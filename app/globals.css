@@ -1,26 +1,294 @@
 @import "tailwindcss";
+@import "@heroui/styles";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/*
+ * LegalDrive HUD — dark + light design system (see .claude/skills/legaldrive-design/SKILL.md).
+ *
+ * Theme mechanism: a single class on <html> controls everything.
+ *   - `html.dark`      -> dark theme (current default, applied in app/layout.tsx)
+ *   - `html:not(.dark)` -> light theme (the default/fallback state; no class needed)
+ * A future toggle only ever needs to add/remove the `dark` class on <html> — every token
+ * below is scoped off that one class, nothing else has to change per component.
+ *
+ * Two token layers on purpose:
+ * 1. HeroUI's own raw vars (--background, --surface, --border, --muted, --accent, --danger, ...)
+ *    are set per-theme here so every HeroUI component (buttonVariants, etc.) and every existing
+ *    call site (border-border, bg-surface, text-muted, bg-surface-hover, bg-accent-soft, ...)
+ *    picks up the right palette with zero component-level changes — HeroUI computes surface-hover/
+ *    accent-soft/etc. from these via color-mix(), so overriding the primitives is enough.
+ * 2. The skill's own Material-3-style names (primary, on-surface, surface-container-*, ...) are
+ *    added as new --color-* tokens via @theme, and they resolve via var() to the same per-theme
+ *    custom properties from layer 1 (plus a handful of M3-only vars added alongside them below)
+ *    — so there is exactly one source of truth per theme, not two hardcoded copies.
+ */
+
+html.dark {
+  color-scheme: dark;
+
+  /* HeroUI primitive overrides -> HUD palette */
+  --background: #101415;
+  --foreground: #e0e3e5;
+
+  --surface: #1d2022;
+  --surface-foreground: #e0e3e5;
+  --surface-secondary: #191c1e;
+  --surface-tertiary: #272a2c;
+
+  --overlay: #1d2022;
+  --overlay-foreground: #e0e3e5;
+
+  --muted: #8c909f;
+
+  --default: #272a2c;
+  --default-foreground: #e0e3e5;
+
+  --accent: #b6c9b1;
+  --accent-foreground: #17241a;
+
+  --border: #424754;
+  --separator: #2c3038;
+  --focus: #b6c9b1;
+  --link: #b6c9b1;
+
+  --success: #7fd99a;
+  --success-foreground: #003917;
+
+  --warning: #d5be90;
+  --warning-foreground: #34280f;
+
+  --danger: #ffb4ab;
+  --danger-foreground: #690005;
+
+  --segment: #272a2c;
+  --segment-foreground: #e0e3e5;
+
+  --field-background: #1d2022;
+  --field-foreground: #e0e3e5;
+  --field-placeholder: #8c909f;
+  --field-border: transparent;
+
+  --backdrop: rgba(0, 0, 0, 0.6);
+
+  --surface-shadow: 0 0 0 0 transparent inset;
+  --overlay-shadow: 0 0 1px 0 rgba(255, 255, 255, 0.3) inset;
+  --field-shadow: 0 0 0 0 transparent inset;
+
+  /* M3-only tokens that have no direct HeroUI primitive equivalent above */
+  --surface-container-lowest: #0b0f10;
+  --surface-container-highest: #323537;
+  --surface-bright: #363a3b;
+  --outline: #8c909f;
+  --primary-container: #639353;
+  --secondary-container: #79643a;
+  --tertiary: #a89a8a;
+  --error-container: #93000a;
+
+  /* Home hero background image (app/page.tsx, public/bg.png — a near-black asphalt
+     HUD illustration, see skill "Brand & mood"). It's a single dark asset with no
+     light variant, so it's dialed down per-theme rather than swapped: full presence
+     in dark mode (its native look), much dimmer in light mode so it doesn't read as
+     a dark patch sitting next to the light navbar/hero text. --hero-top-overlay is
+     the starting stop of the hero's vertical gradient mask, keeping the top edge
+     (immediately under the navbar) tinted toward the theme background. */
+  --hero-image-opacity: 0.6;
+  --hero-top-overlay: transparent;
+}
+
+html:not(.dark) {
+  color-scheme: light;
+
+  /* HeroUI primitive overrides -> HUD palette, light theme (sage/earthy — see skill
+     "Palette update"). Four brand anchors: #778873 (deep sage), #A1BC98 (light sage),
+     #DCCFC0 (warm beige), #FDF6ED (warm ivory) — everything below is a tint/shade of
+     that same warm family, not the old cool blue-gray neutrals. */
+  --background: #fdf6ed;
+  --foreground: #2a2620;
+
+  --surface: #dccfc0;
+  --surface-foreground: #2a2620;
+  --surface-secondary: #f0e5d6;
+  --surface-tertiary: #cbb9a6;
+
+  --overlay: #fffcf7;
+  --overlay-foreground: #2a2620;
+
+  --muted: #7e7467;
+
+  --default: #f0e5d6;
+  --default-foreground: #2a2620;
+
+  --accent: #778873;
+  --accent-foreground: #fdf6ed;
+
+  --border: #e0dad1;
+  --separator: #eae4d9;
+  --focus: #778873;
+  --link: #778873;
+
+  --success: #1e7d42;
+  --success-foreground: #eafff1;
+
+  --warning: #8c7b4a;
+  --warning-foreground: #fff8ea;
+
+  --danger: #b3261e;
+  --danger-foreground: #ffffff;
+
+  --segment: #f0e5d6;
+  --segment-foreground: #2a2620;
+
+  --field-background: #fffdfa;
+  --field-foreground: #2a2620;
+  --field-placeholder: #7e7467;
+  --field-border: transparent;
+
+  --backdrop: rgba(42, 38, 32, 0.5);
+
+  --surface-shadow: 0 0 0 0 transparent inset;
+  --overlay-shadow: inset 0 0 1px 0 rgba(0, 0, 0, 0.08);
+  --field-shadow: 0 0 0 0 transparent inset;
+
+  /* M3-only tokens that have no direct HeroUI primitive equivalent above */
+  --surface-container-lowest: #fffdfa;
+  --surface-container-highest: #b9a38c;
+  --surface-bright: #fffcf7;
+  --outline: #988d81;
+  --primary-container: #a1bc98;
+  --secondary-container: #e8dcb8;
+  --tertiary: #8f7a5e;
+  --error-container: #ffdad4;
+
+  /* See dark block above for what these control. Dimmed hard in light mode: the
+     source image is a near-black asphalt illustration with no light variant, and at
+     dark-mode opacity it reads as a black patch next to the light navbar/hero — the
+     literal bug this fixes. */
+  --hero-image-opacity: 0.05;
+  --hero-top-overlay: color-mix(in oklab, var(--background) 85%, transparent);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Fonts: Montserrat for display/headings, Inter for body/UI. mono-label (citations,
+     timestamps) is small-tracked Inter, not a literal monospace face — see .mono-label below. */
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-montserrat);
+
+  /* Material-3-style HUD tokens (skill palette) — resolve via var() to the per-theme
+     custom properties set on html.dark / html:not(.dark) above, so both themes flip
+     together with a single class toggle on <html>. */
+  --color-surface-dim: var(--background);
+  --color-surface-container-lowest: var(--surface-container-lowest);
+  --color-surface-container-low: var(--surface-secondary);
+  --color-surface-container: var(--surface);
+  --color-surface-container-high: var(--surface-tertiary);
+  --color-surface-container-highest: var(--surface-container-highest);
+  --color-surface-bright: var(--surface-bright);
+
+  --color-on-surface: var(--foreground);
+  --color-on-surface-variant: var(--muted);
+  --color-outline: var(--outline);
+  --color-outline-variant: var(--border);
+
+  --color-primary: var(--accent);
+  --color-on-primary: var(--accent-foreground);
+  --color-primary-container: var(--primary-container);
+
+  --color-secondary: var(--warning);
+  --color-on-secondary: var(--warning-foreground);
+  --color-secondary-container: var(--secondary-container);
+
+  --color-tertiary: var(--tertiary);
+
+  --color-error: var(--danger);
+  --color-on-error: var(--danger-foreground);
+  --color-error-container: var(--error-container);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-background);
+  color: var(--color-foreground);
+}
+
+/* Elevation model — "glass, not shadow" (skill section: Elevation model) */
+html.dark .glass-card,
+html.dark .glass-panel {
+  background: rgba(30, 41, 59, 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+}
+
+html.dark .glass-panel {
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+
+html.dark .glow-primary {
+  box-shadow: 0 0 20px rgba(119, 136, 115, 0.4);
+}
+
+/* Light theme glass: translucent white (not a lightened copy of the dark navy glass,
+   which reads muddy on white), with the border doing more of the edge-definition work
+   since a white top-hairline inset glow is invisible on a light background — a soft
+   drop shadow stands in for that ambient glow instead. */
+html:not(.dark) .glass-card,
+html:not(.dark) .glass-panel {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+}
+
+html:not(.dark) .glass-panel {
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+
+html:not(.dark) .glow-primary {
+  /* Dimmer than the dark-mode glow — a full-strength sage glow reads garish on cream. */
+  box-shadow: 0 0 16px rgba(119, 136, 115, 0.22);
+}
+
+.mono-label {
+  font-family: var(--font-inter);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+/* Route-transition loading (components/RouteLoading.tsx): opacity 0 until
+   animation-delay elapses, so instant/prefetched navigations that unmount
+   before the delay never render it — no flash. Mirrors the delayed-visibility
+   pattern from Next's useLinkStatus docs. */
+@keyframes route-loading-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.route-loading {
+  opacity: 0;
+  animation: route-loading-fade-in 160ms ease-in forwards;
+  animation-delay: 120ms;
+}
+
+/* Chat "PDF kimi ixrac et" export (app/chat/page.tsx): print:hidden on the
+   normal chrome + a print:block transcript section print the transcript
+   plainly via the browser's print dialog ("Save as PDF") — no PDF library
+   needed. Force light/plain colors here since the glass HUD theme (blur,
+   translucency, dark backgrounds) doesn't render usefully on paper. */
+@media print {
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
 }

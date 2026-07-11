@@ -1,0 +1,95 @@
+import Link from 'next/link';
+import { buttonVariants } from '@heroui/styles';
+import { createClient } from '@/lib/supabase/server';
+import { logout } from '@/app/(auth)/actions';
+import { SidebarNav } from '@/components/SidebarNav';
+import { PlusIcon } from '@/components/icons';
+import ThemeToggle from '@/components/ThemeToggle';
+
+const NAV_ITEMS = [
+  { href: '/', label: 'Ana Səhifə', icon: 'home' as const },
+  { href: '/chat', label: 'Söhbət', icon: 'chat' as const },
+  { href: '/qaydalar', label: 'Qaydalar', icon: 'rules' as const },
+  { href: '/account', label: 'Ayarlar', icon: 'settings' as const },
+];
+
+export default async function Sidebar() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  let isAdmin = false;
+  if (user) {
+    const { data: profile, error } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+    if (error) console.error('[Sidebar] profiles query failed', error);
+    isAdmin = profile?.role === 'admin';
+  }
+
+  return (
+    <aside className="hidden md:flex md:w-64 md:shrink-0 md:flex-col md:min-h-0 md:overflow-y-auto border-r border-border bg-surface">
+      <Link href="/" className="flex flex-col gap-0.5 px-5 py-5">
+        <span className="font-semibold text-foreground">Yol Hərəkəti QA</span>
+        <span className="text-xs text-muted">Hüquqi AI köməkçi</span>
+      </Link>
+
+      <SidebarNav items={NAV_ITEMS} />
+
+      <div className="mt-4 flex items-center justify-between gap-1 px-3">
+        <span className="text-xs font-medium text-muted">Tema</span>
+        <ThemeToggle />
+      </div>
+
+      <div className="mt-1 flex flex-col gap-1 px-3">
+        {isAdmin && (
+          <Link
+            href="/admin"
+            className="rounded-lg px-3 py-2 text-sm font-medium text-muted hover:bg-surface-hover hover:text-foreground"
+          >
+            Admin
+          </Link>
+        )}
+        {user ? (
+          <>
+            <Link
+              href="/account"
+              className="rounded-lg px-3 py-2 text-sm font-medium text-muted hover:bg-surface-hover hover:text-foreground"
+            >
+              Hesabım
+            </Link>
+            <form action={logout}>
+              <button
+                type="submit"
+                className="w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-muted hover:bg-surface-hover hover:text-foreground"
+              >
+                Çıxış
+              </button>
+            </form>
+          </>
+        ) : (
+          <>
+            <Link
+              href="/login"
+              className="rounded-lg px-3 py-2 text-sm font-medium text-muted hover:bg-surface-hover hover:text-foreground"
+            >
+              Daxil ol
+            </Link>
+            <Link
+              href="/signup"
+              className="rounded-lg px-3 py-2 text-sm font-medium text-muted hover:bg-surface-hover hover:text-foreground"
+            >
+              Qeydiyyat
+            </Link>
+          </>
+        )}
+      </div>
+
+      <div className="mt-auto p-4">
+        <Link href="/chat" className={buttonVariants({ variant: 'primary', size: 'md' }) + ' w-full justify-center gap-2'}>
+          <PlusIcon className="shrink-0" />
+          Yeni Sual
+        </Link>
+      </div>
+    </aside>
+  );
+}

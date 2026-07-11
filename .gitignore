@@ -32,10 +32,17 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env*.example
 
 # vercel
 .vercel
 
+# seed PDFs used for local ingestion testing (large binaries, re-downloadable)
+/seed-pdfs
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Playwright MCP scratch artifacts
+/.playwright-mcp/
