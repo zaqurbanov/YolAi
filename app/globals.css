@@ -25,62 +25,68 @@
 html.dark {
   color-scheme: dark;
 
-  /* HeroUI primitive overrides -> HUD palette */
-  --background: #101415;
-  --foreground: #e0e3e5;
+  /* HeroUI primitive overrides -> HUD palette, dark theme (dedicated dark anchors, see
+     skill "Dark mode palette" — NOT derived from the light-mode sage anchors). Four
+     anchors: #222831 (darkest charcoal-navy, background), #393E46 (dark slate gray,
+     surface-container), #948979 (muted warm taupe/khaki, outline/on-surface-variant/
+     secondary), #DFD0B8 (warm cream/tan, primary + on-surface bright text). Ramp below
+     is HSL-derived from these four at consistent L/S steps (H~217deg for the charcoal/
+     slate surface family, H~36-37deg for the taupe/cream text-and-brand family). */
+  --background: #222831;
+  --foreground: #dfd0b8;
 
-  --surface: #1d2022;
-  --surface-foreground: #e0e3e5;
-  --surface-secondary: #191c1e;
-  --surface-tertiary: #272a2c;
+  --surface: #393e46;
+  --surface-foreground: #dfd0b8;
+  --surface-secondary: #2c3139;
+  --surface-tertiary: #424a57;
 
-  --overlay: #1d2022;
-  --overlay-foreground: #e0e3e5;
+  --overlay: #393e46;
+  --overlay-foreground: #dfd0b8;
 
-  --muted: #8c909f;
+  --muted: #948979;
 
-  --default: #272a2c;
-  --default-foreground: #e0e3e5;
+  --default: #424a57;
+  --default-foreground: #dfd0b8;
 
-  --accent: #b6c9b1;
-  --accent-foreground: #17241a;
+  --accent: #dfd0b8;
+  --accent-foreground: #222831;
 
-  --border: #424754;
-  --separator: #2c3038;
-  --focus: #b6c9b1;
-  --link: #b6c9b1;
+  --border: #5d5c5a;
+  --separator: #505153;
+  --focus: #dfd0b8;
+  --link: #dfd0b8;
 
   --success: #7fd99a;
   --success-foreground: #003917;
 
-  --warning: #d5be90;
-  --warning-foreground: #34280f;
+  --warning: #948979;
+  --warning-foreground: #222831;
 
   --danger: #ffb4ab;
   --danger-foreground: #690005;
 
-  --segment: #272a2c;
-  --segment-foreground: #e0e3e5;
+  --segment: #424a57;
+  --segment-foreground: #dfd0b8;
 
-  --field-background: #1d2022;
-  --field-foreground: #e0e3e5;
-  --field-placeholder: #8c909f;
+  --field-background: #393e46;
+  --field-foreground: #dfd0b8;
+  --field-placeholder: #948979;
   --field-border: transparent;
 
-  --backdrop: rgba(0, 0, 0, 0.6);
+  --backdrop: rgba(34, 40, 49, 0.6);
 
   --surface-shadow: 0 0 0 0 transparent inset;
   --overlay-shadow: 0 0 1px 0 rgba(255, 255, 255, 0.3) inset;
   --field-shadow: 0 0 0 0 transparent inset;
 
   /* M3-only tokens that have no direct HeroUI primitive equivalent above */
-  --surface-container-lowest: #0b0f10;
-  --surface-container-highest: #323537;
-  --surface-bright: #363a3b;
-  --outline: #8c909f;
-  --primary-container: #639353;
-  --secondary-container: #79643a;
-  --tertiary: #a89a8a;
+  --surface-container-lowest: #181b20;
+  --surface-container-highest: #4d5666;
+  --surface-bright: #586374;
+  --outline: #948979;
+  --primary-container: #baad99;
+  --secondary-container: #706b65;
+  --tertiary: #676460;
   --error-container: #93000a;
 
   /* Home hero background image (app/page.tsx, public/bg.png — a near-black asphalt
@@ -227,7 +233,8 @@ html.dark .glass-panel {
 }
 
 html.dark .glow-primary {
-  box-shadow: 0 0 20px rgba(119, 136, 115, 0.4);
+  /* rgb of the dark-mode primary anchor #DFD0B8 (warm cream), not the light-mode sage. */
+  box-shadow: 0 0 20px rgba(223, 208, 184, 0.4);
 }
 
 /* Light theme glass: translucent white (not a lightened copy of the dark navy glass,

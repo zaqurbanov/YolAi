@@ -46,3 +46,5 @@ next-env.d.ts
 
 # Playwright MCP scratch artifacts
 /.playwright-mcp/
+CLAUDE.md
+.claude/*
