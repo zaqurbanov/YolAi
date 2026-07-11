@@ -25,68 +25,67 @@
 html.dark {
   color-scheme: dark;
 
-  /* HeroUI primitive overrides -> HUD palette, dark theme (dedicated dark anchors, see
-     skill "Dark mode palette" — NOT derived from the light-mode sage anchors). Four
-     anchors: #222831 (darkest charcoal-navy, background), #393E46 (dark slate gray,
-     surface-container), #948979 (muted warm taupe/khaki, outline/on-surface-variant/
-     secondary), #DFD0B8 (warm cream/tan, primary + on-surface bright text). Ramp below
-     is HSL-derived from these four at consistent L/S steps (H~217deg for the charcoal/
-     slate surface family, H~36-37deg for the taupe/cream text-and-brand family). */
-  --background: #222831;
-  --foreground: #dfd0b8;
+  /* HeroUI primitive overrides -> HUD palette, dark theme (restrained neutral-dominant
+     palette, full rebuild — see skill "Palette update (latest)"). A single soft-charcoal
+     cool-gray neutral family (H~222deg, low saturation, NOT pure black) carries
+     background/surface, with exactly one moderate-saturation indigo-blue accent
+     (H~231deg) for primary/interactive elements. No second competing vivid accent —
+     the old warning/secondary slot is now a quiet desaturated slate tone. */
+  --background: #16181d;
+  --foreground: #e7e9ee;
 
-  --surface: #393e46;
-  --surface-foreground: #dfd0b8;
-  --surface-secondary: #2c3139;
-  --surface-tertiary: #424a57;
+  --surface: #1e2128;
+  --surface-foreground: #e7e9ee;
+  --surface-secondary: #191c22;
+  --surface-tertiary: #2a2e37;
 
-  --overlay: #393e46;
-  --overlay-foreground: #dfd0b8;
+  --overlay: #1e2128;
+  --overlay-foreground: #e7e9ee;
 
-  --muted: #948979;
+  --muted: #9299a6;
 
-  --default: #424a57;
-  --default-foreground: #dfd0b8;
+  --default: #2a2e37;
+  --default-foreground: #e7e9ee;
 
-  --accent: #dfd0b8;
-  --accent-foreground: #222831;
+  --accent: #7c93f2;
+  --accent-foreground: #12141a;
 
-  --border: #5d5c5a;
-  --separator: #505153;
-  --focus: #dfd0b8;
-  --link: #dfd0b8;
+  --border: #2e323c;
+  --separator: #363b46;
+  --focus: #7c93f2;
+  --link: #7c93f2;
 
   --success: #7fd99a;
   --success-foreground: #003917;
 
-  --warning: #948979;
-  --warning-foreground: #222831;
+  --warning: #94a3b8;
+  --warning-foreground: #12141a;
 
   --danger: #ffb4ab;
   --danger-foreground: #690005;
 
-  --segment: #424a57;
-  --segment-foreground: #dfd0b8;
+  --segment: #2a2e37;
+  --segment-foreground: #e7e9ee;
 
-  --field-background: #393e46;
-  --field-foreground: #dfd0b8;
-  --field-placeholder: #948979;
+  --field-background: #1e2128;
+  --field-foreground: #e7e9ee;
+  --field-placeholder: #9299a6;
   --field-border: transparent;
 
-  --backdrop: rgba(34, 40, 49, 0.6);
+  --backdrop: rgba(22, 24, 29, 0.6);
 
   --surface-shadow: 0 0 0 0 transparent inset;
   --overlay-shadow: 0 0 1px 0 rgba(255, 255, 255, 0.3) inset;
   --field-shadow: 0 0 0 0 transparent inset;
 
   /* M3-only tokens that have no direct HeroUI primitive equivalent above */
-  --surface-container-lowest: #181b20;
-  --surface-container-highest: #4d5666;
-  --surface-bright: #586374;
-  --outline: #948979;
-  --primary-container: #baad99;
-  --secondary-container: #706b65;
-  --tertiary: #676460;
+  --surface-container-lowest: #101216;
+  --surface-container-highest: #3a3f4b;
+  --surface-bright: #454b59;
+  --outline: #6b7280;
+  --primary-container: #2c3560;
+  --secondary-container: #333947;
+  --tertiary: #7a8699;
   --error-container: #93000a;
 
   /* Home hero background image (app/page.tsx, public/bg.png — a near-black asphalt
@@ -103,65 +102,68 @@ html.dark {
 html:not(.dark) {
   color-scheme: light;
 
-  /* HeroUI primitive overrides -> HUD palette, light theme (sage/earthy — see skill
-     "Palette update"). Four brand anchors: #778873 (deep sage), #A1BC98 (light sage),
-     #DCCFC0 (warm beige), #FDF6ED (warm ivory) — everything below is a tint/shade of
-     that same warm family, not the old cool blue-gray neutrals. */
-  --background: #fdf6ed;
-  --foreground: #2a2620;
+  /* HeroUI primitive overrides -> HUD palette, light theme (restrained neutral-dominant
+     palette, full rebuild — see skill "Palette update (latest)"). A single cool-gray
+     neutral family (H~220deg, low saturation, NOT stark pure white) carries
+     background/surface, with the same single indigo-blue accent (H~231deg, moderate
+     saturation) used in dark mode for primary/interactive elements. No second
+     competing vivid accent — the old warning/secondary slot is a quiet desaturated
+     slate tone instead. */
+  --background: #f7f8fa;
+  --foreground: #1b1f27;
 
-  --surface: #dccfc0;
-  --surface-foreground: #2a2620;
-  --surface-secondary: #f0e5d6;
-  --surface-tertiary: #cbb9a6;
+  --surface: #ffffff;
+  --surface-foreground: #1b1f27;
+  --surface-secondary: #f0f2f5;
+  --surface-tertiary: #e4e7ec;
 
-  --overlay: #fffcf7;
-  --overlay-foreground: #2a2620;
+  --overlay: #ffffff;
+  --overlay-foreground: #1b1f27;
 
-  --muted: #7e7467;
+  --muted: #6b7280;
 
-  --default: #f0e5d6;
-  --default-foreground: #2a2620;
+  --default: #f0f2f5;
+  --default-foreground: #1b1f27;
 
-  --accent: #778873;
-  --accent-foreground: #fdf6ed;
+  --accent: #3e63dd;
+  --accent-foreground: #ffffff;
 
-  --border: #e0dad1;
-  --separator: #eae4d9;
-  --focus: #778873;
-  --link: #778873;
+  --border: #e4e7ec;
+  --separator: #edeff2;
+  --focus: #3e63dd;
+  --link: #3e63dd;
 
   --success: #1e7d42;
   --success-foreground: #eafff1;
 
-  --warning: #8c7b4a;
-  --warning-foreground: #fff8ea;
+  --warning: #64748b;
+  --warning-foreground: #ffffff;
 
   --danger: #b3261e;
   --danger-foreground: #ffffff;
 
-  --segment: #f0e5d6;
-  --segment-foreground: #2a2620;
+  --segment: #f0f2f5;
+  --segment-foreground: #1b1f27;
 
-  --field-background: #fffdfa;
-  --field-foreground: #2a2620;
-  --field-placeholder: #7e7467;
+  --field-background: #ffffff;
+  --field-foreground: #1b1f27;
+  --field-placeholder: #6b7280;
   --field-border: transparent;
 
-  --backdrop: rgba(42, 38, 32, 0.5);
+  --backdrop: rgba(27, 31, 39, 0.5);
 
   --surface-shadow: 0 0 0 0 transparent inset;
   --overlay-shadow: inset 0 0 1px 0 rgba(0, 0, 0, 0.08);
   --field-shadow: 0 0 0 0 transparent inset;
 
   /* M3-only tokens that have no direct HeroUI primitive equivalent above */
-  --surface-container-lowest: #fffdfa;
-  --surface-container-highest: #b9a38c;
-  --surface-bright: #fffcf7;
-  --outline: #988d81;
-  --primary-container: #a1bc98;
-  --secondary-container: #e8dcb8;
-  --tertiary: #8f7a5e;
+  --surface-container-lowest: #ffffff;
+  --surface-container-highest: #d0d5dd;
+  --surface-bright: #ffffff;
+  --outline: #9aa1ae;
+  --primary-container: #dde4fb;
+  --secondary-container: #e2e8f0;
+  --tertiary: #94a3b8;
   --error-container: #ffdad4;
 
   /* See dark block above for what these control. Dimmed hard in light mode: the
@@ -233,8 +235,9 @@ html.dark .glass-panel {
 }
 
 html.dark .glow-primary {
-  /* rgb of the dark-mode primary anchor #DFD0B8 (warm cream), not the light-mode sage. */
-  box-shadow: 0 0 20px rgba(223, 208, 184, 0.4);
+  /* rgb of the dark-mode accent #7c93f2 (indigo-blue), kept deliberately subtle —
+     restraint applies to the glow effect itself, not just the base hue. */
+  box-shadow: 0 0 16px rgba(124, 147, 242, 0.28);
 }
 
 /* Light theme glass: translucent white (not a lightened copy of the dark navy glass,
@@ -256,8 +259,9 @@ html:not(.dark) .glass-panel {
 }
 
 html:not(.dark) .glow-primary {
-  /* Dimmer than the dark-mode glow — a full-strength sage glow reads garish on cream. */
-  box-shadow: 0 0 16px rgba(119, 136, 115, 0.22);
+  /* rgb of the light-mode accent #3e63dd (indigo-blue), dimmer still than dark mode —
+     a bare hint of glow on white/near-white surfaces, not an ambient light source. */
+  box-shadow: 0 0 12px rgba(62, 99, 221, 0.14);
 }
 
 .mono-label {
