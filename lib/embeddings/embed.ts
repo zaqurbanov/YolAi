@@ -1,7 +1,13 @@
 import 'server-only';
-import { pipeline, type FeatureExtractionPipeline } from '@huggingface/transformers';
+import os from 'node:os';
+import path from 'node:path';
+import { env, pipeline, type FeatureExtractionPipeline } from '@huggingface/transformers';
 
 const MODEL_ID = 'Xenova/paraphrase-multilingual-MiniLM-L12-v2';
+
+// Serverless runtimes (Vercel) ship a read-only filesystem except /tmp — the
+// library's default cache dir lives under node_modules and fails to mkdir there.
+env.cacheDir = path.join(os.tmpdir(), 'transformers-cache');
 
 let extractorPromise: Promise<FeatureExtractionPipeline> | null = null;
 
