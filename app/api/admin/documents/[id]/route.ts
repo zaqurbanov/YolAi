@@ -119,6 +119,31 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   return NextResponse.json({ ok: true });
 }
 
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireAdmin();
+  if (!auth.ok) return apiError(auth.status, auth.message);
+
+  const { id } = await params;
+  const body = await request.json().catch(() => null);
+  const title = body?.title;
+
+  if (typeof title !== 'string' || !title.trim()) {
+    return apiError(400, 'title tələb olunur');
+  }
+
+  const supabase = createAdminClient();
+  const { data: document, error } = await supabase
+    .from('documents')
+    .update({ title: title.trim() })
+    .eq('id', id)
+    .select('id, title')
+    .single();
+
+  if (error || !document) return notFound('Sənəd tapılmadı');
+
+  return NextResponse.json({ document });
+}
+
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAdmin();
   if (!auth.ok) return apiError(auth.status, auth.message);

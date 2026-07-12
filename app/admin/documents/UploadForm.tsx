@@ -351,14 +351,20 @@ export default function UploadForm() {
       <div>
         <h2 className="text-lg font-semibold mb-3">Sənədlər</h2>
 
-        {selectedCount > 0 && (
-          <div className="glass-panel rounded-xl px-4 py-2 flex items-center justify-between mb-3">
-            <span className="mono-label">{selectedCount} sənəd seçildi</span>
-            <Button variant="danger" size="sm" onPress={requestBulkDelete} isDisabled={confirmBusy}>
-              Seçilənləri sil
-            </Button>
-          </div>
-        )}
+        {/* Always rendered (not conditional) so this row's height is permanently
+            reserved — toggling it in/out of the DOM on selection shifted the table
+            below it. Visibility is faded instead so the table's position never moves. */}
+        <div
+          className={`glass-panel rounded-xl px-4 py-2 flex items-center justify-between mb-3 transition-opacity ${
+            selectedCount > 0 ? 'opacity-100' : 'opacity-0 pointer-events-none'
+          }`}
+          aria-hidden={selectedCount === 0}
+        >
+          <span className="mono-label">{selectedCount} sənəd seçildi</span>
+          <Button variant="danger" size="sm" onPress={requestBulkDelete} isDisabled={confirmBusy || selectedCount === 0}>
+            Seçilənləri sil
+          </Button>
+        </div>
 
         {loading ? (
           <div className="glass-panel rounded-2xl overflow-hidden">

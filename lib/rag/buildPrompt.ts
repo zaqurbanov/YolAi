@@ -33,3 +33,26 @@ export function buildCitations(chunks: RetrievedChunk[]) {
     article_label: chunk.article_label,
   }));
 }
+
+// Retrieval returns up to 15 chunks as candidate context, but the model only
+// ends up grounding its answer in a handful of them — showing all 15 as
+// "citations" is misleading (most were never actually used). The system
+// prompt (buildSystemPrompt) instructs the model to cite as
+// "[Sənəd: {document_title}, Maddə {N}, səhifə {page}]", using the exact
+// document_title string it was given in the context block — so requiring
+// that literal title (plus the article number, when the chunk has one) to
+// appear in the answer text is a reliable way to tell which chunks were
+// actually referenced, without trusting the model to report citation
+// *content* (title/article/page) itself — we still only ever display data
+// that came from the real retrieval result, just gated on whether it was used.
+export function filterCitedChunks(chunks: RetrievedChunk[], answerText: string): RetrievedChunk[] {
+  return chunks.filter((chunk) => {
+    if (!chunk.document_title || !answerText.includes(chunk.document_title)) return false;
+
+    const articleMatch = chunk.article_label?.match(/Maddə\s+(\d+)/i);
+    if (!articleMatch) return true;
+
+    const articleNumberPattern = new RegExp(`Madd[əe]\\s+${articleMatch[1]}\\b`, 'i');
+    return articleNumberPattern.test(answerText);
+  });
+}

@@ -46,6 +46,15 @@ function formatMs(ms: number | null): string {
   return `${Math.round(ms)}ms`;
 }
 
+// Sequential pipeline (app/api/chat/route.ts): rewrite -> embed -> DB search -> LLM.
+// llm_first_token_ms is a milestone within llm_total_ms, not an additional
+// duration, so it's deliberately excluded here to avoid double-counting.
+function sumMs(...values: (number | null)[]): number | null {
+  const present = values.filter((v): v is number => v != null);
+  if (present.length === 0) return null;
+  return present.reduce((a, b) => a + b, 0);
+}
+
 interface DocumentOption {
   id: string;
   title: string;
@@ -77,6 +86,16 @@ export default function ChatPage() {
   const adminPrimaryModelIdRef = useRef<string | null>(null);
   const [logModalMessageId, setLogModalMessageId] = useState<string | null>(null);
   const [logFetchState, setLogFetchState] = useState<LogFetchState | null>(null);
+  const [expandedCitationIds, setExpandedCitationIds] = useState<Set<string>>(new Set());
+
+  function toggleCitations(messageId: string) {
+    setExpandedCitationIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(messageId)) next.delete(messageId);
+      else next.add(messageId);
+      return next;
+    });
+  }
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const bottomSentinelRef = useRef<HTMLDivElement>(null);
   const { messages, sendMessage, setMessages, status, error } = useChat<ChatUIMessage>({
@@ -221,6 +240,17 @@ export default function ChatPage() {
     return t ? timeFormatter.format(t) : '';
   }
 
+  // How close to the bottom (px) still counts as "following along" — a user who
+  // has scrolled further up than this is treated as intentionally reading
+  // earlier messages, and streaming growth must not yank them back down.
+  const NEAR_BOTTOM_THRESHOLD = 80;
+
+  function isNearBottom() {
+    const el = scrollContainerRef.current;
+    if (!el) return true;
+    return el.scrollHeight - el.scrollTop - el.clientHeight <= NEAR_BOTTOM_THRESHOLD;
+  }
+
   // Initial land-at-bottom on page load/refresh, once history hydration settles —
   // instant (no visible scroll-through-history animation).
   useEffect(() => {
@@ -228,9 +258,13 @@ export default function ChatPage() {
     bottomSentinelRef.current?.scrollIntoView({ block: 'end', behavior: 'instant' });
   }, [historyLoaded]);
 
-  // Auto-follow on new messages and streaming growth.
+  // Auto-follow on new messages and streaming growth — but only while the user
+  // is already near the bottom. If they've scrolled up to read earlier
+  // messages, respect that instead of forcing them back down on every
+  // streamed token.
   useEffect(() => {
     if (!historyLoaded) return;
+    if (!isNearBottom()) return;
     bottomSentinelRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
   }, [messages, historyLoaded]);
 
@@ -356,6 +390,11 @@ export default function ChatPage() {
     const documentId = selectedDocumentKey === ALL_DOCUMENTS_KEY ? undefined : selectedDocumentKey;
     sendMessage({ text: input }, { body: { documentId } });
     setInput('');
+    // Sending is a deliberate action — always follow it to the bottom, even if
+    // the user had scrolled up to read earlier messages first.
+    requestAnimationFrame(() => {
+      bottomSentinelRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
+    });
   }
 
   const handleDocumentSelectionChange = useCallback((key: React.Key | null) => {
@@ -577,15 +616,34 @@ export default function ChatPage() {
                 </div>
 
                 {!isUser && citations && citations.length > 0 && (
-                  <div className="flex max-w-[85%] flex-wrap gap-1.5">
-                    {citations.map((c, i) => (
-                      <Chip key={i} size="sm" variant="soft" color="accent" className="mono-label">
-                        {c.title}
-                        {c.article_label ? ` · ${c.article_label}` : ''}
-                        {c.page ? ` · s.${c.page}` : ''}
-                      </Chip>
-                    ))}
-                  </div>
+                  expandedCitationIds.has(message.id) ? (
+                    <div className="flex max-w-[85%] flex-col gap-1.5">
+                      <div className="flex flex-wrap gap-1.5">
+                        {citations.map((c, i) => (
+                          <Chip key={i} size="sm" variant="soft" color="accent" className="mono-label">
+                            {c.title}
+                            {c.article_label ? ` · ${c.article_label}` : ''}
+                            {c.page ? ` · s.${c.page}` : ''}
+                          </Chip>
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => toggleCitations(message.id)}
+                        className="mono-label w-fit px-1 text-on-surface-variant/70 hover:text-on-surface hover:underline"
+                      >
+                        Gizlət
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => toggleCitations(message.id)}
+                      className="mono-label w-fit px-1 text-primary hover:underline"
+                    >
+                      Sitatları oxu ({citations.length})
+                    </button>
+                  )
                 )}
 
                 <span className="mono-label inline-flex items-center gap-1 px-1 uppercase text-on-surface-variant">
@@ -748,6 +806,19 @@ export default function ChatPage() {
               )}
               {logFetchState?.status === 'success' && logFetchState.log && (
                 <dl className="mono-label space-y-1.5 text-on-surface">
+                  <div className="flex items-center justify-between gap-4 border-b border-outline-variant/40 pb-1.5 text-sm font-semibold">
+                    <dt>Ümumi vaxt</dt>
+                    <dd>
+                      {formatMs(
+                        sumMs(
+                          logFetchState.log.rewrite_ms,
+                          logFetchState.log.embed_ms,
+                          logFetchState.log.db_search_ms,
+                          logFetchState.log.llm_total_ms
+                        )
+                      )}
+                    </dd>
+                  </div>
                   <div className="flex items-center justify-between gap-4">
                     <dt className="text-on-surface-variant">Sual yenidən yazıldı</dt>
                     <dd>{formatMs(logFetchState.log.rewrite_ms)}</dd>

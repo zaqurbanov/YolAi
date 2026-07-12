@@ -9,7 +9,7 @@ import {
 import { getChatModel, getChatModelFallback, getChatModelId, getChatModelFallbackId, getProviderCallOptions } from '@/lib/llm';
 import { streamTextWithFallback } from '@/lib/llm/streamWithFallback';
 import { retrieveRelevantChunks } from '@/lib/retrieval/search';
-import { buildSystemPrompt, buildContextBlock, buildCitations } from '@/lib/rag/buildPrompt';
+import { buildSystemPrompt, buildContextBlock, buildCitations, filterCitedChunks } from '@/lib/rag/buildPrompt';
 import { shouldUpdateSummary, updateContextSummary } from '@/lib/rag/contextSummary';
 import { rewriteQuery } from '@/lib/rag/rewriteQuery';
 import { createClient } from '@/lib/supabase/server';
@@ -147,7 +147,6 @@ export async function POST(request: Request) {
   });
 
   const contextBlock = buildContextBlock(relevantChunks);
-  const citations = buildCitations(relevantChunks);
 
   const summaryBlock = conversation && Object.keys(conversation.contextSummary).length > 0
     ? `\n\nSÖHBƏTİN XÜLASƏSİ (əvvəlki mesajlardan qısa yaddaş, yalnız kontekst üçündür, faktları yenidən sitat gətirmə mənbəyi kimi istifadə etmə):\n${JSON.stringify(conversation.contextSummary)}`
@@ -157,6 +156,13 @@ export async function POST(request: Request) {
 
   const llmStartTime = performance.now();
   let llmFirstTokenMs: number | null = null;
+  // Accumulated from text-delta parts as they stream through onChunk, so the
+  // full answer text is already available by the time messageMetadata is
+  // called for the 'finish' UI part (which itself carries no text) — used to
+  // filter citations down to chunks the model actually referenced. onFinish's
+  // own `text` param is the authoritative source for the same filtering when
+  // persisting to the DB below.
+  let liveAnswerText = '';
 
   const fallbackModel = getChatModelFallback();
   const fallbackModelId = getChatModelFallbackId();
@@ -168,13 +174,17 @@ export async function POST(request: Request) {
       system: `${buildSystemPrompt(userName)}\n\nKONTEKST:\n${contextBlock || 'Heç bir uyğun məlumat tapılmadı.'}${summaryBlock}`,
       messages: await convertToModelMessages(windowedMessages),
       providerOptions: getProviderCallOptions(),
-      onChunk: () => {
+      onChunk: ({ chunk }) => {
         if (llmFirstTokenMs === null) {
           llmFirstTokenMs = performance.now() - llmStartTime;
+        }
+        if (chunk.type === 'text-delta') {
+          liveAnswerText += chunk.text;
         }
       },
       onFinish: async ({ text }) => {
         const llmTotalMs = performance.now() - llmStartTime;
+        const citations = buildCitations(filterCitedChunks(relevantChunks, text));
 
         try {
           console.log(
@@ -282,8 +292,14 @@ export async function POST(request: Request) {
   return createUIMessageStreamResponse({
     stream: toUIMessageStream({
       stream,
-      messageMetadata: () =>
-        isAdmin ? { citations, modelUsed, messageId: assistantMessageId } : { citations },
+      messageMetadata: () => {
+        // liveAnswerText is empty at the 'start' event (nothing streamed yet) and
+        // fully populated by 'finish' (all text-delta parts have already passed
+        // through onChunk) — filtering naturally yields an empty citation list
+        // for the former and the real, referenced-only list for the latter.
+        const citations = buildCitations(filterCitedChunks(relevantChunks, liveAnswerText));
+        return isAdmin ? { citations, modelUsed, messageId: assistantMessageId } : { citations };
+      },
       onError: (error) => {
         // Fires only once a stream error is terminal and about to reach the client
         // (i.e. after any primary->fallback switch has already been decided) — safe

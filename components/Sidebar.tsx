@@ -27,6 +27,12 @@ export default async function Sidebar() {
     isAdmin = profile?.role === 'admin';
   }
 
+  // "Ayarlar" links to /account, which requires auth (redirects to /login
+  // otherwise) — hide it for logged-out visitors instead of sending them into
+  // a redirect. Logged-in users see it here; the separate "Hesabım" link
+  // below duplicates the same destination but is intentionally kept as-is.
+  const navItems = user ? NAV_ITEMS : NAV_ITEMS.filter((item) => item.href !== '/account');
+
   return (
     <SidebarShell>
       <Link href="/" className="flex flex-col gap-0.5 px-5 py-5">
@@ -34,7 +40,7 @@ export default async function Sidebar() {
         <span className="text-xs text-muted">Hüquqi AI köməkçi</span>
       </Link>
 
-      <SidebarNav items={NAV_ITEMS} />
+      <SidebarNav items={navItems} />
 
       <div className="mt-4 flex items-center justify-between gap-1 px-3">
         <span className="text-xs font-medium text-muted">Tema</span>

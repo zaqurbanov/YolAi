@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { HelpIcon, ArrowRightIcon } from '@/components/icons';
 
 export default function Footer() {
@@ -12,8 +13,12 @@ export default function Footer() {
         </div>
 
         <div className="flex items-center gap-6">
-          <span className="text-sm text-on-surface-variant">Məxfilik Siyasəti</span>
-          <span className="text-sm text-on-surface-variant">İstifadə Şərtləri</span>
+          <Link href="/privacy" className="text-sm text-on-surface-variant hover:text-primary hover:underline">
+            Məxfilik Siyasəti
+          </Link>
+          <Link href="/terms" className="text-sm text-on-surface-variant hover:text-primary hover:underline">
+            İstifadə Şərtləri
+          </Link>
 
           <div className="flex items-center gap-3">
             <a

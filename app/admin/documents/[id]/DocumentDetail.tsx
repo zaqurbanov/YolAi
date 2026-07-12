@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Card, Chip, Button, Skeleton, EmptyState, toast } from '@heroui/react';
+import { Card, Chip, Button, Skeleton, EmptyState, toast, TextField, Input } from '@heroui/react';
 import { Spinner } from '@/components/Spinner';
 
 interface DocumentMeta {
@@ -81,6 +81,9 @@ export default function DocumentDetail({ id }: { id: string }) {
   const [page, setPage] = useState(1);
   const [loadingChunks, setLoadingChunks] = useState(true);
   const [reprocessing, setReprocessing] = useState(false);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState('');
+  const [savingTitle, setSavingTitle] = useState(false);
 
   const loadMeta = useCallback(async () => {
     setLoadingMeta(true);
@@ -137,6 +140,39 @@ export default function DocumentDetail({ id }: { id: string }) {
     setReprocessing(false);
   }
 
+  function startEditingTitle() {
+    setTitleDraft(document?.title ?? '');
+    setIsEditingTitle(true);
+  }
+
+  async function handleSaveTitle() {
+    const nextTitle = titleDraft.trim();
+    if (!nextTitle || nextTitle === document?.title) {
+      setIsEditingTitle(false);
+      return;
+    }
+
+    setSavingTitle(true);
+    const res = await fetch(`/api/admin/documents/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: nextTitle }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      toast.danger(data?.error ?? 'Başlığı yeniləmək uğursuz oldu');
+      setSavingTitle(false);
+      return;
+    }
+
+    const data = await res.json();
+    setDocument((prev) => (prev ? { ...prev, title: data.document.title } : prev));
+    toast.success('Başlıq yeniləndi');
+    setSavingTitle(false);
+    setIsEditingTitle(false);
+  }
+
   const totalPages = Math.max(1, Math.ceil(chunksTotal / PAGE_SIZE));
 
   if (notFound) {
@@ -171,7 +207,36 @@ export default function DocumentDetail({ id }: { id: string }) {
         <div className="glass-card rounded-2xl p-6 space-y-3">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-2xl font-semibold">{document.title}</h1>
+              {isEditingTitle ? (
+                <div className="flex items-center gap-2">
+                  <TextField
+                    aria-label="Sənəd başlığı"
+                    value={titleDraft}
+                    onChange={setTitleDraft}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') void handleSaveTitle();
+                      if (e.key === 'Escape') setIsEditingTitle(false);
+                    }}
+                  >
+                    <Input autoFocus className="text-2xl font-semibold" />
+                  </TextField>
+                  <Button size="sm" isPending={savingTitle} onPress={handleSaveTitle}>
+                    Yadda saxla
+                  </Button>
+                  <Button size="sm" variant="outline" isDisabled={savingTitle} onPress={() => setIsEditingTitle(false)}>
+                    Ləğv et
+                  </Button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={startEditingTitle}
+                  className="rounded-md text-left text-2xl font-semibold hover:underline decoration-dashed underline-offset-4"
+                  title="Başlığı redaktə et"
+                >
+                  {document.title}
+                </button>
+              )}
               <Chip size="sm" color={STATUS_COLOR[document.status]}>
                 {document.status}
               </Chip>

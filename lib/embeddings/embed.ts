@@ -13,7 +13,15 @@ let extractorPromise: Promise<FeatureExtractionPipeline> | null = null;
 
 function getExtractor() {
   if (!extractorPromise) {
-    extractorPromise = pipeline('feature-extraction', MODEL_ID) as Promise<FeatureExtractionPipeline>;
+    // Serverless (Vercel) cold starts re-download the model on every fresh
+    // container — quantized (q8) ONNX weights are ~4x smaller than the
+    // default fp32 weights (~120MB vs ~470MB), cutting both download and
+    // load time substantially. Retrieval quality loss from int8 quantization
+    // is negligible for this use case (semantic similarity search, not
+    // generation).
+    extractorPromise = pipeline('feature-extraction', MODEL_ID, {
+      dtype: 'q8',
+    }) as Promise<FeatureExtractionPipeline>;
   }
   return extractorPromise;
 }
