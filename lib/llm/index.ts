@@ -1,6 +1,7 @@
 import 'server-only';
 import { openrouter } from '@openrouter/ai-sdk-provider';
 import { anthropic } from '@ai-sdk/anthropic';
+import { deepSeek } from '@ai-sdk/deepseek';
 import { google } from '@ai-sdk/google';
 import type { LanguageModel } from 'ai';
 
@@ -17,9 +18,9 @@ const DISABLE_REASONING = { extraBody: { reasoning: { enabled: false, exclude: t
 // / messageMetadata) can never drift apart.
 function resolveChatModelId(): string {
   const provider = process.env.LLM_PROVIDER ?? 'openrouter';
-  return provider === 'anthropic'
-    ? process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-5'
-    : process.env.OPENROUTER_MODEL ?? 'openai/gpt-oss-120b:free';
+  if (provider === 'anthropic') return process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-5';
+  if (provider === 'deepseek') return process.env.DEEPSEEK_MODEL ?? 'deepseek-v4-flash';
+  return process.env.OPENROUTER_MODEL ?? 'openai/gpt-oss-120b:free';
 }
 
 export function getChatModel(): LanguageModel {
@@ -28,6 +29,10 @@ export function getChatModel(): LanguageModel {
 
   if (provider === 'anthropic') {
     return anthropic(modelId);
+  }
+
+  if (provider === 'deepseek') {
+    return deepSeek(modelId);
   }
 
   return openrouter(modelId, DISABLE_REASONING);
@@ -39,9 +44,13 @@ export function getChatModelId(): string {
 
 function resolveRewriteModelId(): string {
   const provider = process.env.LLM_PROVIDER ?? 'openrouter';
-  return provider === 'anthropic'
-    ? process.env.ANTHROPIC_REWRITE_MODEL ?? 'claude-haiku-4-5'
-    : process.env.OPENROUTER_REWRITE_MODEL ?? 'nvidia/nemotron-3-nano-30b-a3b:free';
+  if (provider === 'anthropic') return process.env.ANTHROPIC_REWRITE_MODEL ?? 'claude-haiku-4-5';
+  // deepseek-v4-flash's "thinking" mode is a slow chain-of-thought mode unsuitable
+  // here (same failure mode this fallback exists to avoid), so the non-thinking
+  // deepseek-v4-flash default is also used for rewrite. deepseek-chat/-reasoner
+  // (the old model ids) are deprecated 2026-07-24 in favor of v4-flash/v4-pro.
+  if (provider === 'deepseek') return process.env.DEEPSEEK_REWRITE_MODEL ?? 'deepseek-v4-flash';
+  return process.env.OPENROUTER_REWRITE_MODEL ?? 'nvidia/nemotron-3-nano-30b-a3b:free';
 }
 
 // Small/cheap model for internal steps (query rewriting) — deliberately not the
@@ -52,6 +61,10 @@ export function getRewriteModel(): LanguageModel {
 
   if (provider === 'anthropic') {
     return anthropic(modelId);
+  }
+
+  if (provider === 'deepseek') {
+    return deepSeek(modelId);
   }
 
   return openrouter(modelId, DISABLE_REASONING);
@@ -95,4 +108,16 @@ export function getRewriteModelFallback(): LanguageModel | null {
 
 export function getRewriteModelFallbackId(): string | null {
   return resolveRewriteModelFallbackId();
+}
+
+// deepseek-v4-flash defaults to 'adaptive' thinking, i.e. it may silently emit
+// hidden chain-of-thought tokens before any visible output — the same failure
+// mode DISABLE_REASONING exists to prevent for OpenRouter models, just gated
+// through generateText/streamText's `providerOptions` instead of provider
+// factory settings, since @ai-sdk/deepseek exposes `thinking` as a per-call
+// chat option, not a DeepSeekProviderSettings field. providerOptions keyed by
+// a provider name other than the active model's are ignored, so it's safe to
+// always include this regardless of which provider is active.
+export function getProviderCallOptions() {
+  return { deepseek: { thinking: { type: 'disabled' as const } } };
 }

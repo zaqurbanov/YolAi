@@ -6,7 +6,7 @@ import {
   RetryError,
   type UIMessage,
 } from 'ai';
-import { getChatModel, getChatModelFallback, getChatModelId, getChatModelFallbackId } from '@/lib/llm';
+import { getChatModel, getChatModelFallback, getChatModelId, getChatModelFallbackId, getProviderCallOptions } from '@/lib/llm';
 import { streamTextWithFallback } from '@/lib/llm/streamWithFallback';
 import { retrieveRelevantChunks } from '@/lib/retrieval/search';
 import { buildSystemPrompt, buildContextBlock, buildCitations } from '@/lib/rag/buildPrompt';
@@ -101,6 +101,15 @@ export async function POST(request: Request) {
     : Promise.resolve(false);
 
   let conversation: ConversationState | null = null;
+  // Reserved synchronously (before streaming starts) so the id is available to
+  // `messageMetadata` on every streamed chunk. `messageMetadata` in the installed
+  // `ai@7.0.16` is called synchronously per stream part and is NOT awaited even if
+  // it returns a Promise, and the streamText `onFinish` callback (where the final
+  // assistant text becomes known) only runs *after* the "finish" chunk has already
+  // been forwarded to `messageMetadata` — so an id captured inside onFinish would
+  // always arrive one chunk too late. Inserting a placeholder row up front and
+  // updating it in onFinish is the only way to make the id available in time.
+  let assistantMessageId: string | null = null;
   if (user) {
     try {
       conversation = await getOrCreateConversation(user.id);
@@ -109,6 +118,19 @@ export async function POST(request: Request) {
         role: 'user',
         content: query,
       });
+
+      const { data: placeholder, error: placeholderError } = await supabase
+        .from('messages')
+        .insert({
+          conversation_id: conversation.id,
+          role: 'assistant',
+          content: '',
+        })
+        .select('id')
+        .single();
+
+      if (placeholderError) throw placeholderError;
+      assistantMessageId = placeholder.id;
     } catch (err) {
       return serverError(err, 'Söhbəti yaratmaq uğursuz oldu');
     }
@@ -123,27 +145,6 @@ export async function POST(request: Request) {
     ftsQuery: query,
     documentId,
   });
-
-  console.log(
-    JSON.stringify({
-      event: 'chat_retrieval_debug',
-      requestId,
-      query,
-      retrievalQuery,
-      retrievedChunks: relevantChunks.map((c) => ({
-        id: c.id,
-        document_id: c.document_id,
-        document_title: c.document_title,
-        page_number: c.page_number,
-        article_label: c.article_label,
-        similarity: c.similarity,
-        vector_rank: c.vector_rank,
-        trgm_rank: c.trgm_rank,
-        combined_score: c.combined_score,
-        snippet: c.content.slice(0, 100),
-      })),
-    }),
-  );
 
   const contextBlock = buildContextBlock(relevantChunks);
   const citations = buildCitations(relevantChunks);
@@ -166,6 +167,7 @@ export async function POST(request: Request) {
     {
       system: `${buildSystemPrompt(userName)}\n\nKONTEKST:\n${contextBlock || 'Heç bir uyğun məlumat tapılmadı.'}${summaryBlock}`,
       messages: await convertToModelMessages(windowedMessages),
+      providerOptions: getProviderCallOptions(),
       onChunk: () => {
         if (llmFirstTokenMs === null) {
           llmFirstTokenMs = performance.now() - llmStartTime;
@@ -197,6 +199,7 @@ export async function POST(request: Request) {
           .insert({
             request_id: requestId,
             conversation_id: conversation?.id ?? null,
+            message_id: assistantMessageId,
             query,
             rewrite_ms: rewriteMs,
             embed_ms: embedMs,
@@ -216,12 +219,23 @@ export async function POST(request: Request) {
         const previousSummary = conversation.contextSummary;
         const summaryMessageCount = conversation.summaryMessageCount;
 
-        await supabase.from('messages').insert({
-          conversation_id: conversationId,
-          role: 'assistant',
-          content: text,
-          citations,
-        });
+        if (assistantMessageId) {
+          const { error: updateError } = await supabase
+            .from('messages')
+            .update({ content: text, citations })
+            .eq('id', assistantMessageId);
+          if (updateError) console.error('[chat] failed to persist assistant message:', updateError);
+        } else {
+          // Should not happen (assistantMessageId is only null when `conversation` is
+          // also null, and we already returned above in that case) — kept as a safety
+          // net so a future refactor that breaks that invariant fails soft, not silent.
+          await supabase.from('messages').insert({
+            conversation_id: conversationId,
+            role: 'assistant',
+            content: text,
+            citations,
+          });
+        }
 
         try {
           const { count } = await supabase
@@ -268,8 +282,24 @@ export async function POST(request: Request) {
   return createUIMessageStreamResponse({
     stream: toUIMessageStream({
       stream,
-      messageMetadata: () => (isAdmin ? { citations, modelUsed } : { citations }),
-      onError: toClientErrorMessage,
+      messageMetadata: () =>
+        isAdmin ? { citations, modelUsed, messageId: assistantMessageId } : { citations },
+      onError: (error) => {
+        // Fires only once a stream error is terminal and about to reach the client
+        // (i.e. after any primary->fallback switch has already been decided) — safe
+        // point to clean up the placeholder assistant message row so a fully failed
+        // request doesn't leave a permanent blank bubble in history.
+        if (assistantMessageId) {
+          void supabase
+            .from('messages')
+            .delete()
+            .eq('id', assistantMessageId)
+            .then(({ error: delError }) => {
+              if (delError) console.error('[chat] failed to clean up placeholder message:', delError);
+            });
+        }
+        return toClientErrorMessage(error);
+      },
     }),
   });
 }

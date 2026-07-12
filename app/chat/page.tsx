@@ -3,9 +3,9 @@
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import type { UIMessage } from 'ai';
-import { useCallback, useEffect, useState } from 'react';
-import { Avatar, Badge, Input, Button, Chip, Select, ListBox, AlertDialog, Dropdown, Skeleton, toast } from '@heroui/react';
-import { SendIcon, ShareIcon, MoreIcon, TrashIcon } from '@/components/icons';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Avatar, Badge, Input, Button, Chip, Select, ListBox, AlertDialog, Modal, Dropdown, Skeleton, toast } from '@heroui/react';
+import { SendIcon, ShareIcon, MoreIcon, TrashIcon, InfoIcon } from '@/components/icons';
 import { Spinner } from '@/components/Spinner';
 
 interface Citation {
@@ -23,7 +23,27 @@ interface HistoryMessage {
   created_at: string;
 }
 
-type ChatUIMessage = UIMessage<{ citations?: Citation[]; modelUsed?: string }>;
+type ChatMessageMetadata = { citations?: Citation[]; modelUsed?: string; messageId?: string };
+
+type ChatUIMessage = UIMessage<ChatMessageMetadata>;
+
+interface RequestLog {
+  rewrite_ms: number | null;
+  embed_ms: number | null;
+  db_search_ms: number | null;
+  llm_first_token_ms: number | null;
+  llm_total_ms: number | null;
+  used_fallback: boolean | null;
+  model_used: string | null;
+  created_at: string;
+}
+
+type LogFetchState = { status: 'loading' } | { status: 'success'; log: RequestLog | null } | { status: 'error' };
+
+function formatMs(ms: number | null): string {
+  if (ms == null) return '—';
+  return `${Math.round(ms)}ms`;
+}
 
 interface DocumentOption {
   id: string;
@@ -53,6 +73,11 @@ export default function ChatPage() {
   const [isDeletingHistory, setIsDeletingHistory] = useState(false);
   const [canNativeShare, setCanNativeShare] = useState(false);
   const [adminPrimaryModelId, setAdminPrimaryModelId] = useState<string | null>(null);
+  const adminPrimaryModelIdRef = useRef<string | null>(null);
+  const [logModalMessageId, setLogModalMessageId] = useState<string | null>(null);
+  const [logFetchState, setLogFetchState] = useState<LogFetchState | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const bottomSentinelRef = useRef<HTMLDivElement>(null);
   const { messages, sendMessage, setMessages, status, error } = useChat<ChatUIMessage>({
     transport: new DefaultChatTransport({ api: '/api/chat' }),
     onError: (err) => {
@@ -102,6 +127,27 @@ export default function ChatPage() {
   }, []);
 
   useEffect(() => {
+    adminPrimaryModelIdRef.current = adminPrimaryModelId;
+  }, [adminPrimaryModelId]);
+
+  // Backfills messageId onto already-hydrated historical assistant messages once
+  // we learn the session is admin — /api/chat/history isn't itself admin-gated
+  // (it returns the real row id to everyone), so history hydration can't set
+  // messageId unconditionally without leaking the icon to non-admins. This runs
+  // regardless of whether admin status resolves before or after history loads.
+  useEffect(() => {
+    if (adminPrimaryModelId === null) return;
+    setMessages((prev) =>
+      prev.map((m) => {
+        if (m.role !== 'assistant') return m;
+        const meta = m.metadata as ChatMessageMetadata | undefined;
+        if (meta?.messageId != null) return m;
+        return { ...m, metadata: { ...meta, messageId: m.id } };
+      })
+    );
+  }, [adminPrimaryModelId, setMessages]);
+
+  useEffect(() => {
     // navigator.share is client-only (undefined during SSR); this is a one-time
     // capability probe on mount, not state synced from a changing external source.
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -128,7 +174,13 @@ export default function ChatPage() {
           id: m.id,
           role: m.role,
           parts: [{ type: 'text', text: m.content }],
-          metadata: m.role === 'assistant' ? { citations: m.citations ?? undefined } : undefined,
+          metadata:
+            m.role === 'assistant'
+              ? {
+                  citations: m.citations ?? undefined,
+                  messageId: adminPrimaryModelIdRef.current !== null ? m.id : undefined,
+                }
+              : undefined,
         }));
 
         setMessages(hydrated);
@@ -167,6 +219,19 @@ export default function ChatPage() {
     const t = timestamps[id];
     return t ? timeFormatter.format(t) : '';
   }
+
+  // Initial land-at-bottom on page load/refresh, once history hydration settles —
+  // instant (no visible scroll-through-history animation).
+  useEffect(() => {
+    if (!historyLoaded) return;
+    bottomSentinelRef.current?.scrollIntoView({ block: 'end', behavior: 'instant' });
+  }, [historyLoaded]);
+
+  // Auto-follow on new messages and streaming growth.
+  useEffect(() => {
+    if (!historyLoaded) return;
+    bottomSentinelRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
+  }, [messages, historyLoaded]);
 
   const isBusy = status === 'streaming' || status === 'submitted';
 
@@ -300,9 +365,35 @@ export default function ChatPage() {
   // fetched primary model id; stays pinned to whichever is most recent.
   const latestModelUsed = [...messages]
     .reverse()
-    .find((m) => m.role === 'assistant' && (m.metadata as { modelUsed?: string } | undefined)?.modelUsed)
+    .find((m) => m.role === 'assistant' && (m.metadata as ChatMessageMetadata | undefined)?.modelUsed)
     ?.metadata?.modelUsed;
   const displayedModelId = latestModelUsed ?? adminPrimaryModelId;
+
+  useEffect(() => {
+    if (!logModalMessageId) return;
+    let cancelled = false;
+    // Deliberate: reset to a loading state the moment the modal opens for a new
+    // message, mirroring the same pattern used for busyElapsedMs above.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLogFetchState({ status: 'loading' });
+    async function loadLog() {
+      try {
+        const res = await fetch(`/api/admin/chat-request-logs/${logModalMessageId}`);
+        if (!res.ok) {
+          if (!cancelled) setLogFetchState({ status: 'error' });
+          return;
+        }
+        const data: { log: RequestLog | null } = await res.json();
+        if (!cancelled) setLogFetchState({ status: 'success', log: data.log });
+      } catch {
+        if (!cancelled) setLogFetchState({ status: 'error' });
+      }
+    }
+    void loadLog();
+    return () => {
+      cancelled = true;
+    };
+  }, [logModalMessageId]);
 
   return (
     <div className="flex flex-1 flex-col min-h-0">
@@ -411,7 +502,7 @@ export default function ChatPage() {
         </div>
       )}
 
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-6 sm:px-8 print:hidden">
+      <div ref={scrollContainerRef} className="flex-1 min-h-0 overflow-y-auto px-4 py-6 sm:px-8 print:hidden">
         {!historyLoaded && (
           <div className="space-y-6">
             <div className="flex flex-col items-start gap-1.5">
@@ -438,7 +529,7 @@ export default function ChatPage() {
 
         <div className="space-y-6">
           {messages.map((message) => {
-            const metadata = message.metadata as { citations?: Citation[]; modelUsed?: string } | undefined;
+            const metadata = message.metadata as ChatMessageMetadata | undefined;
             const citations = metadata?.citations;
             const modelUsed = metadata?.modelUsed;
             const isUser = message.role === 'user';
@@ -485,9 +576,19 @@ export default function ChatPage() {
                   </div>
                 )}
 
-                <span className="mono-label px-1 uppercase text-on-surface-variant">
+                <span className="mono-label inline-flex items-center gap-1 px-1 uppercase text-on-surface-variant">
                   {isUser ? 'Sən' : 'Yol AI'} · {timestampFor(message.id)}
                   {!isUser && modelUsed && <> · {modelUsed}</>}
+                  {!isUser && metadata?.messageId != null && (
+                    <button
+                      type="button"
+                      onClick={() => setLogModalMessageId(metadata.messageId!)}
+                      className="ml-0.5 inline-flex items-center rounded-full p-0.5 normal-case text-on-surface-variant/70 transition hover:bg-surface-hover hover:text-on-surface"
+                      aria-label="Performans məlumatı"
+                    >
+                      <InfoIcon width={13} height={13} />
+                    </button>
+                  )}
                 </span>
               </div>
             );
@@ -510,6 +611,8 @@ export default function ChatPage() {
             )}
           </div>
         )}
+
+        <div ref={bottomSentinelRef} />
       </div>
 
       <div className="border-t border-outline-variant/40 px-4 py-4 sm:px-8 print:hidden">
@@ -599,6 +702,79 @@ export default function ChatPage() {
           </AlertDialog.Container>
         </AlertDialog.Backdrop>
       </AlertDialog.Root>
+
+      <Modal.Backdrop
+        isOpen={logModalMessageId != null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setLogModalMessageId(null);
+            setLogFetchState(null);
+          }
+        }}
+      >
+        <Modal.Container>
+          <Modal.Dialog className="sm:max-w-[420px]">
+            <Modal.CloseTrigger />
+            <Modal.Header>
+              <Modal.Heading>Performans məlumatı</Modal.Heading>
+            </Modal.Header>
+            <Modal.Body>
+              {logFetchState?.status === 'loading' && (
+                <div className="space-y-2">
+                  <Skeleton className="h-3 w-full rounded-full" />
+                  <Skeleton className="h-3 w-4/5 rounded-full" />
+                  <Skeleton className="h-3 w-3/5 rounded-full" />
+                </div>
+              )}
+              {logFetchState?.status === 'error' && (
+                <p className="text-sm text-error">Performans məlumatını yükləmək uğursuz oldu.</p>
+              )}
+              {logFetchState?.status === 'success' && logFetchState.log === null && (
+                <p className="text-sm text-on-surface-variant">
+                  Bu mesaj üçün performans məlumatı tapılmadı.
+                </p>
+              )}
+              {logFetchState?.status === 'success' && logFetchState.log && (
+                <dl className="mono-label space-y-1.5 text-on-surface">
+                  <div className="flex items-center justify-between gap-4">
+                    <dt className="text-on-surface-variant">Sual yenidən yazıldı</dt>
+                    <dd>{formatMs(logFetchState.log.rewrite_ms)}</dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <dt className="text-on-surface-variant">Embedding</dt>
+                    <dd>{formatMs(logFetchState.log.embed_ms)}</dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <dt className="text-on-surface-variant">DB axtarışı</dt>
+                    <dd>{formatMs(logFetchState.log.db_search_ms)}</dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <dt className="text-on-surface-variant">Cavabın ilk hərfi</dt>
+                    <dd>{formatMs(logFetchState.log.llm_first_token_ms)}</dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <dt className="text-on-surface-variant">Ümumi model vaxtı</dt>
+                    <dd>{formatMs(logFetchState.log.llm_total_ms)}</dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <dt className="text-on-surface-variant">İstifadə olunan model</dt>
+                    <dd className="truncate normal-case">{logFetchState.log.model_used ?? '—'}</dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <dt className="text-on-surface-variant">Fallback işlədildimi?</dt>
+                    <dd>{logFetchState.log.used_fallback ? 'Bəli' : 'Xeyr'}</dd>
+                  </div>
+                </dl>
+              )}
+            </Modal.Body>
+            <Modal.Footer>
+              <Button className="w-full" slot="close" variant="secondary">
+                Bağla
+              </Button>
+            </Modal.Footer>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
     </div>
   );
 }

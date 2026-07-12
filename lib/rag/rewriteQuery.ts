@@ -1,5 +1,5 @@
 import 'server-only';
-import { getRewriteModel, getRewriteModelFallback } from '@/lib/llm';
+import { getRewriteModel, getRewriteModelFallback, getProviderCallOptions } from '@/lib/llm';
 import { generateTextWithFallback } from '@/lib/llm/fallback';
 
 const MAX_REWRITTEN_LENGTH = 400;
@@ -33,14 +33,17 @@ export async function rewriteQuery(query: string, contextSummary?: object): Prom
       }
     }
 
-    // Reasoning is disabled centrally in getRewriteModel() (lib/llm/index.ts) —
-    // re-verified 2026-07-11: a prior comment here claimed disabling reasoning
-    // degraded output quality, but that was never re-tested against the
-    // currently configured rewrite model and turned out to be the dominant
-    // source of a 13.8s user-facing latency spike (chat_request_timing logs).
+    // Reasoning/thinking is disabled centrally: DISABLE_REASONING for OpenRouter
+    // models (baked into getRewriteModel() itself) and getProviderCallOptions()
+    // for DeepSeek's per-call `thinking` option — re-verified 2026-07-12: a prior
+    // comment here claimed disabling reasoning degraded output quality, but that
+    // was never re-tested against the currently configured rewrite model and
+    // turned out to be the dominant source of multi-second latency spikes
+    // (chat_request_timing logs) on both OpenRouter and DeepSeek.
     const { text } = await generateTextWithFallback(getRewriteModel(), getRewriteModelFallback(), {
       system: REWRITE_PROMPT,
       prompt: `İstifadəçinin sualı: "${query}"${contextBlock}`,
+      providerOptions: getProviderCallOptions(),
     });
 
     if (!isUsableRewrite(text)) return query;
