@@ -3,6 +3,7 @@ import { buttonVariants } from '@heroui/styles';
 import { createClient } from '@/lib/supabase/server';
 import { logout } from '@/app/(auth)/actions';
 import { SidebarNav } from '@/components/SidebarNav';
+import { SidebarShell } from '@/components/SidebarShell';
 import { PlusIcon } from '@/components/icons';
 import ThemeToggle from '@/components/ThemeToggle';
 
@@ -27,7 +28,7 @@ export default async function Sidebar() {
   }
 
   return (
-    <aside className="hidden md:flex md:w-64 md:shrink-0 md:flex-col md:min-h-0 md:overflow-y-auto border-r border-border bg-surface">
+    <SidebarShell>
       <Link href="/" className="flex flex-col gap-0.5 px-5 py-5">
         <span className="font-semibold text-foreground">Yol Hərəkəti QA</span>
         <span className="text-xs text-muted">Hüquqi AI köməkçi</span>
@@ -90,6 +91,6 @@ export default async function Sidebar() {
           Yeni Sual
         </Link>
       </div>
-    </aside>
+    </SidebarShell>
   );
 }

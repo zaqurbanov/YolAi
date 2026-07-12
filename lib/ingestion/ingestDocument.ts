@@ -4,6 +4,20 @@ import { parsePdf } from './parsePdf';
 import { chunkPages } from './chunkText';
 import { embedBatch } from '@/lib/embeddings/embed';
 
+// Supabase's PostgrestError/StorageError are plain objects with a `message`
+// field, not `instanceof Error` — a bare `err instanceof Error` check (as
+// this used to be) swallows their actual message and reports a useless
+// "Unknown ingestion error" for the majority of real ingestion failures
+// (storage download errors, chunk insert errors), which is exactly the class
+// of error most likely to occur here.
+function extractErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'object' && err !== null && 'message' in err && typeof err.message === 'string') {
+    return err.message;
+  }
+  return 'Unknown ingestion error';
+}
+
 export async function ingestDocument(documentId: string) {
   const supabase = createAdminClient();
 
@@ -50,7 +64,7 @@ export async function ingestDocument(documentId: string) {
       .update({ status: 'ready', page_count: pages.length, error_message: null })
       .eq('id', documentId);
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown ingestion error';
+    const message = extractErrorMessage(err);
     await supabase.from('documents').update({ status: 'failed', error_message: message }).eq('id', documentId);
     throw err;
   }

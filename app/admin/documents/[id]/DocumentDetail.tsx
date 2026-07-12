@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Card, Chip, Button, Skeleton, EmptyState } from '@heroui/react';
+import { Card, Chip, Button, Skeleton, EmptyState, toast } from '@heroui/react';
 import { Spinner } from '@/components/Spinner';
 
 interface DocumentMeta {
@@ -80,6 +80,7 @@ export default function DocumentDetail({ id }: { id: string }) {
   const [chunksTotal, setChunksTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loadingChunks, setLoadingChunks] = useState(true);
+  const [reprocessing, setReprocessing] = useState(false);
 
   const loadMeta = useCallback(async () => {
     setLoadingMeta(true);
@@ -120,6 +121,22 @@ export default function DocumentDetail({ id }: { id: string }) {
     void loadChunks(1);
   }, [loadMeta, loadChunks]);
 
+  async function handleReprocess() {
+    setReprocessing(true);
+    const res = await fetch(`/api/admin/documents/${id}`, { method: 'POST' });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      toast.danger(data?.error ?? 'Yenidən emal uğursuz oldu');
+      setReprocessing(false);
+      return;
+    }
+
+    toast.success('Sənəd yenidən emala göndərildi');
+    await Promise.all([loadMeta(), loadChunks(1)]);
+    setReprocessing(false);
+  }
+
   const totalPages = Math.max(1, Math.ceil(chunksTotal / PAGE_SIZE));
 
   if (notFound) {
@@ -152,11 +169,21 @@ export default function DocumentDetail({ id }: { id: string }) {
         </div>
       ) : (
         <div className="glass-card rounded-2xl p-6 space-y-3">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-semibold">{document.title}</h1>
-            <Chip size="sm" color={STATUS_COLOR[document.status]}>
-              {document.status}
-            </Chip>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="text-2xl font-semibold">{document.title}</h1>
+              <Chip size="sm" color={STATUS_COLOR[document.status]}>
+                {document.status}
+              </Chip>
+            </div>
+            <Button variant="outline" size="sm" isPending={reprocessing} onPress={handleReprocess}>
+              {({ isPending }) => (
+                <>
+                  {isPending ? <Spinner size="sm" tone="current" /> : null}
+                  Yenidən emal et
+                </>
+              )}
+            </Button>
           </div>
           <div className="flex flex-wrap gap-6 mono-label text-on-surface-variant">
             <span>Səhifə: {document.page_count ?? '—'}</span>

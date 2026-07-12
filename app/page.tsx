@@ -46,6 +46,7 @@ export default function Home() {
           />
           <div className="absolute inset-0 bg-[linear-gradient(to_right,var(--color-background)_0%,var(--color-background)_58%,transparent_92%)]" />
           <div className="absolute inset-0 bg-[linear-gradient(to_bottom,var(--hero-top-overlay)_0%,color-mix(in_oklab,var(--background)_30%,transparent)_50%,var(--background)_100%)]" />
+          <div className="hero-glow motion-reduce:animate-none absolute inset-0 bg-[radial-gradient(60%_50%_at_75%_35%,color-mix(in_oklab,var(--color-primary)_16%,transparent)_0%,transparent_70%)]" />
         </div>
 
         <div className="relative z-10 flex flex-col items-center gap-6 max-w-xl">
@@ -59,17 +60,26 @@ export default function Home() {
           <div className="flex flex-wrap items-center justify-center gap-3">
             <Link
               href="/chat"
-              className={buttonVariants({ variant: 'primary', size: 'lg' }) + ' glow-primary'}
+              className={
+                buttonVariants({ variant: 'primary', size: 'lg' }) +
+                ' glow-primary transition-transform hover:scale-[1.03] active:scale-[0.98]'
+              }
             >
               Suala başla
             </Link>
-            <Link href="#movzular" className={buttonVariants({ variant: 'ghost', size: 'lg' })}>
+            <Link
+              href="#movzular"
+              className={
+                buttonVariants({ variant: 'ghost', size: 'lg' }) +
+                ' transition-transform hover:scale-[1.03] active:scale-[0.98]'
+              }
+            >
               Mövzulara bax
             </Link>
           </div>
         </div>
 
-        <Card className="glass-panel relative z-10 hidden w-full max-w-sm border-0 lg:absolute lg:right-10 lg:bottom-10 lg:flex lg:w-80">
+        <Card className="hero-progress-card motion-reduce:animate-none glass-panel relative z-10 hidden w-full max-w-sm border-0 lg:absolute lg:right-10 lg:bottom-10 lg:flex lg:w-80">
           <Card.Content className="flex flex-col gap-4">
             <ProgressBar aria-label="Nişanlar mövzusu üzrə tərəqqi" value={85}>
               <Label>Nişanlar</Label>
@@ -102,10 +112,14 @@ export default function Home() {
           </div>
 
           <div className="grid gap-6 sm:grid-cols-3">
-            {TOPICS.map(({ icon: Icon, title, description, citation }) => (
-              <Card key={title} className="glass-card border-0">
+            {TOPICS.map(({ icon: Icon, title, description, citation }, i) => (
+              <Card
+                key={title}
+                className="topic-card-in motion-reduce:animate-none glass-card group border border-transparent transition duration-200 hover:-translate-y-1 hover:border-primary/40 hover:shadow-lg"
+                style={{ animationDelay: `${i * 80}ms` }}
+              >
                 <Card.Header>
-                  <div className="flex size-12 items-center justify-center rounded-full bg-primary/15 text-primary mb-2">
+                  <div className="flex size-12 items-center justify-center rounded-full bg-primary/15 text-primary mb-2 transition duration-200 group-hover:bg-primary/25 group-hover:scale-110">
                     <Icon />
                   </div>
                   <Card.Title className="font-display">{title}</Card.Title>
@@ -122,9 +136,9 @@ export default function Home() {
 
       <section className="px-6 py-16">
         <div className="mx-auto max-w-5xl">
-          <div className="flex items-stretch overflow-hidden rounded-3xl border border-primary/20 bg-primary/5 backdrop-blur-2xl md:flex-row flex-col">
+          <div className="flex items-stretch overflow-hidden rounded-3xl border border-primary/20 bg-primary/5 backdrop-blur-2xl transition hover:border-primary/40 hover:bg-primary/10 md:flex-row flex-col">
             <div className="flex min-h-[220px] w-full items-center justify-center bg-gradient-to-br from-primary/20 to-primary/5 md:w-1/2">
-              <SparkleIcon className="size-16 text-primary" />
+              <SparkleIcon className="sparkle-pulse motion-reduce:animate-none size-16 text-primary" />
             </div>
             <div className="flex w-full flex-col gap-4 p-8 md:w-1/2">
               <span className="inline-flex w-fit items-center gap-2 rounded-full bg-primary/15 px-3 py-1 text-sm font-medium text-primary">
@@ -146,7 +160,10 @@ export default function Home() {
               </ul>
               <Link
                 href="/chat"
-                className={buttonVariants({ variant: 'primary', size: 'lg' }) + ' glow-primary w-fit'}
+                className={
+                  buttonVariants({ variant: 'primary', size: 'lg' }) +
+                  ' glow-primary w-fit transition-transform hover:scale-[1.03] active:scale-[0.98]'
+                }
               >
                 Suala başla
               </Link>

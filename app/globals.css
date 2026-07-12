@@ -352,6 +352,74 @@ html:not(.dark) .glow-primary {
   }
 }
 
+/* Home page motion polish (app/page.tsx) — ambient, restrained per skill "glass, not
+   shadow" mood: soft breathing glow, mount-in entrances, hover-lift. Every looping
+   animation gets motion-reduce:animate-none in markup per prefers-reduced-motion. */
+@keyframes hero-glow-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.04);
+  }
+}
+
+.hero-glow {
+  animation: hero-glow-pulse 5s ease-in-out infinite;
+}
+
+@keyframes hero-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.hero-progress-card {
+  opacity: 0;
+  animation: hero-card-in 500ms ease-out forwards;
+  animation-delay: 300ms;
+}
+
+@keyframes topic-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.topic-card-in {
+  opacity: 0;
+  animation: topic-card-in 400ms ease-out forwards;
+}
+
+@keyframes sparkle-pulse {
+  0%,
+  100% {
+    opacity: 0.85;
+    transform: scale(1) rotate(0deg);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08) rotate(6deg);
+  }
+}
+
+.sparkle-pulse {
+  animation: sparkle-pulse 4.5s ease-in-out infinite;
+}
+
 /* Chat "PDF kimi ixrac et" export (app/chat/page.tsx): print:hidden on the
    normal chrome + a print:block transcript section print the transcript
    plainly via the browser's print dialog ("Save as PDF") — no PDF library

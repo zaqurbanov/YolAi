@@ -51,10 +51,23 @@ function stripBoilerplate(pages: PageText[]): PageText[] {
   });
 }
 
+// PDF text extraction occasionally emits NUL bytes and other C0 control
+// characters as encoding artifacts (broken embedded fonts, malformed streams).
+// Postgres `text` columns cannot store U+0000 at all (error 22P05,
+// "unsupported Unicode escape sequence" - its internal string representation
+// is C-style null-terminated), so a single stray NUL anywhere in an extracted
+// page fails the entire chunk insert. Strip these before any downstream use.
+function sanitizeExtractedText(text: string): string {
+  return text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
+}
+
 export async function parsePdf(buffer: ArrayBuffer): Promise<PageText[]> {
   const pdf = await getDocumentProxy(new Uint8Array(buffer));
   const { text } = await extractText(pdf, { mergePages: false });
   const pages = Array.isArray(text) ? text : [text];
-  const pageTexts = pages.map((pageText, i) => ({ pageNumber: i + 1, text: pageText }));
+  const pageTexts = pages.map((pageText, i) => ({
+    pageNumber: i + 1,
+    text: sanitizeExtractedText(pageText),
+  }));
   return stripBoilerplate(pageTexts);
 }

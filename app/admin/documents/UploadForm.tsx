@@ -46,6 +46,15 @@ function resolveSelectedIds(selectedKeys: Selection, documents: DocumentRow[]): 
   return Array.from(selectedKeys).map(String);
 }
 
+// Strips the extension and normalizes separators so a filename like
+// "yol-hereketi-qaydalari_2024.pdf" becomes a reasonable starting title
+// ("yol hereketi qaydalari 2024") the admin can still edit before uploading.
+function filenameToTitle(filename: string): string {
+  const dotIndex = filename.lastIndexOf('.');
+  const base = dotIndex > 0 ? filename.slice(0, dotIndex) : filename;
+  return base.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 function SelectionCheckbox() {
   return (
     <Checkbox slot="selection">
@@ -304,7 +313,15 @@ export default function UploadForm() {
               <input
                 type="file"
                 accept="application/pdf"
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                onChange={(e) => {
+                  const selected = e.target.files?.[0] ?? null;
+                  setFile(selected);
+                  // Only auto-fill an empty title — don't clobber a title the
+                  // user already typed/edited by hand.
+                  if (selected && !title.trim()) {
+                    setTitle(filenameToTitle(selected.name));
+                  }
+                }}
                 className="w-full border rounded-md px-3 py-2 text-sm"
                 required
               />

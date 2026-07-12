@@ -4,6 +4,7 @@ import { Toast } from "@heroui/react";
 import "./globals.css";
 import NavBar from "@/components/NavBar";
 import Sidebar from "@/components/Sidebar";
+import { SidebarProvider } from "@/components/SidebarContext";
 
 const montserrat = Montserrat({
   variable: "--font-montserrat",
@@ -49,11 +50,13 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body className="h-full flex flex-col overflow-hidden bg-background text-foreground">
-        <NavBar />
-        <div className="flex flex-1 min-h-0">
-          <Sidebar />
-          <main className="flex flex-1 flex-col min-h-0 overflow-y-auto">{children}</main>
-        </div>
+        <SidebarProvider>
+          <NavBar />
+          <div className="flex flex-1 min-h-0">
+            <Sidebar />
+            <main className="flex flex-1 flex-col min-h-0 overflow-y-auto">{children}</main>
+          </div>
+        </SidebarProvider>
         <Toast.Provider placement="top end" />
       </body>
     </html>
