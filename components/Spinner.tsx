@@ -1,14 +1,3 @@
-'use client';
-
-import dynamic from 'next/dynamic';
-import loadingAnimation from '@/public/loading.json';
-
-// lottie-web (behind lottie-react) is ~100KB gzipped — too heavy to ship on
-// every button/inline spinner. Dynamic-import with ssr:false code-splits it
-// into its own chunk that only loads when SpinnerPanel actually mounts
-// (route loading.tsx boundaries, GoogleSignInButton's redirect wait, etc.).
-const Lottie = dynamic(() => import('lottie-react'), { ssr: false });
-
 const INLINE_SIZES = {
   sm: 'size-4 border-2',
   md: 'size-6 border-2',
@@ -35,7 +24,7 @@ interface SpinnerProps {
  * Inline HUD spinner — lightweight CSS ring in the primary accent color.
  * Use everywhere a loading state sits next to text or inside a button
  * (chat "Cavab hazırlanır...", form submit buttons, etc). For a full-panel
- * loading state (route transitions), use `SpinnerPanel` instead.
+ * route-transition loading state, use `RouteLoading` instead.
  */
 export function Spinner({
   size = 'sm',
@@ -51,34 +40,5 @@ export function Spinner({
       aria-label={ariaLabel}
       className={`inline-block shrink-0 animate-spin rounded-full ${toneClass} ${INLINE_SIZES[size]} ${className}`}
     />
-  );
-}
-
-const PANEL_SIZES = {
-  md: 'size-28 sm:size-36',
-  lg: 'size-36 sm:size-44',
-} as const;
-
-interface SpinnerPanelProps {
-  label?: string;
-  size?: keyof typeof PANEL_SIZES;
-  className?: string;
-}
-
-/**
- * Full glass-panel loading presentation (route transitions / full-page
- * boundaries). Wraps the same Lottie asset RouteLoading previously inlined
- * directly — keep the dynamic-import reasoning above if you touch this.
- */
-export function SpinnerPanel({ label = 'Yüklənir...', size = 'md', className = '' }: SpinnerPanelProps) {
-  return (
-    <div
-      className={`glass-panel glow-primary flex flex-col items-center gap-3 rounded-3xl px-10 py-8 ${className}`}
-    >
-      <div className={`overflow-hidden rounded-xl ${PANEL_SIZES[size]}`}>
-        <Lottie animationData={loadingAnimation} loop autoplay />
-      </div>
-      <span className="mono-label uppercase text-on-surface-variant">{label}</span>
-    </div>
   );
 }

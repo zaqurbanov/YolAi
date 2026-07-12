@@ -101,7 +101,7 @@ export default function DocumentDetail({ id }: { id: string }) {
     async (targetPage: number) => {
       setLoadingChunks(true);
       const res = await fetch(
-        `/api/admin/documents/${id}/chunks?page=${targetPage}&pageSize=${PAGE_SIZE}`
+        `/api/admin/documents/${id}?chunks=1&page=${targetPage}&pageSize=${PAGE_SIZE}`
       );
       if (res.ok) {
         const data = await res.json();

@@ -3,6 +3,7 @@
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import type { UIMessage } from 'ai';
+import Image from 'next/image';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Avatar, Badge, Input, Button, Chip, Select, ListBox, AlertDialog, Modal, Dropdown, Skeleton, toast } from '@heroui/react';
 import { SendIcon, ShareIcon, MoreIcon, TrashIcon, InfoIcon } from '@/components/icons';
@@ -112,7 +113,7 @@ export default function ChatPage() {
     let cancelled = false;
     async function loadChatModel() {
       try {
-        const res = await fetch('/api/admin/chat-model');
+        const res = await fetch('/api/admin/chat-meta?type=model');
         if (!res.ok) return;
         const data: { modelId: string } = await res.json();
         if (!cancelled && data.modelId) setAdminPrimaryModelId(data.modelId);
@@ -378,7 +379,7 @@ export default function ChatPage() {
     setLogFetchState({ status: 'loading' });
     async function loadLog() {
       try {
-        const res = await fetch(`/api/admin/chat-request-logs/${logModalMessageId}`);
+        const res = await fetch(`/api/admin/chat-meta?type=log&messageId=${logModalMessageId}`);
         if (!res.ok) {
           if (!cancelled) setLogFetchState({ status: 'error' });
           return;
@@ -535,33 +536,44 @@ export default function ChatPage() {
             const isUser = message.role === 'user';
             return (
               <div key={message.id} className={`flex flex-col gap-1.5 ${isUser ? 'items-end' : 'items-start'}`}>
-                <div
-                  className={
-                    isUser
-                      ? 'glow-primary max-w-[85%] rounded-2xl rounded-tr-none bg-primary px-4 py-3 text-sm text-on-primary'
-                      : 'glass-panel max-w-[85%] rounded-2xl rounded-tl-none border-l-2 border-primary px-4 py-3 text-sm text-on-surface'
-                  }
-                >
-                  {message.parts.map((part, i) => {
-                    if (part.type === 'text') {
-                      return (
-                        <span key={i} className="whitespace-pre-wrap">
-                          {part.text}
-                        </span>
-                      );
+                <div className={`flex items-end gap-2 ${isUser ? '' : 'flex-row'}`}>
+                  {!isUser && (
+                    <Image
+                      src="/ai.png"
+                      alt="Yol AI"
+                      width={40}
+                      height={40}
+                      className="mb-0.5 size-10 shrink-0 rounded-full object-cover"
+                    />
+                  )}
+                  <div
+                    className={
+                      isUser
+                        ? 'glow-primary max-w-[85%] rounded-2xl rounded-tr-none bg-primary px-4 py-3 text-sm text-on-primary'
+                        : 'glass-panel max-w-[85%] rounded-2xl rounded-tl-none border-l-2 border-primary px-4 py-3 text-sm text-on-surface'
                     }
-                    if (part.type === 'reasoning' && part.text) {
-                      return (
-                        <div
-                          key={i}
-                          className="mono-label mb-2 border-l-2 border-outline-variant/60 pl-2 text-on-surface-variant/70 italic"
-                        >
-                          {part.state === 'streaming' ? 'Düşünür...' : 'Düşündü'}
-                        </div>
-                      );
-                    }
-                    return null;
-                  })}
+                  >
+                    {message.parts.map((part, i) => {
+                      if (part.type === 'text') {
+                        return (
+                          <span key={i} className="whitespace-pre-wrap">
+                            {part.text}
+                          </span>
+                        );
+                      }
+                      if (part.type === 'reasoning' && part.text) {
+                        return (
+                          <div
+                            key={i}
+                            className="mono-label mb-2 border-l-2 border-outline-variant/60 pl-2 text-on-surface-variant/70 italic"
+                          >
+                            {part.state === 'streaming' ? 'Düşünür...' : 'Düşündü'}
+                          </div>
+                        );
+                      }
+                      return null;
+                    })}
+                  </div>
                 </div>
 
                 {!isUser && citations && citations.length > 0 && (

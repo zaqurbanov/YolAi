@@ -225,7 +225,7 @@ export default function UploadForm() {
 
   async function handleReprocess(id: string) {
     setReprocessingId(id);
-    const res = await fetch(`/api/admin/documents/${id}/reprocess`, { method: 'POST' });
+    const res = await fetch(`/api/admin/documents/${id}`, { method: 'POST' });
 
     if (!res.ok) {
       const data = await res.json().catch(() => null);

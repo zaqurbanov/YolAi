@@ -83,7 +83,7 @@ export default async function AdminLogsPage() {
   const maxAvg = Math.max(...stats.map((s) => s.avg ?? 0), 1);
 
   return (
-    <div className="max-w-6xl mx-auto p-6 space-y-8">
+    <div className="mx-auto p-6 space-y-8">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Sorğu latensiyası</h1>
         <span className="mono-label text-on-surface-variant">Son {rows.length} sorğu</span>
