@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useTableOptions } from 'react-aria-components';
 import type { Key, Selection } from 'react-aria-components';
 import {
@@ -97,7 +97,6 @@ function DocsTableRow({
   onDeleteRequest: (doc: DocumentRow) => void;
 }) {
   const { selectionBehavior } = useTableOptions();
-  const router = useRouter();
   return (
     <Table.Row id={item.id}>
       {selectionBehavior === 'toggle' && (
@@ -106,14 +105,16 @@ function DocsTableRow({
         </Table.Cell>
       )}
       <Table.Cell className="font-medium">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="px-0 h-auto font-medium justify-start hover:text-primary hover:underline"
-          onPress={() => router.push(`/admin/documents/${item.id}`)}
+        {/* Plain Link, not a Button: react-aria's press handling on Button
+            intercepts pointerdown/mousedown to manage press state, which
+            blocks native text selection -- admins need to select/copy
+            document titles here (e.g. to search for the source file). */}
+        <Link
+          href={`/admin/documents/${item.id}`}
+          className="inline-block font-medium hover:text-primary hover:underline"
         >
           {item.title}
-        </Button>
+        </Link>
       </Table.Cell>
       <Table.Cell>
         <div className="flex flex-col gap-1">

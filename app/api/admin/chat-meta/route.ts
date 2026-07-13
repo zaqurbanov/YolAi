@@ -26,7 +26,9 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await supabase
       .from('chat_request_logs')
-      .select('rewrite_ms, embed_ms, db_search_ms, llm_first_token_ms, llm_total_ms, used_fallback, model_used, created_at')
+      .select(
+        'rewrite_ms, embed_ms, db_search_ms, llm_first_token_ms, llm_total_ms, used_fallback, model_used, created_at, prompt_tokens, completion_tokens, total_tokens',
+      )
       .eq('message_id', messageId)
       .maybeSingle();
 

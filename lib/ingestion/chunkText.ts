@@ -10,6 +10,17 @@ export interface Chunk {
   chunkIndex: number;
 }
 
+// `label` is only ever populated by splitTopLevelDottedClauses (per-piece
+// clause label, since that strategy's pieces can each belong to a different
+// section — e.g. "3.2" vs "4.1" — unlike every other strategy here, whose
+// pieces all share the enclosing segment's single label). Left undefined by
+// every other strategy so chunkPages falls back to the segment label.
+interface TextPiece {
+  piece: string;
+  start: number;
+  label?: string;
+}
+
 // "Maddə\s+\d+" alone also matches mid-sentence amendment-log references like
 // "...Qanunvericilik Toplusu, № 9, maddə 150) ilə 27-ci maddəsinin..." (citing an
 // article number of a legislative bulletin, not a structural header of this law).
@@ -37,10 +48,10 @@ function normalizeArticleLabel(label: string): string {
 const MAX_CHARS = 3200;
 const OVERLAP_CHARS = 500;
 
-function splitWithOverlap(text: string): { piece: string; start: number }[] {
+function splitWithOverlap(text: string): TextPiece[] {
   if (text.length <= MAX_CHARS) return [{ piece: text, start: 0 }];
 
-  const parts: { piece: string; start: number }[] = [];
+  const parts: TextPiece[] = [];
   let start = 0;
   while (start < text.length) {
     let end = Math.min(start + MAX_CHARS, text.length);
@@ -103,8 +114,8 @@ const SHORT_DOTTED_SUBCLAUSE_CHARS = 150;
 function buildPiecesFromMarkers(
   text: string,
   markerStarts: number[]
-): { piece: string; start: number }[] {
-  const rawPieces: { piece: string; start: number }[] = [];
+): TextPiece[] {
+  const rawPieces: TextPiece[] = [];
   for (let i = 0; i < markerStarts.length; i++) {
     const segStart = markerStarts[i];
     const segEnd = i + 1 < markerStarts.length ? markerStarts[i + 1] : text.length;
@@ -115,7 +126,7 @@ function buildPiecesFromMarkers(
     rawPieces.push({ piece, start: segStart + localTrimStart });
   }
 
-  const merged: { piece: string; start: number }[] = [];
+  const merged: TextPiece[] = [];
   let bufferPiece = '';
   let bufferStart = -1;
   const flush = () => {
@@ -161,7 +172,7 @@ const MIN_DOTTED_SUBCLAUSES = 2;
 function splitDottedSubclauses(
   text: string,
   articleNumber: string
-): { piece: string; start: number }[] | null {
+): TextPiece[] | null {
   // Also reject if immediately followed by another digit: real sub-clause
   // headers are always followed by clause text starting with a letter, but a
   // three-part dotted date ("15.06.2023") would otherwise false-match the
@@ -181,7 +192,116 @@ function splitDottedSubclauses(
   return buildPiecesFromMarkers(text, markerStarts);
 }
 
-function splitEnumeratedList(text: string): { piece: string; start: number }[] | null {
+const MIN_PLAIN_SUBCLAUSES = 3;
+
+// Some long "Maddə N." bodies (e.g. Maddə 37, driver duties) enumerate
+// distinct, freestanding sub-duties/prohibitions as line-initial "N)"
+// markers with NO following dash — unlike Maddə 1's "term – definition" list
+// (splitEnumeratedList, dash-gated), these read like "1) sürücülük
+// vəsiqəsini ... saxlamalıdır; 2) ... nəqliyyat vasitəsini dayandırdıqda
+// ...". They also commonly sit under Roman-numeral subsection headers
+// ("I.", "II." ...) that themselves aren't marker-based, so those headers
+// stay merged into whichever adjacent numbered piece precedes the next
+// marker. Left as one segment-wide chunk, a query about a single duty (e.g.
+// "hansı sənədləri saxlamalıdır") gets diluted across a dozen-plus unrelated
+// duties sharing generic vocabulary ("sənəd", "vəsiqə", "şəhadətnamə") and
+// can be outscored by a more specific competing chunk from another document.
+// splitEnumeratedList (dash-gated) and splitDottedSubclauses (this article's
+// own "N.M." numbering) are both tried first — a genuine definition list or
+// dotted-subclause article is never routed here since this only fires when
+// those stricter, more specific patterns find nothing. Same false-positive
+// guards as SUBCLAUSE_MARKER: line-initial only (a genuine duty is always
+// its own list line; the risk case — referencing a bənd by number
+// mid-sentence, e.g. "bu maddənin 1-ci bəndi" — is never line-initial) and
+// the "ilə" exclusion for amendment-log citations ("maddə 150) ilə").
+// Some documents ("Əsasnamə"-style regulations, e.g. the technical-inspection
+// rules document) have ZERO Maddə/Fəsil/Bölmə headers anywhere — their only
+// structure is dotted clause numbering ("3.2.", "4.1.") directly at the top
+// level, with no enclosing "Maddə N." to derive a base number from (unlike
+// splitDottedSubclauses above, which is always invoked from inside an
+// already-identified Maddə segment and locks to that Maddə's own number to
+// reject cross-references to other articles). Confirmed live: this document's
+// chunks all end up with article_label = null and, lacking any Maddə header,
+// fall straight through to the generic size-window splitWithOverlap fallback
+// as one giant undifferentiated segment — diluting a specific, directly
+// relevant clause (3.2, listing documents required for a technical
+// inspection) into a chunk dominated by unrelated surrounding text, letting
+// an unrelated chunk from a better-structured document outrank it in
+// retrieval.
+//
+// Unlike splitDottedSubclauses, no single base-number lock is needed or
+// possible here: a document with this top-level numbering genuinely has
+// multiple sections (3.x, 4.x, 5.x, ...), each its own base number, and all
+// of them are real structure, not cross-references — so every "N.M." marker
+// found is treated as a genuine clause boundary regardless of N. The same
+// date-like guard as splitDottedSubclauses is carried over unchanged (reject
+// a marker immediately followed by another digit, so "15.06.2023" doesn't
+// false-match as clause "15.6").
+//
+// Scope is deliberately narrow: this is only invoked by chunkPages for the
+// matches.length === 0 case, i.e. a whole document with NO Maddə/Fəsil/Bölmə
+// marker anywhere — never for a label:null segment that merely precedes a
+// document's first Maddə header (e.g. a preamble in an otherwise normally
+// structured document). Those documents already have real structure
+// elsewhere via the existing per-Maddə-segment strategies; this dotted-clause
+// strategy has only been verified against fully Maddə-less documents, and a
+// preamble block falling through to the existing, known-safe generic
+// fallback is preferable to an untested broader scope. A higher minimum
+// marker count than splitDottedSubclauses' MIN_DOTTED_SUBCLAUSES is used
+// because this runs unscoped across an entire document rather than within
+// one already-confirmed Maddə — a document that just happens to contain a
+// couple of stray "N.M." dates or measurements (and nothing else structural)
+// should fall through to the generic fallback instead of over-triggering.
+const TOP_LEVEL_DOTTED_MARKER = /(?<!\d)(\d+\.\d+(?:-\d+)?)\.(?!\s*\d)/g;
+const MIN_TOP_LEVEL_DOTTED_CLAUSES = 5;
+
+function splitTopLevelDottedClauses(text: string): TextPiece[] | null {
+  const markers: { start: number; label: string }[] = [];
+  for (const m of text.matchAll(TOP_LEVEL_DOTTED_MARKER)) {
+    markers.push({ start: m.index ?? 0, label: m[1] });
+  }
+  if (markers.length < MIN_TOP_LEVEL_DOTTED_CLAUSES) return null;
+
+  const markerStarts = markers.map((m) => m.start);
+  const labelsByStart = new Map<number, string>();
+  for (const m of markers) labelsByStart.set(m.start, m.label);
+
+  // Keep the segment preamble (document title/intro text before the first
+  // real clause marker) attached to the first clause rather than dropping it
+  // — same rationale as splitDottedSubclauses/splitPlainEnumeratedList — but
+  // the first clause's own label still applies to that merged piece.
+  if (markerStarts[0] > 0) {
+    labelsByStart.set(0, markers[0].label);
+    markerStarts[0] = 0;
+  }
+
+  const pieces = buildPiecesFromMarkers(text, markerStarts);
+
+  // buildPiecesFromMarkers may merge several short raw pieces into one output
+  // piece, but a merged piece's start is always exactly one of the marker
+  // starts above (merging only appends subsequent text, never shifts where a
+  // piece begins) — so looking up by start reliably recovers which clause
+  // each output piece begins at.
+  return pieces.map((p) => ({ ...p, label: labelsByStart.get(p.start) && `Bənd ${labelsByStart.get(p.start)}` }));
+}
+
+function splitPlainEnumeratedList(text: string): TextPiece[] | null {
+  const markerStarts: number[] = [];
+  for (const m of text.matchAll(SUBCLAUSE_MARKER)) {
+    markerStarts.push(m.index ?? 0);
+  }
+  if (markerStarts.length < MIN_PLAIN_SUBCLAUSES) return null;
+
+  // Keep the segment header/preamble (article title, any Roman-numeral
+  // subsection intro like "I. Mexaniki nəqliyyat vasitəsinin sürücüsü:")
+  // attached to the first sub-item rather than dropping it — same rationale
+  // as splitDottedSubclauses.
+  if (markerStarts[0] > 0) markerStarts[0] = 0;
+
+  return buildPiecesFromMarkers(text, markerStarts);
+}
+
+function splitEnumeratedList(text: string): TextPiece[] | null {
   const markerStarts: number[] = [];
   for (const m of text.matchAll(SUBCLAUSE_MARKER)) {
     const markerStart = m.index ?? 0;
@@ -193,7 +313,7 @@ function splitEnumeratedList(text: string): { piece: string; start: number }[] |
   }
   if (markerStarts.length < MIN_SUBCLAUSES) return null;
 
-  const rawPieces: { piece: string; start: number }[] = [];
+  const rawPieces: TextPiece[] = [];
   for (let i = 0; i < markerStarts.length; i++) {
     const segStart = markerStarts[i];
     const segEnd = i + 1 < markerStarts.length ? markerStarts[i + 1] : text.length;
@@ -209,7 +329,7 @@ function splitEnumeratedList(text: string): { piece: string; start: number }[] |
   // oversized via the existing overlap splitter. Never merge across a
   // sub-clause boundary in a way that drops the boundary — the merged chunk
   // still starts at a real marker and only appends whole subsequent pieces.
-  const merged: { piece: string; start: number }[] = [];
+  const merged: TextPiece[] = [];
   let bufferPiece = '';
   let bufferStart = -1;
   const flush = () => {
@@ -265,6 +385,10 @@ export function chunkPages(pages: PageText[]): Chunk[] {
 
   const segments: { label: string | null; text: string; offset: number }[] = [];
   const matches = [...fullText.matchAll(ARTICLE_MARKER)];
+  // Only a document with zero Maddə/Fəsil/Bölmə markers anywhere is eligible
+  // for splitTopLevelDottedClauses — see that function's comment for why this
+  // is scoped narrower than "any label:null segment".
+  const documentHasNoStructuralMarkers = matches.length === 0;
 
   if (matches.length === 0) {
     segments.push({ label: null, text: fullText, offset: 0 });
@@ -295,12 +419,16 @@ export function chunkPages(pages: PageText[]): Chunk[] {
     const pieces =
       splitEnumeratedList(trimmed) ??
       (articleNumber ? splitDottedSubclauses(trimmed, articleNumber) : null) ??
+      splitPlainEnumeratedList(trimmed) ??
+      (segment.label === null && documentHasNoStructuralMarkers
+        ? splitTopLevelDottedClauses(trimmed)
+        : null) ??
       splitWithOverlap(trimmed);
-    for (const { piece, start } of pieces) {
+    for (const piece of pieces) {
       chunks.push({
-        content: piece,
-        pageNumber: pageForOffset(segment.offset + trimStart + start),
-        articleLabel: segment.label,
+        content: piece.piece,
+        pageNumber: pageForOffset(segment.offset + trimStart + piece.start),
+        articleLabel: piece.label ?? segment.label,
         chunkIndex: chunkIndex++,
       });
     }

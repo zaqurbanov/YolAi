@@ -40,6 +40,42 @@ export interface RetrieveRelevantChunksParams {
   matchCount?: number;
 }
 
+// Narrow, single-purpose intent check for "which documents must a driver
+// carry / what can police request when stopping me" — NOT a general
+// per-query document router. Bug repro: "polis məni saxlayanda hansı
+// sənədləri istəyə bilər?" was answered from "727 IQ Polis haqqında" Maddə
+// 17 (police ID-check powers) instead of "Yol hərəkəti qaydaları" Maddə 37
+// (documents a driver must carry) — diagnostics showed the correct chunk
+// simply doesn't surface in top-15 vector search because Maddə 37 was one
+// large diluted chunk (see chunkText.ts's splitPlainEnumeratedList fix for
+// the root cause). This is a supplementary, additive retrieval boost so the
+// correct chunk is guaranteed to be considered even before/regardless of the
+// chunking fix landing — it never removes chunks another query would
+// otherwise get (e.g. a genuinely Police-Law-scoped question like "polis
+// hansı hallarda sənədlərimi yoxlaya bilər?" doesn't match this pattern at
+// all, and even if it did, merging only adds candidates).
+const DRIVER_DOCUMENTS_INTENT_PATTERN =
+  /(sənəd|vəsiqə|şəhadətnamə)\w*.{0,40}(saxla|gəzdir|daşı)\w*|(\bpolis\b|əməkdaş).{0,60}(sənəd|vəsiqə|şəhadətnamə)\w*.{0,40}(istə|tələb)|(sənəd|vəsiqə|şəhadətnamə)\w*.{0,60}(\bpolis\b|əməkdaş).{0,40}(istə|tələb)/i;
+
+export function matchesDriverDocumentsIntent(text: string): boolean {
+  return DRIVER_DOCUMENTS_INTENT_PATTERN.test(text);
+}
+
+/** Case-insensitive exact title lookup — used by the driver-documents intent
+ * boost to find "Yol hərəkəti qaydaları"'s current id rather than hardcoding
+ * a UUID that can differ across environments/reseeds. */
+export async function findDocumentIdByTitle(title: string): Promise<string | null> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from('documents')
+    .select('id')
+    .ilike('title', title)
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.id ?? null;
+}
+
 export async function retrieveRelevantChunks({
   embedQuery,
   ftsQuery,

@@ -4,12 +4,29 @@ import { generateTextWithFallback } from '@/lib/llm/fallback';
 
 const MAX_REWRITTEN_LENGTH = 400;
 
+// Rewriting is an LLM round trip fully blocking retrieval (~2.3s in measured
+// chat_request_timing logs) — worth skipping when it's unlikely to help.
+// Deliberately conservative: most real questions in this domain ("qırmızı
+// işıqda keçməyin cəriməsi nədi?") are short and ambiguous by nature and
+// genuinely need expansion (see REWRITE_PROMPT's penalty-vocabulary rule
+// added to fix a real recall bug) — a length-based skip only fires for
+// already-long, already keyword-dense queries where an LLM rewrite adds
+// little. Word count, not character count, since Azerbaijani legal terms
+// run long (agglutinative suffixes) without being more "specific" per word.
+const SKIP_REWRITE_MIN_WORDS = 25;
+
+function isAlreadySpecific(query: string): boolean {
+  return query.trim().split(/\s+/).filter(Boolean).length >= SKIP_REWRITE_MIN_WORDS;
+}
+
 const REWRITE_PROMPT = `Sən Azərbaycanın Yol Hərəkəti Qaydaları üzrə axtarış sorğusunu genişləndirən köməkçi funksiyasın. Sənə istifadəçinin qısa/qeyri-müəyyən sualı veriləcək. Vəzifən onu sənəd axtarışı (retrieval) üçün daha uyğun, açar sözlərlə və sinonimlərlə zənginləşdirilmiş formaya çevirməkdir.
 
 Qaydalar:
 - Sualı ÖZÜN CAVABLANDIRMA — yalnız axtarış üçün sorğunu yenidən yaz.
 - Sorğuda ehtiva olunmayan yeni faktlar uydurma.
 - Mövzu ilə bağlı əlaqəli terminləri, tərif axtaran ifadələri əlavə edə bilərsən (məsələn "velosiped yolu" -> "velosiped yolu tərifi qaydaları velosipedçilər üçün ayrılmış yol zolağı").
+- ƏGƏR sual cəza/cərimə/məsuliyyət haqqındadırsa (məsələn "cərimə", "cəza", "neçə manat", "məsuliyyət" kimi sözlər və ya mənalar varsa), sorğunu YALNIZ Yol Hərəkəti Qaydaları terminləri ilə deyil, həm də İnzibati Xətalar Məcəlləsinin (cərimə/sanksiya sənədi) terminləri ilə genişləndir — məsələn "inzibati xəta", "cərimə məbləği", "manat", "Maddə", "qadağanedici işarə", "məsuliyyətə cəlb olunma" kimi sözləri əlavə et. Bu iki sənəd fərqli lüğətdən istifadə edir (biri qaydanı təsvir edir, digəri cəzanı) — sorğu hər ikisinə uyğun gəlməlidir.
+- ƏGƏR sual sürücünün özündə saxlamalı olduğu sənədlər və ya polisin saxladıqda hansı sənədləri tələb edə biləcəyi haqqındadırsa (məsələn "hansı sənədləri istəyə bilər", "yanımda hansı sənəd olmalıdır", "hansı sənədləri gəzdirməliyəm" kimi ifadələr), sorğunu bu konkret terminlərlə genişləndir: "sürücülük vəsiqəsi", "qeydiyyat şəhadətnaməsi", "sığorta şəhadətnaməsi", "sənədləri özündə saxlamaq", "sənədləri təqdim etmək". "texniki pasport" sözünü İSTİFADƏ ETMƏ — bu termin mənbə sənədlərdə yoxdur.
 - Yalnız yenidən yazılmış sorğu mətnini qaytar — heç bir izahat, sitat işarəsi və ya markdown olmadan.
 - Cavabın qısa və yığcam olsun (bir neçə cümlə/söz birləşməsi), lazımsız uzatma.`;
 
@@ -21,6 +38,8 @@ function isUsableRewrite(text: string): boolean {
 }
 
 export async function rewriteQuery(query: string, contextSummary?: object): Promise<string> {
+  if (isAlreadySpecific(query)) return query;
+
   try {
     let contextBlock = '';
     if (contextSummary && Object.keys(contextSummary).length > 0) {

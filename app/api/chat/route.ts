@@ -8,7 +8,7 @@ import {
 } from 'ai';
 import { getChatModel, getChatModelFallback, getChatModelId, getChatModelFallbackId, getProviderCallOptions } from '@/lib/llm';
 import { streamTextWithFallback } from '@/lib/llm/streamWithFallback';
-import { retrieveRelevantChunks } from '@/lib/retrieval/search';
+import { retrieveRelevantChunks, matchesDriverDocumentsIntent, findDocumentIdByTitle } from '@/lib/retrieval/search';
 import { buildSystemPrompt, buildContextBlock, buildCitations, filterCitedChunks } from '@/lib/rag/buildPrompt';
 import { shouldUpdateSummary, updateContextSummary } from '@/lib/rag/contextSummary';
 import { rewriteQuery } from '@/lib/rag/rewriteQuery';
@@ -140,11 +140,48 @@ export async function POST(request: Request) {
   const retrievalQuery = await rewriteQuery(query, conversation?.contextSummary);
   const rewriteMs = performance.now() - rewriteStart;
 
-  const { chunks: relevantChunks, embedMs, dbSearchMs } = await retrieveRelevantChunks({
+  const { chunks: initialChunks, embedMs, dbSearchMs: initialDbSearchMs } = await retrieveRelevantChunks({
     embedQuery: retrievalQuery,
     ftsQuery: query,
     documentId,
   });
+
+  let relevantChunks = initialChunks;
+  let dbSearchMs = initialDbSearchMs;
+
+  // Supplementary, additive-only retrieval boost for the "which documents
+  // must a driver carry / what can police request" intent (see
+  // matchesDriverDocumentsIntent) — only when the UI hasn't already scoped
+  // this chat to a specific document, so an explicit user scope is never
+  // silently overridden. Merged in, never replacing the primary result set,
+  // so it can only help recall for this one narrow intent and can't suppress
+  // a correct answer another query would otherwise get.
+  if (!documentId && (matchesDriverDocumentsIntent(query) || matchesDriverDocumentsIntent(retrievalQuery))) {
+    try {
+      const trafficRulesDocId = await findDocumentIdByTitle('Yol hərəkəti qaydaları');
+      if (trafficRulesDocId) {
+        // A higher matchCount than the primary call's default (15) is used here
+        // deliberately: this Maddə 37 driver-duties article enumerates many
+        // structurally-similar sub-duties (see chunkText.ts's
+        // splitPlainEnumeratedList), so the single sub-chunk with the complete
+        // document list can rank outside the top 15 within its own article even
+        // when it's exactly what's needed — a wider candidate pool for this one
+        // additive, document-scoped call costs little and doesn't affect the
+        // primary corpus-wide search.
+        const { chunks: supplementaryChunks, dbSearchMs: supplementaryDbSearchMs } = await retrieveRelevantChunks({
+          embedQuery: retrievalQuery,
+          ftsQuery: query,
+          documentId: trafficRulesDocId,
+          matchCount: 25,
+        });
+        const seenIds = new Set(relevantChunks.map((c) => c.id));
+        relevantChunks = [...relevantChunks, ...supplementaryChunks.filter((c) => !seenIds.has(c.id))];
+        dbSearchMs += supplementaryDbSearchMs;
+      }
+    } catch (err) {
+      console.error('[chat] driver-documents intent supplementary retrieval failed:', err);
+    }
+  }
 
   const contextBlock = buildContextBlock(relevantChunks);
 
@@ -182,9 +219,12 @@ export async function POST(request: Request) {
           liveAnswerText += chunk.text;
         }
       },
-      onFinish: async ({ text }) => {
+      onFinish: async ({ text, usage }) => {
         const llmTotalMs = performance.now() - llmStartTime;
         const citations = buildCitations(filterCitedChunks(relevantChunks, text));
+        const promptTokens = usage?.inputTokens ?? null;
+        const completionTokens = usage?.outputTokens ?? null;
+        const totalTokens = usage?.totalTokens ?? null;
 
         try {
           console.log(
@@ -197,6 +237,9 @@ export async function POST(request: Request) {
               dbSearchMs,
               llmFirstTokenMs,
               llmTotalMs,
+              promptTokens,
+              completionTokens,
+              totalTokens,
               query,
             }),
           );
@@ -218,6 +261,9 @@ export async function POST(request: Request) {
             llm_total_ms: llmTotalMs,
             used_fallback: usedFallback,
             model_used: modelUsed,
+            prompt_tokens: promptTokens,
+            completion_tokens: completionTokens,
+            total_tokens: totalTokens,
           })
           .then(({ error }) => {
             if (error) console.error('[chat] failed to persist request timing log:', error);

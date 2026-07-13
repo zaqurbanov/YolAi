@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 import { requireAdmin } from '@/lib/auth/requireAdmin';
 import { getAdminUsers } from '@/lib/admin/getUsers';
 import { Chip } from '@heroui/react';
@@ -32,15 +33,29 @@ export default async function AdminUsersPage() {
             </thead>
             <tbody>
               {users.map((u) => (
-                <tr key={u.id} className="border-b border-outline-variant/20 last:border-b-0">
-                  <td className="px-4 py-3">{u.email ?? '—'}</td>
-                  <td className="px-4 py-3">
-                    <Chip size="sm" color={u.role === 'admin' ? 'success' : 'default'}>
-                      {u.role}
-                    </Chip>
+                <tr
+                  key={u.id}
+                  className="border-b border-outline-variant/20 last:border-b-0 hover:bg-surface-container-high/40"
+                >
+                  <td className="p-0">
+                    <Link href={`/admin/users/${u.id}`} className="block px-4 py-3 cursor-pointer">
+                      {u.email ?? '—'}
+                    </Link>
                   </td>
-                  <td className="px-4 py-3 mono-label text-right text-on-surface-variant">
-                    {dateFormatter.format(new Date(u.created_at))}
+                  <td className="p-0">
+                    <Link href={`/admin/users/${u.id}`} className="flex px-4 py-3 cursor-pointer">
+                      <Chip size="sm" color={u.role === 'admin' ? 'success' : 'default'}>
+                        {u.role}
+                      </Chip>
+                    </Link>
+                  </td>
+                  <td className="p-0">
+                    <Link
+                      href={`/admin/users/${u.id}`}
+                      className="block px-4 py-3 mono-label text-right text-on-surface-variant cursor-pointer"
+                    >
+                      {dateFormatter.format(new Date(u.created_at))}
+                    </Link>
                   </td>
                 </tr>
               ))}

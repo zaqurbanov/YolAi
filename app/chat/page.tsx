@@ -4,7 +4,7 @@ import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import type { UIMessage } from 'ai';
 import Image from 'next/image';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Avatar, Badge, Input, Button, Chip, Select, ListBox, AlertDialog, Modal, Dropdown, Skeleton, toast } from '@heroui/react';
 import { SendIcon, ShareIcon, MoreIcon, TrashIcon, InfoIcon } from '@/components/icons';
 import { Spinner } from '@/components/Spinner';
@@ -36,6 +36,9 @@ interface RequestLog {
   llm_total_ms: number | null;
   used_fallback: boolean | null;
   model_used: string | null;
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
+  total_tokens: number | null;
   created_at: string;
 }
 
@@ -44,6 +47,12 @@ type LogFetchState = { status: 'loading' } | { status: 'success'; log: RequestLo
 function formatMs(ms: number | null): string {
   if (ms == null) return '—';
   return `${Math.round(ms)}ms`;
+}
+
+function formatTokens(log: RequestLog): string {
+  if (log.total_tokens == null) return '—';
+  if (log.prompt_tokens == null || log.completion_tokens == null) return `${log.total_tokens}`;
+  return `${log.total_tokens} (giriş: ${log.prompt_tokens}, çıxış: ${log.completion_tokens})`;
 }
 
 // Sequential pipeline (app/api/chat/route.ts): rewrite -> embed -> DB search -> LLM.
@@ -59,6 +68,122 @@ interface DocumentOption {
   id: string;
   title: string;
 }
+
+interface MessageBubbleProps {
+  message: ChatUIMessage;
+  timestamp: string;
+  isCitationsExpanded: boolean;
+  onToggleCitations: (messageId: string) => void;
+  onOpenLog: (messageId: string) => void;
+}
+
+// Memoized so a streamed chunk to the newest message doesn't force React to
+// re-diff every earlier bubble in a long conversation on every token — see
+// bug report re: streaming jank. Props are kept to primitives + stable
+// callbacks (see ChatPage) so this actually skips re-render for untouched
+// messages, not just in theory.
+const MessageBubble = memo(function MessageBubble({
+  message,
+  timestamp,
+  isCitationsExpanded,
+  onToggleCitations,
+  onOpenLog,
+}: MessageBubbleProps) {
+  const metadata = message.metadata as ChatMessageMetadata | undefined;
+  const citations = metadata?.citations;
+  const modelUsed = metadata?.modelUsed;
+  const isUser = message.role === 'user';
+
+  return (
+    <div className={`flex flex-col gap-1.5 ${isUser ? 'items-end' : 'items-start'}`}>
+      <div className={`flex items-end gap-2 ${isUser ? '' : 'flex-row'}`}>
+        {!isUser && (
+          <Image
+            src="/ai.png"
+            alt="Yol AI"
+            width={40}
+            height={40}
+            className="mb-0.5 size-10 shrink-0 rounded-full object-cover"
+          />
+        )}
+        <div
+          className={
+            isUser
+              ? 'glow-primary max-w-[85%] rounded-2xl rounded-tr-none bg-primary px-4 py-3 text-sm text-on-primary'
+              : 'glass-panel max-w-[85%] rounded-2xl rounded-tl-none border-l-2 border-primary px-4 py-3 text-sm text-on-surface'
+          }
+        >
+          {message.parts.map((part, i) => {
+            if (part.type === 'text') {
+              return (
+                <span key={i} className="whitespace-pre-wrap">
+                  {part.text}
+                </span>
+              );
+            }
+            if (part.type === 'reasoning' && part.text) {
+              return (
+                <div
+                  key={i}
+                  className="mono-label mb-2 border-l-2 border-outline-variant/60 pl-2 text-on-surface-variant/70 italic"
+                >
+                  {part.state === 'streaming' ? 'Düşünür...' : 'Düşündü'}
+                </div>
+              );
+            }
+            return null;
+          })}
+        </div>
+      </div>
+
+      {!isUser && citations && citations.length > 0 && (
+        isCitationsExpanded ? (
+          <div className="flex max-w-[85%] flex-col gap-1.5">
+            <div className="flex flex-wrap gap-1.5">
+              {citations.map((c, i) => (
+                <Chip key={i} size="sm" variant="soft" color="accent" className="mono-label">
+                  {c.title}
+                  {c.article_label ? ` · ${c.article_label}` : ''}
+                  {c.page ? ` · s.${c.page}` : ''}
+                </Chip>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => onToggleCitations(message.id)}
+              className="mono-label w-fit px-1 text-on-surface-variant/70 hover:text-on-surface hover:underline"
+            >
+              Gizlət
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => onToggleCitations(message.id)}
+            className="mono-label w-fit px-1 text-primary hover:underline"
+          >
+            Sitatları oxu ({citations.length})
+          </button>
+        )
+      )}
+
+      <span className="mono-label inline-flex items-center gap-1 px-1 uppercase text-on-surface-variant">
+        {isUser ? 'Sən' : 'Yol AI'} · {timestamp}
+        {!isUser && modelUsed && <> · {modelUsed}</>}
+        {!isUser && metadata?.messageId != null && (
+          <button
+            type="button"
+            onClick={() => onOpenLog(metadata.messageId!)}
+            className="ml-0.5 inline-flex items-center rounded-full p-0.5 normal-case text-on-surface-variant/70 transition hover:bg-surface-hover hover:text-on-surface"
+            aria-label="Performans məlumatı"
+          >
+            <InfoIcon width={13} height={13} />
+          </button>
+        )}
+      </span>
+    </div>
+  );
+});
 
 const ALL_DOCUMENTS_KEY = 'all';
 
@@ -88,14 +213,14 @@ export default function ChatPage() {
   const [logFetchState, setLogFetchState] = useState<LogFetchState | null>(null);
   const [expandedCitationIds, setExpandedCitationIds] = useState<Set<string>>(new Set());
 
-  function toggleCitations(messageId: string) {
+  const toggleCitations = useCallback((messageId: string) => {
     setExpandedCitationIds((prev) => {
       const next = new Set(prev);
       if (next.has(messageId)) next.delete(messageId);
       else next.add(messageId);
       return next;
     });
-  }
+  }, []);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const bottomSentinelRef = useRef<HTMLDivElement>(null);
   const { messages, sendMessage, setMessages, status, error } = useChat<ChatUIMessage>({
@@ -235,14 +360,16 @@ export default function ChatPage() {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages]);
-  function timestampFor(id: string) {
-    const t = timestamps[id];
-    return t ? timeFormatter.format(t) : '';
-  }
+  const timestampFor = useCallback(
+    (id: string) => {
+      const t = timestamps[id];
+      return t ? timeFormatter.format(t) : '';
+    },
+    [timestamps]
+  );
 
-  // How close to the bottom (px) still counts as "following along" — a user who
-  // has scrolled further up than this is treated as intentionally reading
-  // earlier messages, and streaming growth must not yank them back down.
+  // How close to the bottom (px) still counts as "at the bottom" — used both
+  // to detect genuine user scroll-away and to know when they've scrolled back.
   const NEAR_BOTTOM_THRESHOLD = 80;
 
   function isNearBottom() {
@@ -251,22 +378,67 @@ export default function ChatPage() {
     return el.scrollHeight - el.scrollTop - el.clientHeight <= NEAR_BOTTOM_THRESHOLD;
   }
 
+  // Whether the user has deliberately scrolled away from the bottom. Unlike a
+  // one-shot isNearBottom() read on every `messages` change, this only flips
+  // to true from a *real* scroll event, and only when that event wasn't
+  // triggered by our own programmatic scrollIntoView call. This is what fixes
+  // the streaming lockout bug: a single large content jump growing scrollHeight
+  // out from under an unmoved scrollTop used to permanently read as "user
+  // scrolled away" even though the user never touched anything.
+  const userScrolledAwayRef = useRef(false);
+  const autoScrollingRef = useRef(false);
+
+  const scrollToBottom = useCallback((behavior: ScrollBehavior) => {
+    const el = scrollContainerRef.current;
+    autoScrollingRef.current = true;
+    bottomSentinelRef.current?.scrollIntoView({ block: 'end', behavior });
+    if (el && 'onscrollend' in el) {
+      const handleScrollEnd = () => {
+        autoScrollingRef.current = false;
+        el.removeEventListener('scrollend', handleScrollEnd);
+      };
+      el.addEventListener('scrollend', handleScrollEnd);
+    } else {
+      // Fallback for browsers without 'scrollend': smooth scrolls take a
+      // moment to settle, instant ones are done by next frame.
+      window.setTimeout(
+        () => {
+          autoScrollingRef.current = false;
+        },
+        behavior === 'smooth' ? 500 : 50
+      );
+    }
+  }, []);
+
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    function handleScroll() {
+      if (autoScrollingRef.current) return;
+      userScrolledAwayRef.current = !isNearBottom();
+    }
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    return () => el.removeEventListener('scroll', handleScroll);
+  }, []);
+
   // Initial land-at-bottom on page load/refresh, once history hydration settles —
   // instant (no visible scroll-through-history animation).
   useEffect(() => {
     if (!historyLoaded) return;
-    bottomSentinelRef.current?.scrollIntoView({ block: 'end', behavior: 'instant' });
-  }, [historyLoaded]);
+    scrollToBottom('instant');
+  }, [historyLoaded, scrollToBottom]);
 
   // Auto-follow on new messages and streaming growth — but only while the user
-  // is already near the bottom. If they've scrolled up to read earlier
-  // messages, respect that instead of forcing them back down on every
-  // streamed token.
+  // hasn't deliberately scrolled away to read earlier messages. Uses 'instant'
+  // during active streaming so a fast-growing response doesn't restart a
+  // smooth-scroll animation on every chunk; 'smooth' otherwise (e.g. the
+  // assistant's reply landing after a non-streamed update).
   useEffect(() => {
     if (!historyLoaded) return;
-    if (!isNearBottom()) return;
-    bottomSentinelRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
-  }, [messages, historyLoaded]);
+    if (userScrolledAwayRef.current) return;
+    const behavior: ScrollBehavior = status === 'streaming' || status === 'submitted' ? 'instant' : 'smooth';
+    scrollToBottom(behavior);
+  }, [messages, historyLoaded, status, scrollToBottom]);
 
   const isBusy = status === 'streaming' || status === 'submitted';
 
@@ -391,9 +563,11 @@ export default function ChatPage() {
     sendMessage({ text: input }, { body: { documentId } });
     setInput('');
     // Sending is a deliberate action — always follow it to the bottom, even if
-    // the user had scrolled up to read earlier messages first.
+    // the user had scrolled up to read earlier messages first, and re-arm
+    // auto-follow for the reply that's about to stream in.
+    userScrolledAwayRef.current = false;
     requestAnimationFrame(() => {
-      bottomSentinelRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
+      scrollToBottom('smooth');
     });
   }
 
@@ -568,101 +742,16 @@ export default function ChatPage() {
         )}
 
         <div className="space-y-6">
-          {messages.map((message) => {
-            const metadata = message.metadata as ChatMessageMetadata | undefined;
-            const citations = metadata?.citations;
-            const modelUsed = metadata?.modelUsed;
-            const isUser = message.role === 'user';
-            return (
-              <div key={message.id} className={`flex flex-col gap-1.5 ${isUser ? 'items-end' : 'items-start'}`}>
-                <div className={`flex items-end gap-2 ${isUser ? '' : 'flex-row'}`}>
-                  {!isUser && (
-                    <Image
-                      src="/ai.png"
-                      alt="Yol AI"
-                      width={40}
-                      height={40}
-                      className="mb-0.5 size-10 shrink-0 rounded-full object-cover"
-                    />
-                  )}
-                  <div
-                    className={
-                      isUser
-                        ? 'glow-primary max-w-[85%] rounded-2xl rounded-tr-none bg-primary px-4 py-3 text-sm text-on-primary'
-                        : 'glass-panel max-w-[85%] rounded-2xl rounded-tl-none border-l-2 border-primary px-4 py-3 text-sm text-on-surface'
-                    }
-                  >
-                    {message.parts.map((part, i) => {
-                      if (part.type === 'text') {
-                        return (
-                          <span key={i} className="whitespace-pre-wrap">
-                            {part.text}
-                          </span>
-                        );
-                      }
-                      if (part.type === 'reasoning' && part.text) {
-                        return (
-                          <div
-                            key={i}
-                            className="mono-label mb-2 border-l-2 border-outline-variant/60 pl-2 text-on-surface-variant/70 italic"
-                          >
-                            {part.state === 'streaming' ? 'Düşünür...' : 'Düşündü'}
-                          </div>
-                        );
-                      }
-                      return null;
-                    })}
-                  </div>
-                </div>
-
-                {!isUser && citations && citations.length > 0 && (
-                  expandedCitationIds.has(message.id) ? (
-                    <div className="flex max-w-[85%] flex-col gap-1.5">
-                      <div className="flex flex-wrap gap-1.5">
-                        {citations.map((c, i) => (
-                          <Chip key={i} size="sm" variant="soft" color="accent" className="mono-label">
-                            {c.title}
-                            {c.article_label ? ` · ${c.article_label}` : ''}
-                            {c.page ? ` · s.${c.page}` : ''}
-                          </Chip>
-                        ))}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => toggleCitations(message.id)}
-                        className="mono-label w-fit px-1 text-on-surface-variant/70 hover:text-on-surface hover:underline"
-                      >
-                        Gizlət
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => toggleCitations(message.id)}
-                      className="mono-label w-fit px-1 text-primary hover:underline"
-                    >
-                      Sitatları oxu ({citations.length})
-                    </button>
-                  )
-                )}
-
-                <span className="mono-label inline-flex items-center gap-1 px-1 uppercase text-on-surface-variant">
-                  {isUser ? 'Sən' : 'Yol AI'} · {timestampFor(message.id)}
-                  {!isUser && modelUsed && <> · {modelUsed}</>}
-                  {!isUser && metadata?.messageId != null && (
-                    <button
-                      type="button"
-                      onClick={() => setLogModalMessageId(metadata.messageId!)}
-                      className="ml-0.5 inline-flex items-center rounded-full p-0.5 normal-case text-on-surface-variant/70 transition hover:bg-surface-hover hover:text-on-surface"
-                      aria-label="Performans məlumatı"
-                    >
-                      <InfoIcon width={13} height={13} />
-                    </button>
-                  )}
-                </span>
-              </div>
-            );
-          })}
+          {messages.map((message) => (
+            <MessageBubble
+              key={message.id}
+              message={message}
+              timestamp={timestampFor(message.id)}
+              isCitationsExpanded={expandedCitationIds.has(message.id)}
+              onToggleCitations={toggleCitations}
+              onOpenLog={setLogModalMessageId}
+            />
+          ))}
         </div>
 
         {isBusy && (
@@ -842,6 +931,10 @@ export default function ChatPage() {
                   <div className="flex items-center justify-between gap-4">
                     <dt className="text-on-surface-variant">İstifadə olunan model</dt>
                     <dd className="truncate normal-case">{logFetchState.log.model_used ?? '—'}</dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <dt className="text-on-surface-variant">İstifadə olunan tokenlər</dt>
+                    <dd>{formatTokens(logFetchState.log)}</dd>
                   </div>
                   <div className="flex items-center justify-between gap-4">
                     <dt className="text-on-surface-variant">Fallback işlədildimi?</dt>
