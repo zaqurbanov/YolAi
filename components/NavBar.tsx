@@ -3,6 +3,7 @@ import { buttonVariants } from '@heroui/styles';
 import { createClient } from '@/lib/supabase/server';
 import { logout } from '@/app/(auth)/actions';
 import { SidebarToggleButton } from '@/components/SidebarToggleButton';
+import CoinBadge from '@/components/CoinBadge';
 
 export default async function NavBar() {
   const supabase = await createClient();
@@ -38,6 +39,7 @@ export default async function NavBar() {
         )}
         {user ? (
           <>
+            {!isAdmin && <CoinBadge />}
             <Link href="/account" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
               Hesab
             </Link>

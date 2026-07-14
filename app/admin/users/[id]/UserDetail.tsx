@@ -148,6 +148,152 @@ function RoleControl({
   );
 }
 
+function formatCoinBalance(n: number): string {
+  return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.?0+$/, '');
+}
+
+function DailyCoinLimitControl({
+  userId,
+  dailyCoinLimit,
+  onChanged,
+}: {
+  userId: string;
+  dailyCoinLimit: number | null;
+  onChanged: (value: number | null) => void;
+}) {
+  const [inputValue, setInputValue] = useState(dailyCoinLimit != null ? String(dailyCoinLimit) : '');
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const dirty = inputValue.trim() !== (dailyCoinLimit != null ? String(dailyCoinLimit) : '');
+
+  async function save() {
+    const trimmed = inputValue.trim();
+    const dailyCoinLimitValue = trimmed === '' ? null : Number(trimmed);
+
+    if (dailyCoinLimitValue !== null && (!Number.isFinite(dailyCoinLimitValue) || dailyCoinLimitValue <= 0)) {
+      setError('Limit müsbət ədəd olmalıdır');
+      return;
+    }
+
+    setPending(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dailyCoinLimit: dailyCoinLimitValue }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setError(data?.error ?? 'Limiti dəyişmək uğursuz oldu');
+        return;
+      }
+      const newLimit = data.coins?.daily_limit ?? null;
+      onChanged(newLimit);
+      setInputValue(newLimit != null ? String(newLimit) : '');
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <TextField
+        type="number"
+        value={inputValue}
+        onChange={setInputValue}
+        className="w-32"
+        aria-label="Gündəlik coin limiti"
+      >
+        <Input placeholder="Standart" min={0.01} max={100000} step={0.01} />
+      </TextField>
+      <Button variant="outline" size="sm" isPending={pending} isDisabled={!dirty} onPress={save}>
+        {({ isPending }) => (
+          <>
+            {isPending ? <Spinner size="sm" tone="current" /> : null}
+            Yadda saxla
+          </>
+        )}
+      </Button>
+      {error && <span className="mono-label text-danger">{error}</span>}
+    </div>
+  );
+}
+
+function GrantCoinsControl({
+  userId,
+  onGranted,
+}: {
+  userId: string;
+  onGranted: (newBalance: number) => void;
+}) {
+  const [inputValue, setInputValue] = useState('');
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function grant(amount: number) {
+    setPending(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ grantCoins: amount }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setError(data?.error ?? 'Coin hədiyyə etmək uğursuz oldu');
+        return;
+      }
+      if (data.coins?.balance != null) onGranted(Number(data.coins.balance));
+      setInputValue('');
+    } finally {
+      setPending(false);
+    }
+  }
+
+  function handleSubmit(sign: 1 | -1) {
+    const trimmed = inputValue.trim();
+    if (trimmed === '') {
+      setError('Miqdar sıfırdan fərqli ədəd olmalıdır');
+      return;
+    }
+    const value = Number(trimmed);
+    if (!Number.isFinite(value) || value === 0) {
+      setError('Miqdar sıfırdan fərqli ədəd olmalıdır');
+      return;
+    }
+    void grant(sign * Math.abs(value));
+  }
+
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <TextField
+        type="number"
+        value={inputValue}
+        onChange={setInputValue}
+        className="w-32"
+        aria-label="Hədiyyə ediləcək coin miqdarı"
+      >
+        <Input placeholder="Miqdar" min={0.01} max={100000} step={0.01} />
+      </TextField>
+      <Button variant="outline" size="sm" isPending={pending} onPress={() => handleSubmit(1)}>
+        {({ isPending }) => (
+          <>
+            {isPending ? <Spinner size="sm" tone="current" /> : null}
+            Əlavə et
+          </>
+        )}
+      </Button>
+      <Button variant="outline" size="sm" isPending={pending} onPress={() => handleSubmit(-1)}>
+        Çıxart
+      </Button>
+      {error && <span className="mono-label text-danger">{error}</span>}
+    </div>
+  );
+}
+
 function RateLimitControl({
   userId,
   customMaxPerDay,
@@ -228,6 +374,8 @@ export default function UserDetail({
   const { profile, stats } = detail;
   const [role, setRole] = useState(profile.role);
   const [customMaxPerDay, setCustomMaxPerDay] = useState(profile.custom_max_per_day);
+  const [coinBalance, setCoinBalance] = useState(detail.coins?.balance ?? null);
+  const [dailyCoinLimit, setDailyCoinLimit] = useState(detail.coins?.daily_limit ?? null);
 
   const [conversations, setConversations] = useState<AdminUserConversation[]>(
     initialConversations.conversations
@@ -298,6 +446,26 @@ export default function UserDetail({
             )}
           </span>
           <RateLimitControl userId={userId} customMaxPerDay={customMaxPerDay} onChanged={setCustomMaxPerDay} />
+        </div>
+        <div className="flex items-center gap-3 flex-wrap pt-1">
+          <span className="mono-label text-on-surface-variant">
+            Coin balansı:{' '}
+            <span className="text-on-surface font-medium">
+              {coinBalance != null ? formatCoinBalance(coinBalance) : '—'}
+            </span>
+          </span>
+          <GrantCoinsControl userId={userId} onGranted={setCoinBalance} />
+        </div>
+        <div className="flex items-center gap-3 flex-wrap pt-1">
+          <span className="mono-label text-on-surface-variant">
+            Gündəlik coin limiti:{' '}
+            {dailyCoinLimit != null ? (
+              <span className="text-on-surface font-medium">{formatCoinBalance(dailyCoinLimit)}</span>
+            ) : (
+              <span className="text-on-surface font-medium">standart</span>
+            )}
+          </span>
+          <DailyCoinLimitControl userId={userId} dailyCoinLimit={dailyCoinLimit} onChanged={setDailyCoinLimit} />
         </div>
       </div>
 

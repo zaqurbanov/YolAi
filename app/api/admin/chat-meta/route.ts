@@ -5,10 +5,16 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { apiError, serverError } from '@/lib/api/errors';
 import { getChatModelId } from '@/lib/llm';
 import { GLOBAL_DEFAULT_SETTING_KEY, ENV_DEFAULT_MAX_PER_WINDOW } from '@/lib/chat/rateLimit';
+import { COIN_PRICE_SETTING_KEY, DEFAULT_MESSAGE_PRICE } from '@/lib/chat/coins';
 
 // Sane upper bound to reject fat-fingered values (e.g. 9999999) — same
 // convention as app/api/admin/users/[id]/rate-limit/route.ts.
 const MAX_ALLOWED = 100000;
+
+// Coin price is numeric(10,2) and explicitly allowed to be fractional (e.g.
+// 0.5/message) — bounds chosen to reject fat-fingered values while still
+// allowing sub-1 prices, unlike MAX_ALLOWED above which is integer-only.
+const MAX_ALLOWED_PRICE = 10000;
 
 export async function GET(request: NextRequest) {
   const auth = await requireAdmin();
@@ -65,6 +71,24 @@ export async function GET(request: NextRequest) {
     });
   }
 
+  if (type === 'coin-price') {
+    const { data, error } = await createAdminClient()
+      .from('app_settings')
+      .select('value')
+      .eq('key', COIN_PRICE_SETTING_KEY)
+      .maybeSingle();
+
+    if (error) return serverError(error, 'Ayarları oxumaq uğursuz oldu');
+
+    const tableValue = data ? Number(data.value) : null;
+    const isTableConfigured = tableValue !== null && Number.isFinite(tableValue) && tableValue > 0;
+
+    return NextResponse.json({
+      price: isTableConfigured ? tableValue : DEFAULT_MESSAGE_PRICE,
+      source: isTableConfigured ? 'table' : 'default',
+    });
+  }
+
   return apiError(400, 'type parametri düzgün deyil');
 }
 
@@ -74,6 +98,35 @@ export async function PATCH(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const type = searchParams.get('type');
+
+  if (type === 'coin-price') {
+    const body = await request.json().catch(() => null);
+    const price = body?.price;
+
+    if (
+      price !== null &&
+      price !== undefined &&
+      (typeof price !== 'number' || !Number.isFinite(price) || price <= 0 || price > MAX_ALLOWED_PRICE)
+    ) {
+      return apiError(400, `price null və ya 0-${MAX_ALLOWED_PRICE} arasında müsbət ədəd olmalıdır`);
+    }
+
+    const admin = createAdminClient();
+
+    if (price === null || price === undefined) {
+      const { error } = await admin.from('app_settings').delete().eq('key', COIN_PRICE_SETTING_KEY);
+      if (error) return serverError(error, 'Ayarı sıfırlamaq uğursuz oldu');
+      return NextResponse.json({ price: DEFAULT_MESSAGE_PRICE, source: 'default' });
+    }
+
+    const { error } = await admin
+      .from('app_settings')
+      .upsert({ key: COIN_PRICE_SETTING_KEY, value: price, updated_at: new Date().toISOString() });
+
+    if (error) return serverError(error, 'Ayarı yeniləmək uğursuz oldu');
+
+    return NextResponse.json({ price, source: 'table' });
+  }
 
   if (type !== 'rate-limit') {
     return apiError(400, 'type parametri düzgün deyil');

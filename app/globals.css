@@ -423,6 +423,29 @@ html:not(.dark) .glow-primary {
   animation: sparkle-pulse 4.5s ease-in-out infinite;
 }
 
+/* CoinBadge (components/CoinBadge.tsx): brief pulse+glow when the live
+   balance changes (mount fetch or per-message metadata update via the
+   'coin-balance-update' window event) — "cəlbedici" per design brief,
+   restrained to match the glow-primary glow strength used elsewhere. */
+@keyframes coin-badge-pulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 rgba(124, 147, 242, 0);
+  }
+  35% {
+    transform: scale(1.12);
+    box-shadow: 0 0 14px rgba(124, 147, 242, 0.45);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 rgba(124, 147, 242, 0);
+  }
+}
+
+.coin-badge-pulse {
+  animation: coin-badge-pulse 550ms ease-out;
+}
+
 /* Chat "PDF kimi ixrac et" export (app/chat/page.tsx): print:hidden on the
    normal chrome + a print:block transcript section print the transcript
    plainly via the browser's print dialog ("Save as PDF") — no PDF library

@@ -110,6 +110,38 @@ export async function retrievePerDocumentChunks(
   return { chunks: data ?? [], embedMs, dbSearchMs };
 }
 
+/**
+ * Article-number fast path (0032) -- see match_chunks_by_article's migration
+ * comment for the full rationale (trigram scores per-word with a length>=3
+ * filter, so short numeric tokens like article numbers get nothing out of
+ * it; an exact/prefix lookup against chunks.article_label is faster and more
+ * accurate for this query shape). `articlePrefixes` should come from
+ * articleLabelPrefixes(extractArticleReferences(<raw user query>)) --
+ * callers must not derive prefixes from the rewritten query (see that
+ * module's comment on why). Purely additive: merged into, never replacing,
+ * the primary hybrid search results -- see route.ts.
+ */
+export async function retrieveChunksByArticle(
+  embedQuery: string,
+  articleLabelPrefixesParam: string[],
+): Promise<RetrievePerDocumentChunksResult> {
+  const embedStart = performance.now();
+  const embedding = await embedText(embedQuery);
+  const embedMs = performance.now() - embedStart;
+
+  const supabase = createAdminClient();
+
+  const dbSearchStart = performance.now();
+  const { data, error } = await supabase.rpc('match_chunks_by_article', {
+    query_embedding: embedding,
+    article_label_prefixes: articleLabelPrefixesParam,
+  });
+  const dbSearchMs = performance.now() - dbSearchStart;
+
+  if (error) throw error;
+  return { chunks: data ?? [], embedMs, dbSearchMs };
+}
+
 export async function retrieveRelevantChunks({
   embedQuery,
   ftsQuery,

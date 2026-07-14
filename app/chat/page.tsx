@@ -4,7 +4,7 @@ import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import type { UIMessage } from 'ai';
 import Image from 'next/image';
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Avatar, Badge, Input, Button, Chip, Select, ListBox, AlertDialog, Modal, Dropdown, Skeleton, toast } from '@heroui/react';
 import { SendIcon, ShareIcon, MoreIcon, TrashIcon, InfoIcon, CopyIcon, CheckIcon } from '@/components/icons';
 import { Spinner } from '@/components/Spinner';
@@ -25,9 +25,13 @@ interface HistoryMessage {
   created_at: string;
 }
 
-type QuotaInfo = { used: number; max: number; remaining: number };
+type CoinInfo = { balance: number; price: number };
 
-type ChatMessageMetadata = { citations?: Citation[]; modelUsed?: string; messageId?: string; quota?: QuotaInfo };
+type ChatMessageMetadata = { citations?: Citation[]; modelUsed?: string; messageId?: string; coins?: CoinInfo };
+
+function formatCoinBalance(n: number): string {
+  return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.?0+$/, '');
+}
 
 type ChatUIMessage = UIMessage<ChatMessageMetadata>;
 
@@ -86,6 +90,14 @@ interface DocumentOption {
 
 function messageToPlainText(message: ChatUIMessage) {
   return message.parts.map((part) => (part.type === 'text' ? part.text : '')).join('');
+}
+
+// Re-parsing citation/excerpt markup on every render is cheap in absolute
+// terms (~4ms across a full streamed response, measured) but still O(n) per
+// token delta for no reason once text stops changing — memoize per part text.
+function TextPart({ text }: { text: string }) {
+  const nodes = useMemo(() => renderCitationText(text), [text]);
+  return <span className="whitespace-pre-wrap">{nodes}</span>;
 }
 
 interface MessageBubbleProps {
@@ -147,11 +159,7 @@ const MessageBubble = memo(function MessageBubble({
         >
           {message.parts.map((part, i) => {
             if (part.type === 'text') {
-              return (
-                <span key={i} className="whitespace-pre-wrap">
-                  {renderCitationText(part.text)}
-                </span>
-              );
+              return <TextPart key={i} text={part.text} />;
             }
             if (part.type === 'reasoning' && part.text) {
               return (
@@ -227,6 +235,38 @@ const MessageBubble = memo(function MessageBubble({
   );
 });
 
+// Elapsed-time + rotating status phrase for the busy indicator: makes a
+// 10-30s wait (dominated by hidden reasoning latency) read as "working", not
+// "frozen". Split out from ChatPage so the 250ms tick only re-renders this
+// small subtree instead of forcing a full re-diff of the message list on
+// every tick (measured: 56-98ms main-thread longtasks at exactly this
+// cadence during streaming before this was isolated).
+function BusyIndicator({ isBusy }: { isBusy: boolean }) {
+  const [elapsedMs, setElapsedMs] = useState(0);
+  useEffect(() => {
+    if (!isBusy) {
+      setElapsedMs(0);
+      return;
+    }
+    const start = Date.now();
+    const interval = setInterval(() => setElapsedMs(Date.now() - start), 250);
+    return () => clearInterval(interval);
+  }, [isBusy]);
+
+  if (!isBusy) return null;
+
+  const phrase = BUSY_PHRASES[Math.floor(elapsedMs / 4000) % BUSY_PHRASES.length];
+  const seconds = Math.floor(elapsedMs / 1000);
+
+  return (
+    <div className="mt-6 flex items-center gap-2 text-on-surface-variant">
+      <Spinner size="sm" />
+      <span className="mono-label uppercase">{phrase}</span>
+      {seconds > 0 && <span className="mono-label text-on-surface-variant/60">{seconds}s</span>}
+    </div>
+  );
+}
+
 const ALL_DOCUMENTS_KEY = 'all';
 
 const timeFormatter = new Intl.DateTimeFormat('az-AZ', { hour: '2-digit', minute: '2-digit' });
@@ -251,7 +291,7 @@ export default function ChatPage() {
   const [canNativeShare, setCanNativeShare] = useState(false);
   const [adminPrimaryModelId, setAdminPrimaryModelId] = useState<string | null>(null);
   const adminPrimaryModelIdRef = useRef<string | null>(null);
-  const [quota, setQuota] = useState<QuotaInfo | null>(null);
+  const [coins, setCoins] = useState<CoinInfo | null>(null);
   const [logModalMessageId, setLogModalMessageId] = useState<string | null>(null);
   const [logFetchState, setLogFetchState] = useState<LogFetchState | null>(null);
   const [expandedCitationIds, setExpandedCitationIds] = useState<Set<string>>(new Set());
@@ -318,40 +358,44 @@ export default function ChatPage() {
     adminPrimaryModelIdRef.current = adminPrimaryModelId;
   }, [adminPrimaryModelId]);
 
-  // Mount-time quota snapshot so the indicator has a value before the user's
-  // first send this session; superseded per-message by metadata.quota below
-  // (fresher, and avoids a second DB read per chat request).
+  // Mount-time coin balance snapshot so the indicator has a value before the
+  // user's first send this session; superseded per-message by metadata.coins
+  // below (fresher, and avoids a second DB read per chat request).
   useEffect(() => {
     let cancelled = false;
-    async function loadQuota() {
+    async function loadCoins() {
       try {
         const res = await fetch('/api/chat/quota');
         if (!res.ok) return;
-        const data: { exempt: boolean; used?: number; max?: number; remaining?: number } = await res.json();
+        const data: { exempt: boolean; balance?: number; price?: number } = await res.json();
         if (cancelled || data.exempt) return;
-        if (data.used != null && data.max != null && data.remaining != null) {
-          setQuota({ used: data.used, max: data.max, remaining: data.remaining });
+        if (data.balance != null && data.price != null) {
+          setCoins({ balance: data.balance, price: data.price });
         }
       } catch {
         // Silent: indicator just stays hidden.
       }
     }
-    void loadQuota();
+    void loadCoins();
     return () => {
       cancelled = true;
     };
   }, []);
 
-  // Keep the indicator in sync with the freshest server-reported quota once a
-  // reply finishes streaming — absent quota (admin, or rare fail-open case)
-  // leaves the last known value untouched.
+  // Keep the indicator (and the nav CoinBadge, via a window event — see
+  // components/CoinBadge.tsx) in sync with the freshest server-reported
+  // balance once a reply finishes streaming — absent coins (admin, or rare
+  // fail-open case) leaves the last known value untouched.
   useEffect(() => {
-    const lastQuota = [...messages]
+    const lastCoins = [...messages]
       .reverse()
-      .find((m) => m.role === 'assistant' && (m.metadata as ChatMessageMetadata | undefined)?.quota)
-      ?.metadata?.quota;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing from a prop-driven external source (message stream), not derivable during render.
-    if (lastQuota) setQuota(lastQuota);
+      .find((m) => m.role === 'assistant' && (m.metadata as ChatMessageMetadata | undefined)?.coins)
+      ?.metadata?.coins;
+    if (lastCoins) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing from a prop-driven external source (message stream), not derivable during render.
+      setCoins(lastCoins);
+      window.dispatchEvent(new CustomEvent('coin-balance-update', { detail: { balance: lastCoins.balance } }));
+    }
   }, [messages]);
 
   // Backfills messageId onto already-hydrated historical assistant messages once
@@ -534,22 +578,6 @@ export default function ChatPage() {
 
   const isBusy = status === 'streaming' || status === 'submitted';
 
-  // Elapsed-time + rotating status phrase for the busy indicator: makes a
-  // 10-30s wait (dominated by hidden reasoning latency) read as "working",
-  // not "frozen". Ticks only while isBusy.
-  const [busyElapsedMs, setBusyElapsedMs] = useState(0);
-  useEffect(() => {
-    if (!isBusy) {
-      setBusyElapsedMs(0);
-      return;
-    }
-    const start = Date.now();
-    const interval = setInterval(() => setBusyElapsedMs(Date.now() - start), 250);
-    return () => clearInterval(interval);
-  }, [isBusy]);
-  const busyPhrase = BUSY_PHRASES[Math.floor(busyElapsedMs / 4000) % BUSY_PHRASES.length];
-  const busySeconds = Math.floor(busyElapsedMs / 1000);
-
   async function handleConfirmDeleteHistory() {
     setIsDeletingHistory(true);
     try {
@@ -665,10 +693,16 @@ export default function ChatPage() {
 
   // Prefer the actual model that answered (post-fallback) over the proactively
   // fetched primary model id; stays pinned to whichever is most recent.
-  const latestModelUsed = [...messages]
-    .reverse()
-    .find((m) => m.role === 'assistant' && (m.metadata as ChatMessageMetadata | undefined)?.modelUsed)
-    ?.metadata?.modelUsed;
+  // Memoized so this O(n) reverse+find doesn't re-run on every render (e.g.
+  // the busy-indicator ticker) — only when the message list actually changes.
+  const latestModelUsed = useMemo(
+    () =>
+      [...messages]
+        .reverse()
+        .find((m) => m.role === 'assistant' && (m.metadata as ChatMessageMetadata | undefined)?.modelUsed)
+        ?.metadata?.modelUsed,
+    [messages],
+  );
   const displayedModelId = latestModelUsed ?? adminPrimaryModelId;
 
   useEffect(() => {
@@ -720,9 +754,9 @@ export default function ChatPage() {
                   Model: {displayedModelId}
                 </Chip>
               )}
-              {!adminPrimaryModelId && quota && (
-                <Chip size="sm" variant="soft" color={quota.remaining <= 0 ? 'danger' : 'default'}>
-                  Bugün {quota.remaining} mesaj qalıb
+              {!adminPrimaryModelId && coins && (
+                <Chip size="sm" variant="soft" color={coins.balance <= 0 ? 'danger' : 'default'}>
+                  {formatCoinBalance(coins.balance)} coin qalıb
                 </Chip>
               )}
             </div>
@@ -848,13 +882,7 @@ export default function ChatPage() {
           ))}
         </div>
 
-        {isBusy && (
-          <div className="mt-6 flex items-center gap-2 text-on-surface-variant">
-            <Spinner size="sm" />
-            <span className="mono-label uppercase">{busyPhrase}</span>
-            {busySeconds > 0 && <span className="mono-label text-on-surface-variant/60">{busySeconds}s</span>}
-          </div>
-        )}
+        <BusyIndicator isBusy={isBusy} />
 
         {error && !isBusy && (
           <div className="glass-panel mt-6 max-w-[85%] rounded-2xl rounded-tl-none border-l-2 border-error px-4 py-3 text-sm text-error">
@@ -920,43 +948,41 @@ export default function ChatPage() {
         </div>
       </div>
 
-      <AlertDialog.Root
+      <AlertDialog.Backdrop
         isOpen={isDeleteDialogOpen}
         onOpenChange={(open) => {
           if (!open) setIsDeleteDialogOpen(false);
         }}
       >
-        <AlertDialog.Backdrop>
-          <AlertDialog.Container>
-            <AlertDialog.Dialog>
-              <AlertDialog.Icon status="danger" />
-              <AlertDialog.Header>
-                <AlertDialog.Heading>Tarixçəni sil</AlertDialog.Heading>
-              </AlertDialog.Header>
-              <AlertDialog.Body>
-                Bütün söhbət tarixçəniz həmişəlik silinəcək. Bu əməliyyatı geri qaytarmaq mümkün deyil.
-              </AlertDialog.Body>
-              <AlertDialog.Footer>
-                <Button
-                  variant="outline"
-                  onPress={() => setIsDeleteDialogOpen(false)}
-                  isDisabled={isDeletingHistory}
-                >
-                  Ləğv et
-                </Button>
-                <Button variant="danger" onPress={handleConfirmDeleteHistory} isPending={isDeletingHistory}>
-                  {({ isPending }) => (
-                    <>
-                      {isPending ? <Spinner size="sm" tone="current" /> : null}
-                      Sil
-                    </>
-                  )}
-                </Button>
-              </AlertDialog.Footer>
-            </AlertDialog.Dialog>
-          </AlertDialog.Container>
-        </AlertDialog.Backdrop>
-      </AlertDialog.Root>
+        <AlertDialog.Container>
+          <AlertDialog.Dialog>
+            <AlertDialog.Icon status="danger" />
+            <AlertDialog.Header>
+              <AlertDialog.Heading>Tarixçəni sil</AlertDialog.Heading>
+            </AlertDialog.Header>
+            <AlertDialog.Body>
+              Bütün söhbət tarixçəniz həmişəlik silinəcək. Bu əməliyyatı geri qaytarmaq mümkün deyil.
+            </AlertDialog.Body>
+            <AlertDialog.Footer>
+              <Button
+                variant="outline"
+                onPress={() => setIsDeleteDialogOpen(false)}
+                isDisabled={isDeletingHistory}
+              >
+                Ləğv et
+              </Button>
+              <Button variant="danger" onPress={handleConfirmDeleteHistory} isPending={isDeletingHistory}>
+                {({ isPending }) => (
+                  <>
+                    {isPending ? <Spinner size="sm" tone="current" /> : null}
+                    Sil
+                  </>
+                )}
+              </Button>
+            </AlertDialog.Footer>
+          </AlertDialog.Dialog>
+        </AlertDialog.Container>
+      </AlertDialog.Backdrop>
 
       <Modal.Backdrop
         isOpen={logModalMessageId != null}

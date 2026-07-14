@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { unauthorized, serverError } from '@/lib/api/errors';
-import { getChatQuotaStatus } from '@/lib/chat/rateLimit';
+import { getCoinBalanceStatus, DEFAULT_DAILY_LIMIT } from '@/lib/chat/coins';
 
 export async function GET() {
   const supabase = await createClient();
@@ -13,7 +13,7 @@ export async function GET() {
 
   const { data: profile, error } = await supabase
     .from('profiles')
-    .select('role, custom_max_per_day')
+    .select('role')
     .eq('id', user.id)
     .single();
 
@@ -23,8 +23,12 @@ export async function GET() {
     return NextResponse.json({ exempt: true });
   }
 
-  const { used, max } = await getChatQuotaStatus(user.id, profile.custom_max_per_day);
-  const remaining = Math.max(0, max - used);
+  const { balance, dailyLimit, price } = await getCoinBalanceStatus(user.id);
 
-  return NextResponse.json({ exempt: false, used, max, remaining });
+  return NextResponse.json({
+    exempt: false,
+    balance,
+    dailyLimit: dailyLimit ?? DEFAULT_DAILY_LIMIT,
+    price,
+  });
 }

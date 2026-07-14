@@ -1,6 +1,9 @@
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { Avatar, Chip, Button } from '@heroui/react';
+import { buttonVariants } from '@heroui/styles';
+import { SparkleIcon } from '@/components/icons';
 import { createClient } from '@/lib/supabase/server';
 import { logout } from '@/app/(auth)/actions';
 import { getAccountStats } from '@/lib/account/getAccountStats';
@@ -94,6 +97,13 @@ export default async function AccountPage() {
           <div className="mt-2 text-sm text-on-surface">
             Bugünkü mesaj limiti: {quota.used}/{quota.max} istifadə olunub
           </div>
+          <Link
+            href="/qiymetler"
+            className={buttonVariants({ variant: 'primary', size: 'sm' }) + ' glow-primary mt-4 gap-1.5'}
+          >
+            <SparkleIcon />
+            Gündəlik limiti artır
+          </Link>
         </div>
       ) : null}
 

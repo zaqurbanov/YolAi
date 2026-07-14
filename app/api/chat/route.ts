@@ -8,7 +8,8 @@ import {
 } from 'ai';
 import { getChatModel, getChatModelFallback, getChatModelId, getChatModelFallbackId, getProviderCallOptions } from '@/lib/llm';
 import { streamTextWithFallback } from '@/lib/llm/streamWithFallback';
-import { retrieveRelevantChunks, retrievePerDocumentChunks, type RetrievedChunk } from '@/lib/retrieval/search';
+import { retrieveRelevantChunks, retrievePerDocumentChunks, retrieveChunksByArticle, type RetrievedChunk } from '@/lib/retrieval/search';
+import { extractArticleReferences, articleLabelPrefixes, isPureArticleReferenceQuery } from '@/lib/retrieval/articleQuery';
 import { buildSystemPrompt, buildContextBlock, buildCitations, filterCitedChunks } from '@/lib/rag/buildPrompt';
 import { shouldUpdateSummary, updateContextSummary } from '@/lib/rag/contextSummary';
 import { rewriteQuery } from '@/lib/rag/rewriteQuery';
@@ -17,6 +18,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { apiError, serverError } from '@/lib/api/errors';
 import { checkChatRateLimit } from '@/lib/chat/rateLimit';
+import { checkAndReserveCoins, debitCoins } from '@/lib/chat/coins';
 
 const MESSAGE_WINDOW = 10;
 
@@ -107,24 +109,46 @@ export async function POST(request: Request) {
   const profile = await profilePromise;
   const isAdmin = profile?.role === 'admin';
 
-  // Rate limiting applies to regular (non-admin) authenticated users only.
+  // Anti-spam min-spacing check still runs via check_chat_rate_limit/
+  // chat_rate_limits (0023) — that concern is orthogonal to coin balance and
+  // is left entirely as-is. The message-count half of that RPC is
+  // deliberately neutralized here (not removed from the SQL, to avoid
+  // touching 0023/0028) by passing an effectively-unlimited max, so only
+  // reason='spacing' can ever reject; the coin economy below is now the sole
+  // source of count-style rejection.
+  // p_max_per_window binds to a Postgres `int` (4-byte, max ~2.1e9) in
+  // check_chat_rate_limit — Number.MAX_SAFE_INTEGER would overflow that
+  // column type, so this uses int4's actual max instead.
+  const SPACING_ONLY_MAX_PER_DAY = 2147483647;
+
+  // Coin gating applies to regular (non-admin) authenticated users only.
   // Unauthenticated requests are out of scope here — left as-is. Checked
   // before any conversation/message rows are created, before rewriteQuery/
-  // retrieval, and before any LLM call, so a rejected request writes nothing
-  // and calls no embedding or LLM API.
+  // retrieval, and before any LLM call, so a rejected request writes nothing,
+  // calls no embedding or LLM API, and spends no coins (see debitCoins call
+  // in onFinish below — spending only happens on a fully successful stream).
   // Captured here (rather than re-derived later) so messageMetadata below can
-  // surface the caller's updated used/max without a second query. Stays null
-  // for admins/unauthenticated users (rate limiting doesn't apply) and for
-  // the fail-open RPC-error case (used is unknown then) — messageMetadata
-  // treats null as "omit quota metadata", which the frontend treats as
-  // "don't show".
-  let quota: { used: number; max: number } | null = null;
+  // surface the post-debit balance without a second query. Stays null for
+  // admins/unauthenticated users (coin gating doesn't apply) and for the
+  // fail-open RPC-error case — messageMetadata treats null as "omit coins
+  // metadata", which the frontend treats as "don't show".
+  let coinPrice: number | null = null;
+  let coinBalance: number | null = null;
   if (user && !isAdmin) {
-    const { allowed, message, used, max } = await checkChatRateLimit(user.id, profile?.custom_max_per_day);
-    if (!allowed) {
-      return apiError(429, message!, { code: 'rate_limited' });
+    const { allowed: spacingAllowed, message: spacingMessage } = await checkChatRateLimit(
+      user.id,
+      SPACING_ONLY_MAX_PER_DAY,
+    );
+    if (!spacingAllowed) {
+      return apiError(429, spacingMessage!, { code: 'rate_limited' });
     }
-    if (typeof used === 'number') quota = { used, max };
+
+    const { allowed, message, balance, price } = await checkAndReserveCoins(user.id);
+    if (!allowed) {
+      return apiError(402, message!, { code: 'insufficient_coins' });
+    }
+    coinPrice = price;
+    coinBalance = balance;
   }
 
   let conversation: ConversationState | null = null;
@@ -193,15 +217,34 @@ export async function POST(request: Request) {
   // of the primary call below.
   const rawQueryDiffersFromRewrite = retrievalQuery !== query;
 
-  const [primaryResult, rawQueryResult, perDocumentResult] = await Promise.all([
-    retrieveRelevantChunks({ embedQuery: retrievalQuery, ftsQuery: query, documentId }),
-    rawQueryDiffersFromRewrite ? retrieveRelevantChunks({ embedQuery: query, ftsQuery: query, documentId }) : null,
-    documentId ? null : retrievePerDocumentChunks(retrievalQuery, query),
+  // Article-number fast path (0032) — detected off the RAW query only, never
+  // the rewritten one (rewriteQuery.ts can hallucinate/drift, and an
+  // invented article number would silently retrieve the wrong article — see
+  // articleQuery.ts's header comment). When the query is essentially just an
+  // article reference ("Maddə 65", "Maddə 65 nə deyir"), the trigram scan
+  // this fast path bypasses adds nothing (short numeric tokens are filtered
+  // out of trigram scoring entirely, see match_chunks_by_article's migration
+  // comment) — skip passing ftsQuery to the other retrieval calls in that
+  // case to also save that cost on the primary/per-document searches. Never
+  // skipped when there's substantial additional free text alongside the
+  // article number, since trigram still adds value there.
+  const articleRefs = extractArticleReferences(query);
+  const articlePrefixes = articleLabelPrefixes(articleRefs);
+  const skipTrigram = isPureArticleReferenceQuery(query, articleRefs);
+  const ftsQueryForSearch = skipTrigram ? undefined : query;
+
+  const [primaryResult, rawQueryResult, perDocumentResult, articleResult] = await Promise.all([
+    retrieveRelevantChunks({ embedQuery: retrievalQuery, ftsQuery: ftsQueryForSearch, documentId }),
+    rawQueryDiffersFromRewrite
+      ? retrieveRelevantChunks({ embedQuery: query, ftsQuery: ftsQueryForSearch, documentId })
+      : null,
+    documentId ? null : retrievePerDocumentChunks(retrievalQuery, ftsQueryForSearch),
+    articlePrefixes.length > 0 ? retrieveChunksByArticle(retrievalQuery, articlePrefixes) : null,
   ]);
 
   const seenChunkIds = new Set(primaryResult.chunks.map((c) => c.id));
   const mergedChunks = [...primaryResult.chunks];
-  for (const source of [rawQueryResult, perDocumentResult]) {
+  for (const source of [rawQueryResult, perDocumentResult, articleResult]) {
     if (!source) continue;
     for (const chunk of source.chunks) {
       if (seenChunkIds.has(chunk.id)) continue;
@@ -213,11 +256,18 @@ export async function POST(request: Request) {
   // candidate cap, so a merged pool larger than that cap loses its weakest
   // candidates, not an arbitrary suffix determined by which source happened
   // to be concatenated first — see rerank.ts's MAX_RERANK_CANDIDATES comment
-  // for the bug this fixes.
+  // for the bug this fixes. articleResult's rows carry a fixed combined_score
+  // of 1.0 (see match_chunks_by_article's migration comment), so an exact
+  // article-number match always sorts first here.
   const initialChunks = mergedChunks.sort((a, b) => b.combined_score - a.combined_score);
 
-  const embedMs = primaryResult.embedMs + (rawQueryResult?.embedMs ?? 0) + (perDocumentResult?.embedMs ?? 0);
-  const dbSearchMs = primaryResult.dbSearchMs + (rawQueryResult?.dbSearchMs ?? 0) + (perDocumentResult?.dbSearchMs ?? 0);
+  const embedMs =
+    primaryResult.embedMs + (rawQueryResult?.embedMs ?? 0) + (perDocumentResult?.embedMs ?? 0) + (articleResult?.embedMs ?? 0);
+  const dbSearchMs =
+    primaryResult.dbSearchMs +
+    (rawQueryResult?.dbSearchMs ?? 0) +
+    (perDocumentResult?.dbSearchMs ?? 0) +
+    (articleResult?.dbSearchMs ?? 0);
 
   const { keptIds, rerankMs } = await rerankChunks(query, initialChunks);
   let relevantChunks: RetrievedChunk[];
@@ -267,6 +317,18 @@ export async function POST(request: Request) {
         }
       },
       onFinish: async ({ text, usage }) => {
+        // Coins are spent only here — a fully successful stream — never on
+        // error/abort (see onError below and toUIMessageStream's own onError,
+        // neither of which call debitCoins). This callback runs before the
+        // 'finish' UI message part reaches messageMetadata below (see the
+        // assistantMessageId comment above for the same ai@7.0.16 timing
+        // guarantee this relies on), so the debited balance is available in
+        // time for the client's final metadata payload.
+        if (user && !isAdmin && coinPrice !== null) {
+          const newBalance = await debitCoins(user.id, coinPrice);
+          if (newBalance !== null) coinBalance = newBalance;
+        }
+
         const llmTotalMs = performance.now() - llmStartTime;
         const citations = buildCitations(filterCitedChunks(relevantChunks, text));
         const promptTokens = usage?.inputTokens ?? null;
@@ -392,8 +454,8 @@ export async function POST(request: Request) {
         // for the former and the real, referenced-only list for the latter.
         const citations = buildCitations(filterCitedChunks(relevantChunks, liveAnswerText));
         if (isAdmin) return { citations, modelUsed, messageId: assistantMessageId };
-        if (quota) {
-          return { citations, quota: { used: quota.used, max: quota.max, remaining: Math.max(0, quota.max - quota.used) } };
+        if (coinPrice !== null && coinBalance !== null) {
+          return { citations, coins: { balance: coinBalance, price: coinPrice } };
         }
         return { citations };
       },

@@ -1,5 +1,6 @@
 import 'server-only';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 /**
  * Return shapes (for the frontend consuming this module):
@@ -32,6 +33,7 @@ import { createClient } from '@/lib/supabase/server';
  * interface AdminUserDetail {
  *   profile: AdminUserProfile;
  *   stats: AdminUserStats;
+ *   coins: { balance: number; daily_limit: number | null } | null; // null only if the user_coins row lookup itself failed
  * }
  *
  * getAdminUserDetail(userId) resolves to `AdminUserDetail | null` (null when
@@ -90,6 +92,7 @@ export interface AdminUserStats {
 export interface AdminUserDetail {
   profile: AdminUserProfile;
   stats: AdminUserStats;
+  coins: { balance: number; daily_limit: number | null } | null;
 }
 
 export interface AdminUserMessage {
@@ -135,6 +138,19 @@ export async function getAdminUserDetail(userId: string): Promise<AdminUserDetai
   if (profileError) throw profileError;
   if (!profile) return null;
 
+  // user_coins has no admin-read RLS policy (only self-SELECT, per
+  // 0036_*.sql — same constraint app/api/admin/users/[id]/route.ts's PATCH
+  // handler works around), so reading another user's row requires the
+  // service-role client. Best-effort: a lookup failure degrades to `coins:
+  // null` rather than failing the whole admin detail page.
+  const admin = createAdminClient();
+  const { data: coinRow } = await admin
+    .from('user_coins')
+    .select('balance, daily_limit')
+    .eq('user_id', userId)
+    .maybeSingle();
+  const coins = coinRow ? { balance: Number(coinRow.balance), daily_limit: coinRow.daily_limit } : null;
+
   const { data: conversationRows, error: conversationsError } = await supabase
     .from('conversations')
     .select('id')
@@ -148,6 +164,7 @@ export async function getAdminUserDetail(userId: string): Promise<AdminUserDetai
   if (conversationIds.length === 0) {
     return {
       profile,
+      coins,
       stats: {
         totalConversations: 0,
         totalUserMessages: 0,
@@ -197,6 +214,7 @@ export async function getAdminUserDetail(userId: string): Promise<AdminUserDetai
 
   return {
     profile,
+    coins,
     stats: {
       totalConversations,
       totalUserMessages,

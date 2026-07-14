@@ -31,30 +31,28 @@ export default function DeleteAccountDialog() {
         Hesabı sil
       </Button>
 
-      <AlertDialog.Root isOpen={isOpen} onOpenChange={setIsOpen}>
-        <AlertDialog.Backdrop>
-          <AlertDialog.Container>
-            <AlertDialog.Dialog>
-              <AlertDialog.Icon status="danger" />
-              <AlertDialog.Header>
-                <AlertDialog.Heading>Hesabı sil</AlertDialog.Heading>
-              </AlertDialog.Header>
-              <form action={deleteAccount}>
-                <AlertDialog.Body>
-                  Hesabınız, bütün söhbətləriniz və mesajlarınız həmişəlik silinəcək. Bu əməliyyatı geri
-                  qaytarmaq mümkün deyil.
-                </AlertDialog.Body>
-                <AlertDialog.Footer>
-                  <Button type="button" variant="outline" onPress={() => setIsOpen(false)}>
-                    Ləğv et
-                  </Button>
-                  <DeleteSubmitButton />
-                </AlertDialog.Footer>
-              </form>
-            </AlertDialog.Dialog>
-          </AlertDialog.Container>
-        </AlertDialog.Backdrop>
-      </AlertDialog.Root>
+      <AlertDialog.Backdrop isOpen={isOpen} onOpenChange={setIsOpen}>
+        <AlertDialog.Container>
+          <AlertDialog.Dialog>
+            <AlertDialog.Icon status="danger" />
+            <AlertDialog.Header>
+              <AlertDialog.Heading>Hesabı sil</AlertDialog.Heading>
+            </AlertDialog.Header>
+            <form action={deleteAccount}>
+              <AlertDialog.Body>
+                Hesabınız, bütün söhbətləriniz və mesajlarınız həmişəlik silinəcək. Bu əməliyyatı geri
+                qaytarmaq mümkün deyil.
+              </AlertDialog.Body>
+              <AlertDialog.Footer>
+                <Button type="button" variant="outline" onPress={() => setIsOpen(false)}>
+                  Ləğv et
+                </Button>
+                <DeleteSubmitButton />
+              </AlertDialog.Footer>
+            </form>
+          </AlertDialog.Dialog>
+        </AlertDialog.Container>
+      </AlertDialog.Backdrop>
     </>
   );
 }
