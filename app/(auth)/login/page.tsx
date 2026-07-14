@@ -3,7 +3,7 @@
 import { Suspense, useActionState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Card, TextField, Label, Input, Button, Alert, Separator } from '@heroui/react';
+import { TextField, Label, Input, Button, Alert, Separator } from '@heroui/react';
 import { login, type AuthFormState } from '../actions';
 import { GoogleSignInButton } from '@/components/GoogleSignInButton';
 import { Spinner } from '@/components/Spinner';
@@ -16,21 +16,26 @@ function LoginForm() {
   const error = state?.error ?? searchParams.get('error');
 
   return (
-    <div className="max-w-sm mx-auto mt-16 px-4">
-      <Card className="w-full">
-        <Card.Header>
-          <Card.Title>Daxil ol</Card.Title>
-        </Card.Header>
-        <form action={formAction}>
-          <Card.Content className="flex flex-col gap-4">
+    <div className="flex min-h-full w-full items-center justify-center px-4 py-16">
+      <div className="w-full max-w-sm">
+        <div className="mb-6 text-center">
+          <h1 className="font-display text-2xl font-semibold text-on-surface">Daxil ol</h1>
+          <p className="mt-1 text-sm text-on-surface-variant">
+            Yol Hərəkəti Qaydaları üzrə sual-cavaba davam etmək üçün hesabına daxil ol
+          </p>
+        </div>
+
+        <div className="glass-panel rounded-2xl p-6 sm:p-8">
+          <form action={formAction} className="flex flex-col gap-5">
             <TextField name="email" isRequired>
               <Label>Email</Label>
-              <Input type="email" />
+              <Input type="email" placeholder="ad@nümunə.com" />
             </TextField>
             <TextField name="password" isRequired>
               <Label>Şifrə</Label>
-              <Input type="password" />
+              <Input type="password" placeholder="••••••••" />
             </TextField>
+
             {error && (
               <Alert status="danger">
                 <Alert.Indicator />
@@ -39,9 +44,14 @@ function LoginForm() {
                 </Alert.Content>
               </Alert>
             )}
-          </Card.Content>
-          <Card.Footer className="flex flex-col gap-4 items-stretch">
-            <Button type="submit" variant="primary" fullWidth isPending={pending}>
+
+            <Button
+              type="submit"
+              variant="primary"
+              fullWidth
+              isPending={pending}
+              className="glow-primary"
+            >
               {({ isPending }) => (
                 <>
                   {isPending ? <Spinner size="sm" tone="current" /> : null}
@@ -49,23 +59,24 @@ function LoginForm() {
                 </>
               )}
             </Button>
-          </Card.Footer>
-        </form>
-        <Card.Content className="flex flex-col gap-4">
-          <div className="flex items-center gap-3">
+          </form>
+
+          <div className="my-6 flex items-center gap-3">
             <Separator className="flex-1" />
-            <span className="text-sm text-muted">və ya</span>
+            <span className="mono-label uppercase text-on-surface-variant">və ya</span>
             <Separator className="flex-1" />
           </div>
+
           <GoogleSignInButton />
-          <p className="text-sm text-center text-muted">
-            Hesabın yoxdur?{' '}
-            <Link href="/signup" className="underline">
-              Qeydiyyatdan keç
-            </Link>
-          </p>
-        </Card.Content>
-      </Card>
+        </div>
+
+        <p className="mt-6 text-center text-sm text-on-surface-variant">
+          Hesabın yoxdur?{' '}
+          <Link href="/signup" className="font-medium text-primary hover:underline">
+            Qeydiyyatdan keç
+          </Link>
+        </p>
+      </div>
     </div>
   );
 }

@@ -19,7 +19,7 @@ export default function GlobalRateLimitControl() {
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      const res = await fetch('/api/admin/settings/rate-limit');
+      const res = await fetch('/api/admin/chat-meta?type=rate-limit');
       if (res.ok && !cancelled) {
         const data: RateLimitSettings = await res.json();
         setSettings(data);
@@ -37,7 +37,7 @@ export default function GlobalRateLimitControl() {
     setPending(true);
     setError(null);
     try {
-      const res = await fetch('/api/admin/settings/rate-limit', {
+      const res = await fetch('/api/admin/chat-meta?type=rate-limit', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ maxPerDay }),
