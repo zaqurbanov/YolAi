@@ -14,7 +14,13 @@ const nextConfig: NextConfig = {
   // dlopen-style require, not a static import it can statically analyze.
   // Force-include the whole native binary directory for every API route.
   outputFileTracingIncludes: {
-    "/api/**/*": ["./node_modules/onnxruntime-node/bin/napi-v6/linux/x64/**"],
+    // Native onnxruntime binding (dlopen'd, not statically analyzable by the tracer)
+    // plus the vendored q8 embedding model weights/tokenizer (scripts/fetch-embedding-model.js)
+    // so cold Vercel containers never hit the HF Hub over the network at request time.
+    "/api/**/*": [
+      "./node_modules/onnxruntime-node/bin/napi-v6/linux/x64/**",
+      "./models/**",
+    ],
   },
   experimental: {
     proxyClientMaxBodySize: "50mb",

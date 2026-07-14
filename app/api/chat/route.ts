@@ -124,7 +124,7 @@ export async function POST(request: Request) {
     if (!allowed) {
       return apiError(429, message!, { code: 'rate_limited' });
     }
-    if (used !== null) quota = { used, max };
+    if (typeof used === 'number') quota = { used, max };
   }
 
   let conversation: ConversationState | null = null;

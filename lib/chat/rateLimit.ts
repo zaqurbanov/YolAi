@@ -67,6 +67,14 @@ export async function checkChatRateLimit(
     // callers must treat a null `used` as "don't show quota metadata".
     return { allowed: true, message: null, used: null, max: effectiveMax };
   }
+  if (typeof data.window_count !== 'number') {
+    // Legacy/malformed RPC row (e.g. a live DB still running the pre-0028
+    // 3-out-column version of check_chat_rate_limit) — window_count comes
+    // back undefined, not null, so it must be caught explicitly here rather
+    // than relying on callers' `used !== null` checks downstream.
+    console.error('[chat] rate limit check returned unexpected shape (missing window_count):', data);
+    return { allowed: true, message: null, used: null, max: effectiveMax };
+  }
   if (data.allowed) return { allowed: true, message: null, used: data.window_count, max: effectiveMax };
   if (data.reason === 'spacing') {
     return {

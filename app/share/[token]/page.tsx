@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { getSharedConversation, type SharedConversationMessage } from '@/lib/chat/getSharedConversation';
+import { renderCitationText } from '@/lib/chat/renderCitationText';
 import { Chip } from '@heroui/react';
 
 interface Citation {
@@ -74,7 +75,7 @@ export default async function SharedConversationPage({
                       : 'glass-panel max-w-[85%] rounded-2xl rounded-tl-none border-l-2 border-primary px-4 py-3 text-sm text-on-surface'
                   }
                 >
-                  <span className="whitespace-pre-wrap">{message.content}</span>
+                  <span className="whitespace-pre-wrap">{renderCitationText(message.content)}</span>
                 </div>
 
                 {!isUser && citations.length > 0 && (

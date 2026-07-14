@@ -40,6 +40,10 @@ yarn-error.log*
 # seed PDFs used for local ingestion testing (large binaries, re-downloadable)
 /seed-pdfs
 
+# vendored embedding model weights (scripts/fetch-embedding-model.js, pinned revision,
+# reproducible via `npm install`/`npm run prebuild` — not committed, ~130MB)
+/models
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

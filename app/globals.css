@@ -212,6 +212,9 @@ html:not(.dark) {
   --color-error: var(--danger);
   --color-on-error: var(--danger-foreground);
   --color-error-container: var(--error-container);
+
+  --color-success: var(--success);
+  --color-on-success: var(--success-foreground);
 }
 
 body {

@@ -5,6 +5,8 @@
   "scripts": {
     "predev": "node scripts/check-dev-port.js",
     "dev": "next dev",
+    "postinstall": "node scripts/fetch-embedding-model.js",
+    "prebuild": "node scripts/fetch-embedding-model.js",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"

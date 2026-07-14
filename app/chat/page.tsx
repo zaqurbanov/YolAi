@@ -8,6 +8,7 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Avatar, Badge, Input, Button, Chip, Select, ListBox, AlertDialog, Modal, Dropdown, Skeleton, toast } from '@heroui/react';
 import { SendIcon, ShareIcon, MoreIcon, TrashIcon, InfoIcon, CopyIcon, CheckIcon } from '@/components/icons';
 import { Spinner } from '@/components/Spinner';
+import { renderCitationText } from '@/lib/chat/renderCitationText';
 
 interface Citation {
   document_id: string;
@@ -148,7 +149,7 @@ const MessageBubble = memo(function MessageBubble({
             if (part.type === 'text') {
               return (
                 <span key={i} className="whitespace-pre-wrap">
-                  {part.text}
+                  {renderCitationText(part.text)}
                 </span>
               );
             }
