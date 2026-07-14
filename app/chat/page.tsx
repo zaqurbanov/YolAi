@@ -24,7 +24,9 @@ interface HistoryMessage {
   created_at: string;
 }
 
-type ChatMessageMetadata = { citations?: Citation[]; modelUsed?: string; messageId?: string };
+type QuotaInfo = { used: number; max: number; remaining: number };
+
+type ChatMessageMetadata = { citations?: Citation[]; modelUsed?: string; messageId?: string; quota?: QuotaInfo };
 
 type ChatUIMessage = UIMessage<ChatMessageMetadata>;
 
@@ -248,6 +250,7 @@ export default function ChatPage() {
   const [canNativeShare, setCanNativeShare] = useState(false);
   const [adminPrimaryModelId, setAdminPrimaryModelId] = useState<string | null>(null);
   const adminPrimaryModelIdRef = useRef<string | null>(null);
+  const [quota, setQuota] = useState<QuotaInfo | null>(null);
   const [logModalMessageId, setLogModalMessageId] = useState<string | null>(null);
   const [logFetchState, setLogFetchState] = useState<LogFetchState | null>(null);
   const [expandedCitationIds, setExpandedCitationIds] = useState<Set<string>>(new Set());
@@ -313,6 +316,42 @@ export default function ChatPage() {
   useEffect(() => {
     adminPrimaryModelIdRef.current = adminPrimaryModelId;
   }, [adminPrimaryModelId]);
+
+  // Mount-time quota snapshot so the indicator has a value before the user's
+  // first send this session; superseded per-message by metadata.quota below
+  // (fresher, and avoids a second DB read per chat request).
+  useEffect(() => {
+    let cancelled = false;
+    async function loadQuota() {
+      try {
+        const res = await fetch('/api/chat/quota');
+        if (!res.ok) return;
+        const data: { exempt: boolean; used?: number; max?: number; remaining?: number } = await res.json();
+        if (cancelled || data.exempt) return;
+        if (data.used != null && data.max != null && data.remaining != null) {
+          setQuota({ used: data.used, max: data.max, remaining: data.remaining });
+        }
+      } catch {
+        // Silent: indicator just stays hidden.
+      }
+    }
+    void loadQuota();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Keep the indicator in sync with the freshest server-reported quota once a
+  // reply finishes streaming — absent quota (admin, or rare fail-open case)
+  // leaves the last known value untouched.
+  useEffect(() => {
+    const lastQuota = [...messages]
+      .reverse()
+      .find((m) => m.role === 'assistant' && (m.metadata as ChatMessageMetadata | undefined)?.quota)
+      ?.metadata?.quota;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing from a prop-driven external source (message stream), not derivable during render.
+    if (lastQuota) setQuota(lastQuota);
+  }, [messages]);
 
   // Backfills messageId onto already-hydrated historical assistant messages once
   // we learn the session is admin — /api/chat/history isn't itself admin-gated
@@ -678,6 +717,11 @@ export default function ChatPage() {
               {adminPrimaryModelId && (
                 <Chip size="sm" variant="soft" color="default" className="mono-label">
                   Model: {displayedModelId}
+                </Chip>
+              )}
+              {!adminPrimaryModelId && quota && (
+                <Chip size="sm" variant="soft" color={quota.remaining <= 0 ? 'danger' : 'default'}>
+                  Bugün {quota.remaining} mesaj qalıb
                 </Chip>
               )}
             </div>

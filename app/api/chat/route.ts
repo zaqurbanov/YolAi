@@ -112,11 +112,19 @@ export async function POST(request: Request) {
   // before any conversation/message rows are created, before rewriteQuery/
   // retrieval, and before any LLM call, so a rejected request writes nothing
   // and calls no embedding or LLM API.
+  // Captured here (rather than re-derived later) so messageMetadata below can
+  // surface the caller's updated used/max without a second query. Stays null
+  // for admins/unauthenticated users (rate limiting doesn't apply) and for
+  // the fail-open RPC-error case (used is unknown then) — messageMetadata
+  // treats null as "omit quota metadata", which the frontend treats as
+  // "don't show".
+  let quota: { used: number; max: number } | null = null;
   if (user && !isAdmin) {
-    const { allowed, message } = await checkChatRateLimit(user.id, profile?.custom_max_per_day);
+    const { allowed, message, used, max } = await checkChatRateLimit(user.id, profile?.custom_max_per_day);
     if (!allowed) {
       return apiError(429, message!, { code: 'rate_limited' });
     }
+    if (used !== null) quota = { used, max };
   }
 
   let conversation: ConversationState | null = null;
@@ -383,7 +391,11 @@ export async function POST(request: Request) {
         // through onChunk) — filtering naturally yields an empty citation list
         // for the former and the real, referenced-only list for the latter.
         const citations = buildCitations(filterCitedChunks(relevantChunks, liveAnswerText));
-        return isAdmin ? { citations, modelUsed, messageId: assistantMessageId } : { citations };
+        if (isAdmin) return { citations, modelUsed, messageId: assistantMessageId };
+        if (quota) {
+          return { citations, quota: { used: quota.used, max: quota.max, remaining: Math.max(0, quota.max - quota.used) } };
+        }
+        return { citations };
       },
       onError: (error) => {
         // Fires only once a stream error is terminal and about to reach the client

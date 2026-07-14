@@ -4,6 +4,7 @@ import { Avatar, Chip, Button } from '@heroui/react';
 import { createClient } from '@/lib/supabase/server';
 import { logout } from '@/app/(auth)/actions';
 import { getAccountStats } from '@/lib/account/getAccountStats';
+import { getChatQuotaStatus } from '@/lib/chat/rateLimit';
 import AdSlot from '@/components/AdSlot';
 import ProfileForm from '@/components/account/ProfileForm';
 import SecurityForms from '@/components/account/SecurityForms';
@@ -33,7 +34,7 @@ export default async function AccountPage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role, full_name, avatar_url, created_at')
+    .select('role, full_name, avatar_url, created_at, custom_max_per_day')
     .eq('id', user.id)
     .single();
 
@@ -45,6 +46,8 @@ export default async function AccountPage() {
   const memberSince = profile?.created_at
     ? new Date(profile.created_at).toLocaleDateString('az-AZ', { year: 'numeric', month: 'short', day: 'numeric' })
     : '—';
+
+  const quota = isAdmin ? null : await getChatQuotaStatus(user.id, profile?.custom_max_per_day ?? null);
 
   const statTiles = [
     { label: 'Söhbətlər', value: stats.conversations },
@@ -84,6 +87,15 @@ export default async function AccountPage() {
           </div>
         ))}
       </div>
+
+      {quota ? (
+        <div className="glass-card rounded-2xl p-4">
+          <div className="mono-label uppercase text-on-surface-variant">Gündəlik limit</div>
+          <div className="mt-2 text-sm text-on-surface">
+            Bugünkü mesaj limiti: {quota.used}/{quota.max} istifadə olunub
+          </div>
+        </div>
+      ) : null}
 
       <ProfileForm fullName={fullName} avatarUrl={avatarUrl} />
 

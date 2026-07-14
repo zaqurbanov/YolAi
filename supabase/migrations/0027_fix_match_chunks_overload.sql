@@ -1,0 +1,16 @@
+-- 0022 used `create or replace function match_chunks(..., filter_document_ids
+-- uuid[] default null)` on the assumption that appending a trailing defaulted
+-- parameter is a pure additive change. It isn't: Postgres identifies
+-- functions by their full argument-type signature, so a different parameter
+-- list (even with a default) does NOT replace an existing function of the
+-- same name -- it creates a second overload alongside it. The old 4-param
+-- match_chunks(vector, int, uuid, text) from 0001/0008/0011/0014/0018 was
+-- never dropped, so both it and 0022's 5-param version have coexisted since
+-- 0022 was applied. PostgREST's RPC resolver can't disambiguate a call that
+-- omits filter_document_ids (both signatures match via the 5-param one's
+-- default), and errors with PGRST203 ("Could not choose the best candidate
+-- function"), breaking every /api/chat request.
+--
+-- Fix: drop the old 4-param overload so only the 5-param version (which
+-- covers all callers, since filter_document_ids defaults to null) remains.
+drop function if exists match_chunks(vector(384), int, uuid, text);
