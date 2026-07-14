@@ -32,9 +32,14 @@ const nextConfig: NextConfig = {
   // model this app uses) into the deployed Lambda bundle — confirmed via
   // `.next/server/app/api/chat/route.js.nft.json`. Exclude it explicitly, plus other
   // runtime-irrelevant pieces: the browser/WASM dist build and onnxruntime-web (this
-  // app is Node-only server-side, using onnxruntime-node's native binding), and sharp
-  // (image preprocessing for vision models — this app only does text
-  // feature-extraction).
+  // app is Node-only server-side, using onnxruntime-node's native binding).
+  // NOTE: sharp was excluded here previously and must NOT be — even though this
+  // app never calls it, dist/transformers.node.mjs statically imports sharp at
+  // module load time (for vision-model image preprocessing this app doesn't
+  // use), so excluding the package wholesale breaks embedText()/embedBatch()
+  // at runtime with ERR_MODULE_NOT_FOUND on Vercel (confirmed live,
+  // 2026-07-14 — POST /api/chat 500s in prod). It's a static import, not
+  // conditionally require()'d, so there's no safe way to omit it.
   outputFileTracingExcludes: {
     "/api/**/*": [
       "./node_modules/@huggingface/transformers/src/**/*",
@@ -42,7 +47,6 @@ const nextConfig: NextConfig = {
       "./node_modules/@huggingface/transformers/dist/transformers.web.js",
       "./node_modules/@huggingface/transformers/dist/*.wasm",
       "./node_modules/onnxruntime-web/**/*",
-      "./node_modules/sharp/**/*",
     ],
   },
   experimental: {
