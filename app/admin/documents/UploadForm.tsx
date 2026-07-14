@@ -28,6 +28,8 @@ interface DocumentRow {
   page_count: number | null;
   error_message: string | null;
   created_at: string;
+  updated_at: string;
+  stale: boolean;
 }
 
 const STATUS_COLOR: Record<DocumentRow['status'], 'default' | 'success' | 'danger' | 'warning'> = {
@@ -118,9 +120,16 @@ function DocsTableRow({
       </Table.Cell>
       <Table.Cell>
         <div className="flex flex-col gap-1">
-          <Chip size="sm" color={STATUS_COLOR[item.status]}>
-            {item.status}
-          </Chip>
+          <div className="flex items-center gap-2">
+            <Chip size="sm" color={STATUS_COLOR[item.status]}>
+              {item.status}
+            </Chip>
+            {item.stale && (
+              <Chip size="sm" color="danger">
+                İşlənmə uzanıb
+              </Chip>
+            )}
+          </div>
           {item.error_message && (
             <span className="mono-label text-on-surface-variant">{item.error_message}</span>
           )}

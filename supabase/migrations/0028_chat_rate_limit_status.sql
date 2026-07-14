@@ -4,7 +4,14 @@
 -- can report the caller's updated used-count without a second query. Full
 -- body copied from 0023_chat_rate_limits.sql with v_window_count added to
 -- every return query select — logic is otherwise unchanged.
-create or replace function check_chat_rate_limit(
+--
+-- CREATE OR REPLACE cannot change a function's OUT-parameter row type (see
+-- 0022/0027's "overload landmine" comments for the same class of bug on
+-- match_chunks) -- the return table shape changed here (added window_count),
+-- so the old 4-out-param version must be dropped first.
+drop function if exists check_chat_rate_limit(uuid, int, int, int);
+
+create function check_chat_rate_limit(
   p_user_id uuid,
   p_max_per_window int,
   p_window_seconds int,

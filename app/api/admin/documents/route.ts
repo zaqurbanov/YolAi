@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { ingestDocument } from '@/lib/ingestion/ingestDocument';
 import { apiError, serverError, logApiError } from '@/lib/api/errors';
 import { deleteDocuments } from '@/lib/documents/deleteDocuments';
+import { isStaleProcessing } from '@/lib/ingestion/staleness';
 
 export const maxDuration = 300;
 
@@ -39,7 +40,11 @@ export async function GET() {
     .order('created_at', { ascending: false });
 
   if (error) return serverError(error, 'Sənədləri yükləmək uğursuz oldu');
-  return NextResponse.json({ documents: data });
+  const documents = data.map((doc) => ({
+    ...doc,
+    stale: isStaleProcessing(doc.status, doc.updated_at),
+  }));
+  return NextResponse.json({ documents });
 }
 
 export async function POST(request: NextRequest) {

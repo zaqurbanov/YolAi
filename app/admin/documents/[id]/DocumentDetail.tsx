@@ -12,6 +12,8 @@ interface DocumentMeta {
   page_count: number | null;
   error_message: string | null;
   created_at: string;
+  updated_at: string;
+  stale: boolean;
 }
 
 interface ChunkStats {
@@ -240,6 +242,11 @@ export default function DocumentDetail({ id }: { id: string }) {
               <Chip size="sm" color={STATUS_COLOR[document.status]}>
                 {document.status}
               </Chip>
+              {document.stale && (
+                <Chip size="sm" color="danger">
+                  İşlənmə uzanıb
+                </Chip>
+              )}
             </div>
             <Button variant="outline" size="sm" isPending={reprocessing} onPress={handleReprocess}>
               {({ isPending }) => (

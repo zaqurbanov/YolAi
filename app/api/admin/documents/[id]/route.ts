@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { apiError, notFound, serverError } from '@/lib/api/errors';
 import { deleteDocuments } from '@/lib/documents/deleteDocuments';
 import { reprocessDocument } from '@/lib/ingestion/ingestDocument';
+import { isStaleProcessing } from '@/lib/ingestion/staleness';
 
 export const maxDuration = 300;
 
@@ -54,12 +55,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   const { data: document, error: fetchError } = await supabase
     .from('documents')
-    .select('id, title, status, page_count, error_message, created_at')
+    .select('id, title, status, page_count, error_message, created_at, updated_at')
     .eq('id', id)
     .single();
   if (fetchError || !document) {
     return notFound('Sənəd tapılmadı');
   }
+  const documentWithStale = { ...document, stale: isStaleProcessing(document.status, document.updated_at) };
 
   // Pull content length + article_label per chunk (not the embedding column,
   // which is large and unused here) to derive split-strategy stats in-process
@@ -89,7 +91,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 
   return NextResponse.json({
-    document,
+    document: documentWithStale,
     chunkStats: { total, minLength, maxLength, avgLength, markerBased, fallback },
   });
 }

@@ -117,7 +117,7 @@ function RoleControl({
     setPending(true);
     setError(null);
     try {
-      const res = await fetch(`/api/admin/users/${userId}/role`, {
+      const res = await fetch(`/api/admin/users/${userId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ role: target }),
@@ -175,7 +175,7 @@ function RateLimitControl({
     setPending(true);
     setError(null);
     try {
-      const res = await fetch(`/api/admin/users/${userId}/rate-limit`, {
+      const res = await fetch(`/api/admin/users/${userId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ customMaxPerDay: customMaxPerDayValue }),
@@ -239,7 +239,7 @@ export default function UserDetail({
   async function loadMore() {
     setLoadingMore(true);
     const res = await fetch(
-      `/api/admin/users/${userId}/conversations?limit=10&offset=${conversations.length}`
+      `/api/admin/users/${userId}?limit=10&offset=${conversations.length}`
     );
     if (res.ok) {
       const data: AdminUserConversationsPage = await res.json();
