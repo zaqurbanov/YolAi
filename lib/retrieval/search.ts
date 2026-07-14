@@ -40,47 +40,81 @@ export interface RetrieveRelevantChunksParams {
   matchCount?: number;
 }
 
-// Narrow, single-purpose intent check for "which documents must a driver
-// carry / what can police request when stopping me" — NOT a general
-// per-query document router. Bug repro: "polis məni saxlayanda hansı
-// sənədləri istəyə bilər?" was answered from "727 IQ Polis haqqında" Maddə
-// 17 (police ID-check powers) instead of "Yol hərəkəti qaydaları" Maddə 37
-// (documents a driver must carry) — diagnostics showed the correct chunk
-// simply doesn't surface in top-15 vector search because Maddə 37 was one
-// large diluted chunk (see chunkText.ts's splitPlainEnumeratedList fix for
-// the root cause). This is a supplementary, additive retrieval boost so the
-// correct chunk is guaranteed to be considered even before/regardless of the
-// chunking fix landing — it never removes chunks another query would
-// otherwise get (e.g. a genuinely Police-Law-scoped question like "polis
-// hansı hallarda sənədlərimi yoxlaya bilər?" doesn't match this pattern at
-// all, and even if it did, merging only adds candidates).
-const DRIVER_DOCUMENTS_INTENT_PATTERN =
-  /(sənəd|vəsiqə|şəhadətnamə)\w*.{0,40}(saxla|gəzdir|daşı)\w*|(\bpolis\b|əməkdaş).{0,60}(sənəd|vəsiqə|şəhadətnamə)\w*.{0,40}(istə|tələb)|(sənəd|vəsiqə|şəhadətnamə)\w*.{0,60}(\bpolis\b|əməkdaş).{0,40}(istə|tələb)/i;
+// Was: a chunk-count threshold (SMALL_DOCUMENT_CHUNK_THRESHOLD = 100)
+// classifying documents as "small" (gets a supplementary search scoped to
+// just the small-document group, per match_chunks' filter_document_ids
+// param, 0022) vs "huge" (assumed to already win corpus-wide ranking on its
+// own merits) — itself replacing an even earlier generation of hand-coded,
+// per-query regex "intent" checks (matchesDriverDocumentsIntent,
+// matchesTechnicalInspectionIntent, matchesPedestrianCrossingIntent) that
+// each guessed, from query wording, which one specific document a question
+// was "about."
+//
+// Root cause that killed the threshold approach (2026-07-14 bug report,
+// two insurance-document questions): "165 IVQ İcbari sığortalar haqqında"
+// was reprocessed and grew to 285 chunks, crossing the 100-chunk cutoff and
+// losing the boost — but it isn't one of the corpus's actually-huge,
+// broadly-relevant documents (517/181/177/114-chunk docs, see match_chunks_
+// per_document's migration comment for the full list); it's a single narrow
+// topic split into many fine-grained articles, so its own best-matching
+// chunk for a specific query can be crowded out of a corpus-wide top-N
+// largely by OTHER CHUNKS OF THE SAME DOCUMENT. Any fixed chunk-count cutoff
+// has this failure mode for some document size, and needs retuning every
+// time a document happens to cross it.
+//
+// Fix: match_chunks_per_document (0025) guarantees every ready document —
+// regardless of its chunk count — contributes up to its own top N chunks
+// (ranked within that document alone, via a partition-by-document window
+// function, using the same vector+trigram combined_score formula match_chunks
+// uses — not a document-local rank-only score, which would sort incomparably
+// against match_chunks' results once merged in route.ts) to the retrieval
+// pool. This has zero query-content-specific code and needs no
+// per-document-size tuning as documents are uploaded or reprocessed.
+// lib/rag/rerank.ts still has the final say on what's actually relevant from
+// the merged pool. Confirmed live against the 2026-07-14 bug report's two
+// queries: the target chunk ranks 12th-15th within its own 285-chunk
+// document — comfortably inside this limit.
+const PER_DOCUMENT_CANDIDATE_LIMIT = 20;
 
-export function matchesDriverDocumentsIntent(text: string): boolean {
-  return DRIVER_DOCUMENTS_INTENT_PATTERN.test(text);
+export interface RetrievePerDocumentChunksResult {
+  chunks: RetrievedChunk[];
+  embedMs: number;
+  dbSearchMs: number;
 }
 
-/** Case-insensitive exact title lookup — used by the driver-documents intent
- * boost to find "Yol hərəkəti qaydaları"'s current id rather than hardcoding
- * a UUID that can differ across environments/reseeds. */
-export async function findDocumentIdByTitle(title: string): Promise<string | null> {
+/** Up to PER_DOCUMENT_CANDIDATE_LIMIT chunks per ready document, guaranteeing
+ * every document a foothold in the retrieval pool regardless of corpus-wide
+ * competition — see PER_DOCUMENT_CANDIDATE_LIMIT's doc comment above for why
+ * this replaces the old chunk-count threshold. `ftsQuery` mirrors
+ * retrieveRelevantChunks' param of the same purpose — pass the raw user
+ * query, not the rewritten one (see that param's doc comment). */
+export async function retrievePerDocumentChunks(
+  embedQuery: string,
+  ftsQuery?: string,
+): Promise<RetrievePerDocumentChunksResult> {
+  const embedStart = performance.now();
+  const embedding = await embedText(embedQuery);
+  const embedMs = performance.now() - embedStart;
+
   const supabase = createAdminClient();
-  const { data, error } = await supabase
-    .from('documents')
-    .select('id')
-    .ilike('title', title)
-    .limit(1)
-    .maybeSingle();
+
+  const dbSearchStart = performance.now();
+  const { data, error } = await supabase.rpc('match_chunks_per_document', {
+    query_embedding: embedding,
+    query_text: ftsQuery ?? null,
+    per_document_limit: PER_DOCUMENT_CANDIDATE_LIMIT,
+  });
+  const dbSearchMs = performance.now() - dbSearchStart;
+
   if (error) throw error;
-  return data?.id ?? null;
+  return { chunks: data ?? [], embedMs, dbSearchMs };
 }
 
 export async function retrieveRelevantChunks({
   embedQuery,
   ftsQuery,
   documentId,
-  matchCount = 15,
+  matchCount = 60,
 }: RetrieveRelevantChunksParams): Promise<RetrieveRelevantChunksResult> {
   const embedStart = performance.now();
   const embedding = await embedText(embedQuery);

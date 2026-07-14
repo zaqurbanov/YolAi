@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { getSharedConversation, type SharedConversationMessage } from '@/lib/chat/getSharedConversation';
 import { Chip } from '@heroui/react';
 
@@ -12,6 +13,18 @@ const timeFormatter = new Intl.DateTimeFormat('az-AZ', { hour: '2-digit', minute
 
 function citationsOf(message: SharedConversationMessage): Citation[] {
   return Array.isArray(message.citations) ? (message.citations as Citation[]) : [];
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ token: string }>;
+}): Promise<Metadata> {
+  const { token } = await params;
+  const conversation = await getSharedConversation(token);
+  return {
+    title: conversation?.title ?? 'Paylaşılan söhbət',
+  };
 }
 
 export default async function SharedConversationPage({

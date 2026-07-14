@@ -11,6 +11,7 @@ import { createClient } from '@/lib/supabase/server';
  *   created_at: string;
  *   full_name: string | null;
  *   avatar_url: string | null;
+ *   custom_max_per_day: number | null; // per-user daily chat rate-limit override; null = use effective global default
  * }
  *
  * interface AdminUserCitedDocument {
@@ -68,6 +69,7 @@ export interface AdminUserProfile {
   created_at: string;
   full_name: string | null;
   avatar_url: string | null;
+  custom_max_per_day: number | null;
 }
 
 export interface AdminUserCitedDocument {
@@ -126,7 +128,7 @@ export async function getAdminUserDetail(userId: string): Promise<AdminUserDetai
 
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
-    .select('id, email, role, created_at, full_name, avatar_url')
+    .select('id, email, role, created_at, full_name, avatar_url, custom_max_per_day')
     .eq('id', userId)
     .maybeSingle();
 

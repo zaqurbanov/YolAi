@@ -19,7 +19,10 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Yol Hərəkəti Qaydaları QA",
+  title: {
+    default: "Yol Hərəkəti Qaydaları QA",
+    template: "%s | Yol Hərəkəti Qaydaları",
+  },
   description: "Yol hərəkəti qaydaları üzrə AI dəstəkli sual-cavab sistemi",
 };
 

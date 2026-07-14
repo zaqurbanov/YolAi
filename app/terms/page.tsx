@@ -1,7 +1,7 @@
 import Footer from '@/components/Footer';
 
 export const metadata = {
-  title: 'İstifadə Şərtləri | Yol Hərəkəti QA',
+  title: 'İstifadə Şərtləri',
 };
 
 export default function TermsPage() {

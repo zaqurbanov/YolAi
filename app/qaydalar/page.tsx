@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { buttonVariants } from '@heroui/styles';
 import { Card } from '@heroui/react';
@@ -63,6 +64,10 @@ const CATEGORIES = [
     citation: 'Maddə 74 | Dayanma və saxlanma qaydaları',
   },
 ];
+
+export const metadata: Metadata = {
+  title: 'Qaydalar',
+};
 
 export default function QaydalarPage() {
   return (

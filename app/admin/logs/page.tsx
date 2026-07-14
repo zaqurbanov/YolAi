@@ -1,6 +1,11 @@
 import { redirect } from 'next/navigation';
+import type { Metadata } from 'next';
 import { requireAdmin } from '@/lib/auth/requireAdmin';
 import { createClient } from '@/lib/supabase/server';
+
+export const metadata: Metadata = {
+  title: 'Loglar',
+};
 
 interface LogRow {
   id: string;

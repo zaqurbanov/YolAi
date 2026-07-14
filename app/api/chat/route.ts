@@ -8,13 +8,15 @@ import {
 } from 'ai';
 import { getChatModel, getChatModelFallback, getChatModelId, getChatModelFallbackId, getProviderCallOptions } from '@/lib/llm';
 import { streamTextWithFallback } from '@/lib/llm/streamWithFallback';
-import { retrieveRelevantChunks, matchesDriverDocumentsIntent, findDocumentIdByTitle } from '@/lib/retrieval/search';
+import { retrieveRelevantChunks, retrievePerDocumentChunks, type RetrievedChunk } from '@/lib/retrieval/search';
 import { buildSystemPrompt, buildContextBlock, buildCitations, filterCitedChunks } from '@/lib/rag/buildPrompt';
 import { shouldUpdateSummary, updateContextSummary } from '@/lib/rag/contextSummary';
 import { rewriteQuery } from '@/lib/rag/rewriteQuery';
+import { rerankChunks } from '@/lib/rag/rerank';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { apiError, serverError } from '@/lib/api/errors';
+import { checkChatRateLimit } from '@/lib/chat/rateLimit';
 
 const MESSAGE_WINDOW = 10;
 
@@ -92,13 +94,30 @@ export async function POST(request: Request) {
     user?.user_metadata?.full_name ?? user?.user_metadata?.name ?? (user?.email ? user.email.split('@')[0] : null) ?? null;
 
   // Real server-side admin check (profiles.role) — proxy.ts only does an optimistic
-  // cookie check and is never sufficient authorization on its own. Kicked off now so
-  // it runs concurrently with retrieval/rewrite instead of blocking the hot path.
-  const isAdminPromise: Promise<boolean> = user
+  // cookie check and is never sufficient authorization on its own. Awaited immediately
+  // (rather than kicked off to run concurrently with retrieval/rewrite, as before) so
+  // the per-user rate limit check right below can gate a non-admin request before any
+  // expensive work (retrieval, embedding, LLM call) starts — a rejected request must
+  // cost nothing beyond this one indexed `profiles` PK lookup.
+  const profilePromise: Promise<{ role: string | null; custom_max_per_day: number | null } | undefined> = user
     ? Promise.resolve(
-        supabase.from('profiles').select('role').eq('id', user.id).single(),
-      ).then(({ data }) => data?.role === 'admin')
-    : Promise.resolve(false);
+        supabase.from('profiles').select('role, custom_max_per_day').eq('id', user.id).single(),
+      ).then(({ data }) => data ?? undefined)
+    : Promise.resolve(undefined);
+  const profile = await profilePromise;
+  const isAdmin = profile?.role === 'admin';
+
+  // Rate limiting applies to regular (non-admin) authenticated users only.
+  // Unauthenticated requests are out of scope here — left as-is. Checked
+  // before any conversation/message rows are created, before rewriteQuery/
+  // retrieval, and before any LLM call, so a rejected request writes nothing
+  // and calls no embedding or LLM API.
+  if (user && !isAdmin) {
+    const { allowed, message } = await checkChatRateLimit(user.id, profile?.custom_max_per_day);
+    if (!allowed) {
+      return apiError(429, message!, { code: 'rate_limited' });
+    }
+  }
 
   let conversation: ConversationState | null = null;
   // Reserved synchronously (before streaming starts) so the id is available to
@@ -140,47 +159,67 @@ export async function POST(request: Request) {
   const retrievalQuery = await rewriteQuery(query, conversation?.contextSummary);
   const rewriteMs = performance.now() - rewriteStart;
 
-  const { chunks: initialChunks, embedMs, dbSearchMs: initialDbSearchMs } = await retrieveRelevantChunks({
-    embedQuery: retrievalQuery,
-    ftsQuery: query,
-    documentId,
-  });
+  // Primary corpus-wide search, plus (unless the UI already scoped this chat
+  // to one document) a supplementary search guaranteeing every ready
+  // document a foothold in the pool — see retrievePerDocumentChunks()'s doc
+  // comment in search.ts for why this replaces the old chunk-count-threshold
+  // "small document" boost: any document, regardless of absolute size, can
+  // be crowded out of a fixed-width corpus-wide top-N, and a fixed cutoff
+  // misclassifies documents whenever they're uploaded/reprocessed and happen
+  // to cross it. Purely additive — merged into, never replacing, the primary
+  // result set — so rerank.ts still has the final say on what's actually
+  // relevant.
+  // rewriteQuery is an LLM call and not fully deterministic even at
+  // temperature 0 (provider-side variance) — a drifted rewrite can shift the
+  // embedding enough that a query which would otherwise retrieve correctly
+  // misses entirely, run to run (confirmed live: the same question sometimes
+  // found its target chunk, sometimes didn't, with no code change in
+  // between). The raw user query costs nothing extra to also search on
+  // (already computed, already used for trigram matching) and is the one
+  // deterministic input in this pipeline, so it's used as a second,
+  // always-present corpus-wide search alongside the rewritten one — a
+  // stability hedge, not a replacement for rewriting (which still helps
+  // vocabulary-poor queries reach documents the raw wording alone wouldn't).
+  // Skipped when rewriting left the query unchanged (isAlreadySpecific/
+  // failure fallback in rewriteQuery.ts), since it would just be a duplicate
+  // of the primary call below.
+  const rawQueryDiffersFromRewrite = retrievalQuery !== query;
 
-  let relevantChunks = initialChunks;
-  let dbSearchMs = initialDbSearchMs;
+  const [primaryResult, rawQueryResult, perDocumentResult] = await Promise.all([
+    retrieveRelevantChunks({ embedQuery: retrievalQuery, ftsQuery: query, documentId }),
+    rawQueryDiffersFromRewrite ? retrieveRelevantChunks({ embedQuery: query, ftsQuery: query, documentId }) : null,
+    documentId ? null : retrievePerDocumentChunks(retrievalQuery, query),
+  ]);
 
-  // Supplementary, additive-only retrieval boost for the "which documents
-  // must a driver carry / what can police request" intent (see
-  // matchesDriverDocumentsIntent) — only when the UI hasn't already scoped
-  // this chat to a specific document, so an explicit user scope is never
-  // silently overridden. Merged in, never replacing the primary result set,
-  // so it can only help recall for this one narrow intent and can't suppress
-  // a correct answer another query would otherwise get.
-  if (!documentId && (matchesDriverDocumentsIntent(query) || matchesDriverDocumentsIntent(retrievalQuery))) {
-    try {
-      const trafficRulesDocId = await findDocumentIdByTitle('Yol hərəkəti qaydaları');
-      if (trafficRulesDocId) {
-        // A higher matchCount than the primary call's default (15) is used here
-        // deliberately: this Maddə 37 driver-duties article enumerates many
-        // structurally-similar sub-duties (see chunkText.ts's
-        // splitPlainEnumeratedList), so the single sub-chunk with the complete
-        // document list can rank outside the top 15 within its own article even
-        // when it's exactly what's needed — a wider candidate pool for this one
-        // additive, document-scoped call costs little and doesn't affect the
-        // primary corpus-wide search.
-        const { chunks: supplementaryChunks, dbSearchMs: supplementaryDbSearchMs } = await retrieveRelevantChunks({
-          embedQuery: retrievalQuery,
-          ftsQuery: query,
-          documentId: trafficRulesDocId,
-          matchCount: 25,
-        });
-        const seenIds = new Set(relevantChunks.map((c) => c.id));
-        relevantChunks = [...relevantChunks, ...supplementaryChunks.filter((c) => !seenIds.has(c.id))];
-        dbSearchMs += supplementaryDbSearchMs;
-      }
-    } catch (err) {
-      console.error('[chat] driver-documents intent supplementary retrieval failed:', err);
+  const seenChunkIds = new Set(primaryResult.chunks.map((c) => c.id));
+  const mergedChunks = [...primaryResult.chunks];
+  for (const source of [rawQueryResult, perDocumentResult]) {
+    if (!source) continue;
+    for (const chunk of source.chunks) {
+      if (seenChunkIds.has(chunk.id)) continue;
+      seenChunkIds.add(chunk.id);
+      mergedChunks.push(chunk);
     }
+  }
+  // Sorted by combined_score (descending) before reaching rerank.ts's own
+  // candidate cap, so a merged pool larger than that cap loses its weakest
+  // candidates, not an arbitrary suffix determined by which source happened
+  // to be concatenated first — see rerank.ts's MAX_RERANK_CANDIDATES comment
+  // for the bug this fixes.
+  const initialChunks = mergedChunks.sort((a, b) => b.combined_score - a.combined_score);
+
+  const embedMs = primaryResult.embedMs + (rawQueryResult?.embedMs ?? 0) + (perDocumentResult?.embedMs ?? 0);
+  const dbSearchMs = primaryResult.dbSearchMs + (rawQueryResult?.dbSearchMs ?? 0) + (perDocumentResult?.dbSearchMs ?? 0);
+
+  const { keptIds, rerankMs } = await rerankChunks(query, initialChunks);
+  let relevantChunks: RetrievedChunk[];
+  if (keptIds) {
+    const chunkById = new Map(initialChunks.map((c) => [c.id, c]));
+    relevantChunks = keptIds
+      .map((id) => chunkById.get(id))
+      .filter((c): c is RetrievedChunk => c !== undefined);
+  } else {
+    relevantChunks = initialChunks.slice(0, 15);
   }
 
   const contextBlock = buildContextBlock(relevantChunks);
@@ -235,6 +274,7 @@ export async function POST(request: Request) {
               rewriteMs,
               embedMs,
               dbSearchMs,
+              rerankMs,
               llmFirstTokenMs,
               llmTotalMs,
               promptTokens,
@@ -257,6 +297,7 @@ export async function POST(request: Request) {
             rewrite_ms: rewriteMs,
             embed_ms: embedMs,
             db_search_ms: dbSearchMs,
+            rerank_ms: rerankMs,
             llm_first_token_ms: llmFirstTokenMs,
             llm_total_ms: llmTotalMs,
             used_fallback: usedFallback,
@@ -332,8 +373,6 @@ export async function POST(request: Request) {
       },
     },
   );
-
-  const isAdmin = await isAdminPromise;
 
   return createUIMessageStreamResponse({
     stream: toUIMessageStream({

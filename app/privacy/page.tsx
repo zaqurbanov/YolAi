@@ -1,7 +1,7 @@
 import Footer from '@/components/Footer';
 
 export const metadata = {
-  title: 'Məxfilik Siyasəti | Yol Hərəkəti QA',
+  title: 'Məxfilik Siyasəti',
 };
 
 export default function PrivacyPage() {

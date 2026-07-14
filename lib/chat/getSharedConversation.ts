@@ -1,4 +1,5 @@
 import 'server-only';
+import { cache } from 'react';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 export interface SharedConversationMessage {
@@ -22,8 +23,12 @@ export interface SharedConversation {
  * policy on conversations/messages), but is safe because the lookup is
  * always an exact share_token equality match and the returned shape omits
  * user_id/email or any other user-identifying field.
+ *
+ * Wrapped in React `cache()` so the page's `generateMetadata` and the page
+ * component itself (both calling this with the same token in one request)
+ * share a single DB round trip instead of fetching the conversation twice.
  */
-export async function getSharedConversation(
+export const getSharedConversation = cache(async function getSharedConversation(
   token: string,
 ): Promise<SharedConversation | null> {
   if (!token) return null;
@@ -52,4 +57,4 @@ export async function getSharedConversation(
     created_at: conversation.created_at,
     messages: messages ?? [],
   };
-}
+});

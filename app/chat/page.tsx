@@ -6,7 +6,7 @@ import type { UIMessage } from 'ai';
 import Image from 'next/image';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Avatar, Badge, Input, Button, Chip, Select, ListBox, AlertDialog, Modal, Dropdown, Skeleton, toast } from '@heroui/react';
-import { SendIcon, ShareIcon, MoreIcon, TrashIcon, InfoIcon } from '@/components/icons';
+import { SendIcon, ShareIcon, MoreIcon, TrashIcon, InfoIcon, CopyIcon, CheckIcon } from '@/components/icons';
 import { Spinner } from '@/components/Spinner';
 
 interface Citation {
@@ -49,6 +49,18 @@ function formatMs(ms: number | null): string {
   return `${Math.round(ms)}ms`;
 }
 
+// DefaultChatTransport throws `new Error(rawBodyText)` on non-OK responses, so
+// `error.message` is the raw JSON body (see lib/api/errors.ts's apiError shape)
+// rather than a clean message. Parse it back out where possible.
+function extractApiErrorMessage(err: Error): string | null {
+  try {
+    const parsed = JSON.parse(err.message);
+    return typeof parsed?.error === 'string' ? parsed.error : null;
+  } catch {
+    return null;
+  }
+}
+
 function formatTokens(log: RequestLog): string {
   if (log.total_tokens == null) return '—';
   if (log.prompt_tokens == null || log.completion_tokens == null) return `${log.total_tokens}`;
@@ -69,10 +81,15 @@ interface DocumentOption {
   title: string;
 }
 
+function messageToPlainText(message: ChatUIMessage) {
+  return message.parts.map((part) => (part.type === 'text' ? part.text : '')).join('');
+}
+
 interface MessageBubbleProps {
   message: ChatUIMessage;
   timestamp: string;
   isCitationsExpanded: boolean;
+  isStreaming: boolean;
   onToggleCitations: (messageId: string) => void;
   onOpenLog: (messageId: string) => void;
 }
@@ -86,6 +103,7 @@ const MessageBubble = memo(function MessageBubble({
   message,
   timestamp,
   isCitationsExpanded,
+  isStreaming,
   onToggleCitations,
   onOpenLog,
 }: MessageBubbleProps) {
@@ -93,6 +111,17 @@ const MessageBubble = memo(function MessageBubble({
   const citations = metadata?.citations;
   const modelUsed = metadata?.modelUsed;
   const isUser = message.role === 'user';
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(messageToPlainText(message));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.danger('Kopyalamaq uğursuz oldu');
+    }
+  }
 
   return (
     <div className={`flex flex-col gap-1.5 ${isUser ? 'items-end' : 'items-start'}`}>
@@ -170,6 +199,16 @@ const MessageBubble = memo(function MessageBubble({
       <span className="mono-label inline-flex items-center gap-1 px-1 uppercase text-on-surface-variant">
         {isUser ? 'Sən' : 'Yol AI'} · {timestamp}
         {!isUser && modelUsed && <> · {modelUsed}</>}
+        {!isStreaming && (
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="ml-0.5 inline-flex items-center rounded-full p-0.5 normal-case text-on-surface-variant/70 transition hover:bg-surface-hover hover:text-on-surface"
+            aria-label={copied ? 'Kopyalandı' : 'Mesajı kopyala'}
+          >
+            {copied ? <CheckIcon width={13} height={13} /> : <CopyIcon width={13} height={13} />}
+          </button>
+        )}
         {!isUser && metadata?.messageId != null && (
           <button
             type="button"
@@ -227,7 +266,7 @@ export default function ChatPage() {
     transport: new DefaultChatTransport({ api: '/api/chat' }),
     onError: (err) => {
       console.error('Chat error:', err);
-      toast.danger('Cavab alınmadı, yenidən cəhd edin.');
+      toast.danger(extractApiErrorMessage(err) ?? 'Cavab alınmadı, yenidən cəhd edin.');
     },
   });
 
@@ -392,6 +431,22 @@ export default function ChatPage() {
     const el = scrollContainerRef.current;
     autoScrollingRef.current = true;
     bottomSentinelRef.current?.scrollIntoView({ block: 'end', behavior });
+    if (behavior === 'instant') {
+      // Instant jumps are atomic (no animation to protect against), so clear
+      // the suppression flag immediately instead of deferring. This runs once
+      // per streamed chunk during an active response; deferring via
+      // scrollend/timeout let the flag stay "true" almost continuously
+      // through a fast stream (chunks arriving faster than the reset window
+      // closes), which silently dropped every real user scroll-up gesture in
+      // handleScroll below and made the view fight the user back to the
+      // bottom on the next chunk — reported as "can't scroll while
+      // streaming". Deferred clearing is still needed for 'smooth' below,
+      // where the browser animates over several frames and intermediate
+      // scroll events mid-animation would otherwise be misread as the user
+      // scrolling away.
+      autoScrollingRef.current = false;
+      return;
+    }
     if (el && 'onscrollend' in el) {
       const handleScrollEnd = () => {
         autoScrollingRef.current = false;
@@ -400,13 +455,10 @@ export default function ChatPage() {
       el.addEventListener('scrollend', handleScrollEnd);
     } else {
       // Fallback for browsers without 'scrollend': smooth scrolls take a
-      // moment to settle, instant ones are done by next frame.
-      window.setTimeout(
-        () => {
-          autoScrollingRef.current = false;
-        },
-        behavior === 'smooth' ? 500 : 50
-      );
+      // moment to settle.
+      window.setTimeout(() => {
+        autoScrollingRef.current = false;
+      }, 500);
     }
   }, []);
 
@@ -503,10 +555,6 @@ export default function ChatPage() {
     } catch {
       toast.danger('Linki kopyalamaq uğursuz oldu');
     }
-  }
-
-  function messageToPlainText(message: ChatUIMessage) {
-    return message.parts.map((part) => (part.type === 'text' ? part.text : '')).join('');
   }
 
   function handleExportText() {
@@ -742,12 +790,13 @@ export default function ChatPage() {
         )}
 
         <div className="space-y-6">
-          {messages.map((message) => (
+          {messages.map((message, index) => (
             <MessageBubble
               key={message.id}
               message={message}
               timestamp={timestampFor(message.id)}
               isCitationsExpanded={expandedCitationIds.has(message.id)}
+              isStreaming={isBusy && index === messages.length - 1 && message.role === 'assistant'}
               onToggleCitations={toggleCitations}
               onOpenLog={setLogModalMessageId}
             />
@@ -766,7 +815,9 @@ export default function ChatPage() {
           <div className="glass-panel mt-6 max-w-[85%] rounded-2xl rounded-tl-none border-l-2 border-error px-4 py-3 text-sm text-error">
             <p>Cavab alınmadı, yenidən cəhd edin.</p>
             {error.message && (
-              <p className="mono-label mt-1 text-on-surface-variant">{error.message}</p>
+              <p className="mono-label mt-1 text-on-surface-variant">
+                {extractApiErrorMessage(error) ?? error.message}
+              </p>
             )}
           </div>
         )}

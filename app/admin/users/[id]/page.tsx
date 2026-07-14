@@ -1,7 +1,12 @@
 import { redirect, notFound } from 'next/navigation';
+import type { Metadata } from 'next';
 import { requireAdmin } from '@/lib/auth/requireAdmin';
 import { getAdminUserDetail, getAdminUserConversations } from '@/lib/admin/getUserDetail';
 import UserDetail from './UserDetail';
+
+export const metadata: Metadata = {
+  title: 'İstifadəçi',
+};
 
 export default async function AdminUserDetailPage({
   params,
@@ -19,11 +24,6 @@ export default async function AdminUserDetailPage({
   const conversationsPage = await getAdminUserConversations(id, { limit: 10, offset: 0 });
 
   return (
-    <UserDetail
-      userId={id}
-      detail={detail}
-      initialConversations={conversationsPage}
-      viewerIsSuperAdmin={auth.role === 'super_admin'}
-    />
+    <UserDetail userId={id} detail={detail} initialConversations={conversationsPage} />
   );
 }

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Chip, Button, EmptyState } from '@heroui/react';
+import { Chip, Button, EmptyState, TextField, Input } from '@heroui/react';
 import { Spinner } from '@/components/Spinner';
 import type {
   AdminUserDetail,
@@ -133,8 +133,6 @@ function RoleControl({
     }
   }
 
-  if (role === 'super_admin') return null;
-
   return (
     <div className="flex items-center gap-2">
       <Button variant="outline" size="sm" isPending={pending} onPress={changeRole}>
@@ -150,19 +148,86 @@ function RoleControl({
   );
 }
 
+function RateLimitControl({
+  userId,
+  customMaxPerDay,
+  onChanged,
+}: {
+  userId: string;
+  customMaxPerDay: number | null;
+  onChanged: (value: number | null) => void;
+}) {
+  const [inputValue, setInputValue] = useState(customMaxPerDay != null ? String(customMaxPerDay) : '');
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const dirty = inputValue.trim() !== (customMaxPerDay != null ? String(customMaxPerDay) : '');
+
+  async function save() {
+    const trimmed = inputValue.trim();
+    const customMaxPerDayValue = trimmed === '' ? null : Number(trimmed);
+
+    if (customMaxPerDayValue !== null && (!Number.isInteger(customMaxPerDayValue) || customMaxPerDayValue <= 0)) {
+      setError('Limit müsbət tam ədəd olmalıdır');
+      return;
+    }
+
+    setPending(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/users/${userId}/rate-limit`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customMaxPerDay: customMaxPerDayValue }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setError(data?.error ?? 'Limiti dəyişmək uğursuz oldu');
+        return;
+      }
+      onChanged(data.profile.custom_max_per_day);
+      setInputValue(data.profile.custom_max_per_day != null ? String(data.profile.custom_max_per_day) : '');
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <TextField
+        type="number"
+        value={inputValue}
+        onChange={setInputValue}
+        className="w-32"
+        aria-label="Gündəlik mesaj limiti"
+      >
+        <Input placeholder="Standart" min={1} max={100000} />
+      </TextField>
+      <Button variant="outline" size="sm" isPending={pending} isDisabled={!dirty} onPress={save}>
+        {({ isPending }) => (
+          <>
+            {isPending ? <Spinner size="sm" tone="current" /> : null}
+            Yadda saxla
+          </>
+        )}
+      </Button>
+      {error && <span className="mono-label text-danger">{error}</span>}
+    </div>
+  );
+}
+
 export default function UserDetail({
   userId,
   detail,
   initialConversations,
-  viewerIsSuperAdmin,
 }: {
   userId: string;
   detail: AdminUserDetail;
   initialConversations: AdminUserConversationsPage;
-  viewerIsSuperAdmin: boolean;
 }) {
   const { profile, stats } = detail;
   const [role, setRole] = useState(profile.role);
+  const [customMaxPerDay, setCustomMaxPerDay] = useState(profile.custom_max_per_day);
 
   const [conversations, setConversations] = useState<AdminUserConversation[]>(
     initialConversations.conversations
@@ -212,16 +277,27 @@ export default function UserDetail({
           <h1 className="text-2xl font-semibold text-on-surface">
             {profile.full_name ?? profile.email ?? 'Naməlum istifadəçi'}
           </h1>
-          <Chip size="sm" color={role === 'admin' || role === 'super_admin' ? 'success' : 'default'}>
+          <Chip size="sm" color={role === 'admin' ? 'success' : 'default'}>
             {role}
           </Chip>
-          {viewerIsSuperAdmin && <RoleControl userId={userId} role={role} onChanged={setRole} />}
+          <RoleControl userId={userId} role={role} onChanged={setRole} />
         </div>
         <div className="flex flex-wrap gap-6 mono-label text-on-surface-variant">
           <span>E-poçt: {profile.email ?? '—'}</span>
           <span suppressHydrationWarning>
             Üzv olub: {dateFormatter.format(new Date(profile.created_at))}
           </span>
+        </div>
+        <div className="flex items-center gap-3 flex-wrap pt-1">
+          <span className="mono-label text-on-surface-variant">
+            Gündəlik mesaj limiti:{' '}
+            {customMaxPerDay != null ? (
+              <span className="text-on-surface font-medium">{customMaxPerDay}</span>
+            ) : (
+              <span className="text-on-surface font-medium">standart</span>
+            )}
+          </span>
+          <RateLimitControl userId={userId} customMaxPerDay={customMaxPerDay} onChanged={setCustomMaxPerDay} />
         </div>
       </div>
 

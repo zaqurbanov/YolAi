@@ -1,6 +1,11 @@
 import { redirect } from 'next/navigation';
+import type { Metadata } from 'next';
 import { requireAdmin } from '@/lib/auth/requireAdmin';
 import DocumentDetail from './DocumentDetail';
+
+export const metadata: Metadata = {
+  title: 'Sənəd',
+};
 
 export default async function AdminDocumentDetailPage({
   params,

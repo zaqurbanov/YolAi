@@ -1,6 +1,11 @@
 import { redirect } from 'next/navigation';
+import type { Metadata } from 'next';
 import { requireAdmin } from '@/lib/auth/requireAdmin';
 import { getAdminStats } from '@/lib/admin/getStats';
+
+export const metadata: Metadata = {
+  title: 'Statistika',
+};
 
 const STATUS_LABELS = {
   pending: 'Gözləyir',

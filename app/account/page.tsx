@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import type { Metadata } from 'next';
 import { Avatar, Chip, Button } from '@heroui/react';
 import { createClient } from '@/lib/supabase/server';
 import { logout } from '@/app/(auth)/actions';
@@ -7,6 +8,10 @@ import AdSlot from '@/components/AdSlot';
 import ProfileForm from '@/components/account/ProfileForm';
 import SecurityForms from '@/components/account/SecurityForms';
 import DeleteAccountDialog from '@/components/account/DeleteAccountDialog';
+
+export const metadata: Metadata = {
+  title: 'Hesab',
+};
 
 function initialsFrom(name: string | null, email: string): string {
   const source = name?.trim() || email;

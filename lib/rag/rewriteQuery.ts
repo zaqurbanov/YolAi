@@ -59,10 +59,17 @@ export async function rewriteQuery(query: string, contextSummary?: object): Prom
     // was never re-tested against the currently configured rewrite model and
     // turned out to be the dominant source of multi-second latency spikes
     // (chat_request_timing logs) on both OpenRouter and DeepSeek.
+    // temperature: 0 -- this output drives the embedding used for retrieval,
+    // so run-to-run drift here isn't just a style difference, it changes
+    // which real documents get found. Doesn't fully eliminate provider-side
+    // nondeterminism, but route.ts also now embeds the raw (always
+    // deterministic) query alongside this rewritten one as a stability
+    // hedge -- see the primary retrieval call there.
     const { text } = await generateTextWithFallback(getRewriteModel(), getRewriteModelFallback(), {
       system: REWRITE_PROMPT,
       prompt: `İstifadəçinin sualı: "${query}"${contextBlock}`,
       providerOptions: getProviderCallOptions(),
+      temperature: 0,
     });
 
     if (!isUsableRewrite(text)) return query;

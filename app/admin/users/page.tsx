@@ -1,8 +1,14 @@
 import { redirect } from 'next/navigation';
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { requireAdmin } from '@/lib/auth/requireAdmin';
 import { getAdminUsers } from '@/lib/admin/getUsers';
 import { Chip } from '@heroui/react';
+import GlobalRateLimitControl from './GlobalRateLimitControl';
+
+export const metadata: Metadata = {
+  title: 'İstifadəçilər',
+};
 
 const dateFormatter = new Intl.DateTimeFormat('az-AZ', { year: 'numeric', month: 'short', day: 'numeric' });
 
@@ -18,6 +24,8 @@ export default async function AdminUsersPage() {
         <h1 className="text-2xl font-semibold">İstifadəçilər</h1>
         <span className="mono-label text-on-surface-variant">Cəmi {users.length}</span>
       </div>
+
+      <GlobalRateLimitControl />
 
       <div className="glass-panel rounded-2xl overflow-hidden overflow-x-auto">
         {users.length === 0 ? (
