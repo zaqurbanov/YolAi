@@ -23,6 +23,13 @@ const VENDORED_MODEL_FILE = path.join(VENDORED_MODEL_DIR, MODEL_ID, 'onnx', 'mod
 if (existsSync(VENDORED_MODEL_FILE)) {
   env.allowRemoteModels = false;
   env.localModelPath = VENDORED_MODEL_DIR + path.sep;
+  console.log(
+    `[embeddings] vendored local model found — using local weights, allowRemoteModels=false (${VENDORED_MODEL_FILE})`
+  );
+} else {
+  console.log(
+    `[embeddings] VENDORED MODEL NOT FOUND at ${VENDORED_MODEL_FILE} (cwd=${process.cwd()}) — falling back to remote HuggingFace Hub download (cold start will be slow, ~15-20s)`
+  );
 }
 
 // Cached on `globalThis`, not a plain module-level `let`, so the pipeline
@@ -48,9 +55,16 @@ function getExtractor() {
     // load time substantially. Retrieval quality loss from int8 quantization
     // is negligible for this use case (semantic similarity search, not
     // generation).
-    globalForEmbeddings.__yolExtractorPromise = pipeline('feature-extraction', MODEL_ID, {
-      dtype: 'q8',
-    }) as Promise<FeatureExtractionPipeline>;
+    const startedAt = Date.now();
+    console.log('[embeddings] pipeline() load starting');
+    globalForEmbeddings.__yolExtractorPromise = (
+      pipeline('feature-extraction', MODEL_ID, {
+        dtype: 'q8',
+      }) as Promise<FeatureExtractionPipeline>
+    ).then((extractor) => {
+      console.log(`[embeddings] pipeline() load finished in ${Date.now() - startedAt}ms`);
+      return extractor;
+    });
   }
   return globalForEmbeddings.__yolExtractorPromise;
 }

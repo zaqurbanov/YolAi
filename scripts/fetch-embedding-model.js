@@ -26,12 +26,35 @@ const FILES = ["config.json", "tokenizer.json", "tokenizer_config.json", "onnx/m
 
 const MODEL_DIR = path.join(__dirname, "..", "models", MODEL_ID);
 
+// The real onnx/model_quantized.onnx is ~118MB. A plain "size > 0" existence
+// check is too weak: a truncated/corrupted partial download (e.g. a network
+// error that still wrote a few KB before failing) would pass that check and
+// get silently skipped forever on every subsequent run, poisoning the
+// vendored model without ever re-attempting the download.
+const MIN_VALID_SIZE_BYTES = {
+  "onnx/model_quantized.onnx": 50_000_000,
+};
+
+function isValidExistingFile(destPath, relPath) {
+  if (!fs.existsSync(destPath)) return false;
+  const { size } = fs.statSync(destPath);
+  const minSize = MIN_VALID_SIZE_BYTES[relPath] ?? 1;
+  return size >= minSize;
+}
+
 async function downloadFile(relPath) {
   const destPath = path.join(MODEL_DIR, relPath);
 
-  if (fs.existsSync(destPath) && fs.statSync(destPath).size > 0) {
+  if (isValidExistingFile(destPath, relPath)) {
     console.log(`[fetch-embedding-model] skip (already present): ${relPath}`);
     return;
+  }
+
+  if (fs.existsSync(destPath)) {
+    console.warn(
+      `[fetch-embedding-model] existing ${relPath} failed size sanity check — treating as corrupt/truncated, re-downloading`
+    );
+    await fsp.rm(destPath, { force: true });
   }
 
   await fsp.mkdir(path.dirname(destPath), { recursive: true });
@@ -52,6 +75,15 @@ async function downloadFile(relPath) {
   await fsp.rename(tmpPath, destPath);
 
   const { size } = await fsp.stat(destPath);
+
+  const minSize = MIN_VALID_SIZE_BYTES[relPath];
+  if (minSize && size < minSize) {
+    await fsp.rm(destPath, { force: true });
+    throw new Error(
+      `Downloaded ${relPath} is only ${size} bytes, expected at least ${minSize} — truncated/corrupted download, deleted`
+    );
+  }
+
   console.log(`[fetch-embedding-model] done: ${relPath} (${(size / 1024 / 1024).toFixed(1)}MB)`);
 }
 
@@ -62,7 +94,12 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error("[fetch-embedding-model] failed:", err);
+  console.error("=".repeat(80));
+  console.error("[fetch-embedding-model] FAILED — vendored embedding model was NOT downloaded.");
+  console.error("[fetch-embedding-model] Deployed cold starts will fall back to a slow");
+  console.error("[fetch-embedding-model] runtime download from the HuggingFace Hub (~15-20s).");
+  console.error(`[fetch-embedding-model] Error: ${err && err.stack ? err.stack : err}`);
+  console.error("=".repeat(80));
   // Non-fatal: embed.ts falls back to runtime remote download (env.allowRemoteModels)
   // when the vendored files aren't present, so don't fail the whole install/build
   // over a transient network error fetching the vendored copy.
