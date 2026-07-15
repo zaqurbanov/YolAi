@@ -91,11 +91,13 @@ html.dark {
   /* Home hero background image (app/page.tsx, public/bg.png — a near-black asphalt
      HUD illustration, see skill "Brand & mood"). It's a single dark asset with no
      light variant, so it's dialed down per-theme rather than swapped: full presence
-     in dark mode (its native look), much dimmer in light mode so it doesn't read as
-     a dark patch sitting next to the light navbar/hero text. --hero-top-overlay is
-     the starting stop of the hero's vertical gradient mask, keeping the top edge
-     (immediately under the navbar) tinted toward the theme background. */
+     in dark mode (its native look, no filter needed), lightened via --hero-image-filter
+     in light mode so it doesn't read as a dark patch sitting next to the light
+     navbar/hero text. --hero-top-overlay is the starting stop of the hero's vertical
+     gradient mask, keeping the top edge (immediately under the navbar) tinted toward
+     the theme background. */
   --hero-image-opacity: 0.6;
+  --hero-image-filter: none;
   --hero-top-overlay: transparent;
 }
 
@@ -166,11 +168,16 @@ html:not(.dark) {
   --tertiary: #94a3b8;
   --error-container: #ffdad4;
 
-  /* See dark block above for what these control. Dimmed hard in light mode: the
-     source image is a near-black asphalt illustration with no light variant, and at
-     dark-mode opacity it reads as a black patch next to the light navbar/hero — the
-     literal bug this fixes. */
-  --hero-image-opacity: 0.05;
+  /* See dark block above for what these control. The source image is a near-black
+     asphalt illustration with no light variant — at dark-mode opacity with no filter
+     it reads as a harsh black patch next to the light navbar/hero, but at the very low
+     opacity previously used here (0.05) to avoid that, it was effectively invisible.
+     Fix: lighten the asset itself via --hero-image-filter (brightness up, contrast/
+     saturation down so the asphalt reads as a soft light-gray HUD graphic instead of
+     black) so it can run at a moderate, actually-visible opacity without looking like
+     a dark smear. */
+  --hero-image-opacity: 0.35;
+  --hero-image-filter: brightness(2.4) contrast(0.8) saturate(0.6);
   --hero-top-overlay: color-mix(in oklab, var(--background) 85%, transparent);
 }
 

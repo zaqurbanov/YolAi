@@ -12,16 +12,22 @@ export default function Footer() {
           </span>
         </div>
 
-        <div className="flex items-center gap-6">
-          <Link href="/privacy" className="text-sm text-on-surface-variant hover:text-primary hover:underline">
+        <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 sm:flex-nowrap">
+          <Link
+            href="/privacy"
+            className="whitespace-nowrap text-sm text-on-surface-variant hover:text-primary hover:underline"
+          >
             Məxfilik Siyasəti
           </Link>
-          <Link href="/terms" className="text-sm text-on-surface-variant hover:text-primary hover:underline">
+          <Link
+            href="/terms"
+            className="whitespace-nowrap text-sm text-on-surface-variant hover:text-primary hover:underline"
+          >
             İstifadə Şərtləri
           </Link>
           <Link
             href="/istifade-qaydalari"
-            className="text-sm text-on-surface-variant hover:text-primary hover:underline"
+            className="whitespace-nowrap text-sm text-on-surface-variant hover:text-primary hover:underline"
           >
             İstifadə Qaydaları
           </Link>

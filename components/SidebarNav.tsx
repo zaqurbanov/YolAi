@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ChatIcon, HomeIcon, RulesIcon, SettingsIcon } from '@/components/icons';
+import { useSidebar } from '@/components/SidebarContext';
 
 const ICONS = {
   home: HomeIcon,
@@ -19,6 +20,7 @@ interface NavItem {
 
 export function SidebarNav({ items }: { items: NavItem[] }) {
   const pathname = usePathname();
+  const { isMobile, close } = useSidebar();
 
   return (
     <nav className="flex flex-col gap-1 px-3">
@@ -29,6 +31,9 @@ export function SidebarNav({ items }: { items: NavItem[] }) {
           <Link
             key={href}
             href={href}
+            onClick={() => {
+              if (isMobile) close();
+            }}
             className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
               active
                 ? 'bg-accent-soft text-accent-soft-foreground'

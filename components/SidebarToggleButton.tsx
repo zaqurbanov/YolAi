@@ -10,7 +10,7 @@ export function SidebarToggleButton() {
     <button
       type="button"
       onClick={toggle}
-      className="hidden md:inline-flex items-center justify-center rounded-lg p-2 text-muted hover:bg-surface-hover hover:text-foreground"
+      className="inline-flex items-center justify-center rounded-lg p-2 text-muted hover:bg-surface-hover hover:text-foreground"
       aria-label="Sidebar-ı aç/bağla"
     >
       <MenuIcon />

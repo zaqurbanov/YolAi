@@ -5,7 +5,7 @@ import { DefaultChatTransport } from 'ai';
 import type { UIMessage } from 'ai';
 import Image from 'next/image';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Avatar, Badge, Input, Button, Chip, Select, ListBox, AlertDialog, Modal, Dropdown, Skeleton, toast } from '@heroui/react';
+import { Avatar, Badge, Input, Button, Chip, AlertDialog, Modal, Dropdown, Skeleton, toast } from '@heroui/react';
 import { SendIcon, ShareIcon, MoreIcon, TrashIcon, InfoIcon, CopyIcon, CheckIcon } from '@/components/icons';
 import { Spinner } from '@/components/Spinner';
 import { renderCitationText } from '@/lib/chat/renderCitationText';
@@ -92,11 +92,6 @@ function sumMs(...values: (number | null)[]): number | null {
   const present = values.filter((v): v is number => v != null);
   if (present.length === 0) return null;
   return present.reduce((a, b) => a + b, 0);
-}
-
-interface DocumentOption {
-  id: string;
-  title: string;
 }
 
 function messageToPlainText(message: ChatUIMessage) {
@@ -278,8 +273,6 @@ function BusyIndicator({ isBusy }: { isBusy: boolean }) {
   );
 }
 
-const ALL_DOCUMENTS_KEY = 'all';
-
 // Rotates through short status phrases so a long wait doesn't look identical/dead
 // at second 2 and second 20 — paired with an elapsed-time counter below.
 const BUSY_PHRASES = [
@@ -291,9 +284,6 @@ const BUSY_PHRASES = [
 
 export default function ChatPage() {
   const [input, setInput] = useState('');
-  const [documents, setDocuments] = useState<DocumentOption[]>([]);
-  const [documentsLoading, setDocumentsLoading] = useState(true);
-  const [selectedDocumentKey, setSelectedDocumentKey] = useState<string>(ALL_DOCUMENTS_KEY);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeletingHistory, setIsDeletingHistory] = useState(false);
@@ -322,28 +312,6 @@ export default function ChatPage() {
       toast.danger(extractApiErrorMessage(err) ?? 'Cavab alınmadı, yenidən cəhd edin.');
     },
   });
-
-  useEffect(() => {
-    let cancelled = false;
-    async function loadDocuments() {
-      try {
-        const res = await fetch('/api/documents');
-        if (!res.ok) return;
-        const data = await res.json();
-        if (!cancelled && Array.isArray(data.documents)) {
-          setDocuments(data.documents);
-        }
-      } catch {
-        // Silent fallback: selector stays hidden/disabled, global search still works.
-      } finally {
-        if (!cancelled) setDocumentsLoading(false);
-      }
-    }
-    void loadDocuments();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -693,8 +661,7 @@ export default function ChatPage() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!input.trim()) return;
-    const documentId = selectedDocumentKey === ALL_DOCUMENTS_KEY ? undefined : selectedDocumentKey;
-    sendMessage({ text: input }, { body: { documentId } });
+    sendMessage({ text: input });
     setInput('');
     // Sending is a deliberate action — always follow it to the bottom, even if
     // the user had scrolled up to read earlier messages first, and re-arm
@@ -704,10 +671,6 @@ export default function ChatPage() {
       scrollToBottom('smooth');
     });
   }
-
-  const handleDocumentSelectionChange = useCallback((key: React.Key | null) => {
-    setSelectedDocumentKey(key ? String(key) : ALL_DOCUMENTS_KEY);
-  }, []);
 
   // Prefer the actual model that answered (post-fallback) over the proactively
   // fetched primary model id; stays pinned to whichever is most recent.
@@ -825,41 +788,6 @@ export default function ChatPage() {
           </button>
         </div>
       </header>
-
-      {documentsLoading && (
-        <div className="glass-panel print:hidden flex items-center gap-2 px-4 py-2 sm:px-8">
-          <span className="mono-label shrink-0 uppercase text-on-surface-variant">Sənəd</span>
-          <Skeleton className="h-8 w-[200px] rounded-full" />
-        </div>
-      )}
-
-      {!documentsLoading && documents.length > 0 && (
-        <div className="glass-panel print:hidden flex items-center gap-2 px-4 py-2 sm:px-8">
-          <span className="mono-label shrink-0 uppercase text-on-surface-variant">Sənəd</span>
-          <Select
-            aria-label="Sənəd seçimi"
-            selectedKey={selectedDocumentKey}
-            onSelectionChange={handleDocumentSelectionChange}
-          >
-            <Select.Trigger className="glass-card min-w-[200px] rounded-full px-3 py-1.5 text-sm text-on-surface focus-visible:ring-2 focus-visible:ring-primary/50">
-              <Select.Value />
-              <Select.Indicator />
-            </Select.Trigger>
-            <Select.Popover className="glass-panel rounded-xl p-1">
-              <ListBox aria-label="Sənəd seçimi">
-                <ListBox.Item id={ALL_DOCUMENTS_KEY} textValue="Bütün sənədlər" className="rounded-lg px-3 py-1.5 text-sm">
-                  Bütün sənədlər
-                </ListBox.Item>
-                {documents.map((doc) => (
-                  <ListBox.Item key={doc.id} id={doc.id} textValue={doc.title} className="rounded-lg px-3 py-1.5 text-sm">
-                    {doc.title}
-                  </ListBox.Item>
-                ))}
-              </ListBox>
-            </Select.Popover>
-          </Select>
-        </div>
-      )}
 
       <div ref={scrollContainerRef} className="flex-1 min-h-0 overflow-y-auto px-4 py-6 sm:px-8 print:hidden">
         {!historyLoaded && (
