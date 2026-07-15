@@ -23,12 +23,13 @@ export async function GET() {
     return NextResponse.json({ exempt: true });
   }
 
-  const { balance, dailyLimit, price } = await getCoinBalanceStatus(user.id);
+  const { balance, dailyLimit, price, msUntilReset } = await getCoinBalanceStatus(user.id);
 
   return NextResponse.json({
     exempt: false,
     balance,
     dailyLimit: dailyLimit ?? DEFAULT_DAILY_LIMIT,
     price,
+    msUntilReset,
   });
 }

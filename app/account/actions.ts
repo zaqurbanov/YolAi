@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getTransferMinAmount, lookupRecipientByEmail, transferCoins as transferCoinsLib } from '@/lib/coins/transfers';
 
 export interface AccountFormState {
   error?: string;
@@ -100,6 +101,70 @@ export async function changePassword(
   if (error) return { error: error.message };
 
   return { success: 'Şifrə yeniləndi' };
+}
+
+// Phase 1 of the coin roadmap (docs/coin-roadmap.md). Mirrors
+// changePassword's shape: auth check via createClient()+getUser(), validate
+// formData, delegate to lib/coins/transfers.ts, map every failure to a
+// user-facing Azerbaijani message (never raw Postgres/RPC text),
+// revalidatePath('/account') on success so the balance/history refresh.
+//
+// "Recipient not found" and "recipient is yourself" deliberately share one
+// generic message (account-enumeration mitigation per the roadmap's noted
+// risk) — lookupRecipientByEmail already collapses both cases to null.
+export async function transferCoins(
+  _prevState: AccountFormState,
+  formData: FormData
+): Promise<AccountFormState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return { error: 'Giriş tələb olunur' };
+
+  const rawEmail = formData.get('recipientEmail');
+  const rawAmount = formData.get('amount');
+
+  const recipientEmail = typeof rawEmail === 'string' ? rawEmail.trim() : '';
+  if (!recipientEmail) {
+    return { error: 'Alıcının email ünvanı tələb olunur' };
+  }
+
+  const amount = typeof rawAmount === 'string' ? Number(rawAmount) : NaN;
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { error: 'Düzgün miqdar daxil edin' };
+  }
+
+  const minAmount = await getTransferMinAmount();
+  if (amount < minAmount) {
+    return { error: `Minimum köçürmə miqdarı ${minAmount} coindir` };
+  }
+
+  const recipient = await lookupRecipientByEmail(recipientEmail, user.id);
+  if (!recipient) {
+    return { error: 'Bu email ünvanı ilə istifadəçi tapılmadı' };
+  }
+
+  const result = await transferCoinsLib(user.id, recipient.id, amount);
+
+  if (!result.ok) {
+    switch (result.error) {
+      case 'self_transfer':
+        return { error: 'Bu email ünvanı ilə istifadəçi tapılmadı' };
+      case 'insufficient_balance':
+        return { error: 'Köçürmək üçün kifayət qədər coininiz yoxdur (gündəlik pulsuz limitiniz köçürülə bilməz)' };
+      case 'daily_cap_exceeded':
+        return { error: 'Gündəlik köçürmə limitini aşdınız' };
+      case 'invalid_amount':
+        return { error: 'Düzgün miqdar daxil edin' };
+      default:
+        return { error: 'Köçürmə zamanı xəta baş verdi. Bir az sonra yenidən cəhd edin' };
+    }
+  }
+
+  revalidatePath('/account');
+  return { success: `${amount} coin uğurla köçürüldü` };
 }
 
 export async function deleteAccount(formData: FormData): Promise<void> {

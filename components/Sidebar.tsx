@@ -92,7 +92,7 @@ export default async function Sidebar() {
       </div>
 
       <div className="mt-auto p-4">
-        <Link href="/chat" className={buttonVariants({ variant: 'primary', size: 'md' }) + ' w-full justify-center gap-2'}>
+        <Link href="/sual" className={buttonVariants({ variant: 'primary', size: 'md' }) + ' w-full justify-center gap-2'}>
           <PlusIcon className="shrink-0" />
           Yeni Sual
         </Link>

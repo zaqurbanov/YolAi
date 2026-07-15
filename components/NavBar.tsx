@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server';
 import { logout } from '@/app/(auth)/actions';
 import { SidebarToggleButton } from '@/components/SidebarToggleButton';
 import CoinBadge from '@/components/CoinBadge';
+import NotificationBell from '@/components/NotificationBell';
+import { getUnreadCount, getRecentNotifications } from '@/lib/notifications/notifications';
 
 export default async function NavBar() {
   const supabase = await createClient();
@@ -18,6 +20,10 @@ export default async function NavBar() {
     isAdmin = profile?.role === 'admin';
   }
 
+  const [unreadCount, recentNotifications] = user
+    ? await Promise.all([getUnreadCount(user.id), getRecentNotifications(user.id)])
+    : [0, []];
+
   return (
     <nav className="border-b px-6 py-3 flex items-center justify-between">
       <div className="flex items-center gap-2">
@@ -27,6 +33,13 @@ export default async function NavBar() {
         </Link>
       </div>
       <div className="flex items-center gap-2 text-sm">
+        {user && !isAdmin && <CoinBadge />}
+        {user && (
+          <NotificationBell
+            initialUnreadCount={unreadCount}
+            initialNotifications={recentNotifications}
+          />
+        )}
         {user && (
           <Link href="/chat" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
             Chat
@@ -39,7 +52,6 @@ export default async function NavBar() {
         )}
         {user ? (
           <>
-            {!isAdmin && <CoinBadge />}
             <Link href="/account" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
               Hesab
             </Link>

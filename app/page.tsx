@@ -3,28 +3,24 @@ import Link from 'next/link';
 import { buttonVariants } from '@heroui/styles';
 import { Card, Label, ProgressBar } from '@heroui/react';
 import Footer from '@/components/Footer';
-import { CheckIcon, FineIcon, RulesIcon, SignIcon, SparkleIcon } from '@/components/icons';
+import { CheckIcon, SparkleIcon } from '@/components/icons';
+import { RULE_CATEGORIES } from '@/lib/content/ruleCategories';
 
-const TOPICS = [
-  {
-    icon: SignIcon,
-    title: 'Nişanlar',
-    description: 'Məlumatlandırıcı, xəbərdarlıq və qadağan nişanlarını nümunələrlə öyrənin.',
-    citation: 'Maddə 18 | Yol nişanları',
-  },
-  {
-    icon: RulesIcon,
-    title: 'Qaydalar',
-    description: 'Yol hərəkəti haqqında qanunvericiliyin əsas maddələri və tətbiqi qaydaları.',
-    citation: 'Maddə 47 | Ümumi müddəalar',
-  },
-  {
-    icon: FineIcon,
-    title: 'Cərimələr',
-    description: 'Qayda pozuntularına görə tətbiq edilən cərimələr və bal sisteminin ətraflı izahı.',
-    citation: 'İXM, Maddə 128 | Cərimə sanksiyaları',
-  },
+// Home page preview: the 6 most commonly-asked categories out of the full 8
+// in RULE_CATEGORIES — "Kəsişmələr və Üstünlük Hüququ" and "Dayanma və
+// Dayanacaq Qaydaları" are intentionally left off this preview and only
+// shown on the full /qaydalar list.
+const HOME_TOPIC_TITLES = [
+  'Nişanlar',
+  'Qaydalar',
+  'Cərimələr və Bal Sistemi',
+  'Piyada Hərəkəti',
+  'Sürət Həddi',
+  'Sənədlər və Sığorta',
 ];
+const TOPICS = HOME_TOPIC_TITLES.map(
+  (title) => RULE_CATEGORIES.find((category) => category.title === title)!
+);
 
 const PROMO_FEATURES = [
   'Rəsmi sənədlərə əsaslanan, mənbəyə istinad edən cavablar',
@@ -111,7 +107,7 @@ export default function Home() {
             </Link>
           </div>
 
-          <div className="grid gap-6 sm:grid-cols-3">
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {TOPICS.map(({ icon: Icon, title, description, citation }, i) => (
               <Card
                 key={title}

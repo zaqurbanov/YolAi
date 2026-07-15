@@ -19,6 +19,12 @@ export default function Footer() {
           <Link href="/terms" className="text-sm text-on-surface-variant hover:text-primary hover:underline">
             İstifadə Şərtləri
           </Link>
+          <Link
+            href="/istifade-qaydalari"
+            className="text-sm text-on-surface-variant hover:text-primary hover:underline"
+          >
+            İstifadə Qaydaları
+          </Link>
 
           <div className="flex items-center gap-3">
             <a

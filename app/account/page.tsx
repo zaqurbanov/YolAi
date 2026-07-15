@@ -8,12 +8,18 @@ import { createClient } from '@/lib/supabase/server';
 import { logout } from '@/app/(auth)/actions';
 import { getAccountStats } from '@/lib/account/getAccountStats';
 import { getCoinBalanceStatus } from '@/lib/chat/coins';
+import { getTransferMinAmount, getTransferHistory } from '@/lib/coins/transfers';
+import { getQuizRewardAmount, hasClaimedToday } from '@/lib/coins/quiz';
+import { getDailyQuestionForUser } from '@/lib/quiz/questions';
 import { formatAzDate } from '@/lib/format/date';
 import { formatMsUntilReset } from '@/lib/format/coins';
 import AdSlot from '@/components/AdSlot';
 import ProfileForm from '@/components/account/ProfileForm';
 import SecurityForms from '@/components/account/SecurityForms';
 import DeleteAccountDialog from '@/components/account/DeleteAccountDialog';
+import TransferCoinsForm from '@/components/account/TransferCoinsForm';
+import TransferHistoryList from '@/components/account/TransferHistoryList';
+import DailyQuizCard from '@/components/account/DailyQuizCard';
 
 export const metadata: Metadata = {
   title: 'Hesab',
@@ -51,6 +57,23 @@ export default async function AccountPage() {
   const memberSince = profile?.created_at ? formatAzDate(profile.created_at) : '—';
 
   const coins = isAdmin ? null : await getCoinBalanceStatus(user.id);
+
+  const [transferMinAmount, transferHistory, quizReward, quizAlreadyClaimed] = isAdmin
+    ? [null, null, null, null]
+    : await Promise.all([
+        getTransferMinAmount(),
+        getTransferHistory(user.id),
+        getQuizRewardAmount(),
+        hasClaimedToday(user.id),
+      ]);
+
+  // Strip correctIndex before it ever reaches the client component's props —
+  // the server action re-derives it server-side from (userId, today) when
+  // the answer is submitted.
+  const dailyQuestion = isAdmin ? null : getDailyQuestionForUser(user.id, new Date());
+  const quizQuestionForClient = dailyQuestion
+    ? { question: dailyQuestion.question, options: dailyQuestion.options }
+    : null;
 
   const statTiles = [
     { label: 'Söhbətlər', value: stats.conversations },
@@ -108,6 +131,21 @@ export default async function AccountPage() {
             Yeni coin paketi al
           </Link>
         </div>
+      ) : null}
+
+      {quizQuestionForClient ? (
+        <DailyQuizCard
+          question={quizQuestionForClient.question}
+          options={quizQuestionForClient.options}
+          alreadyClaimed={quizAlreadyClaimed ?? false}
+          reward={quizReward ?? 0}
+        />
+      ) : null}
+
+      {transferMinAmount != null ? <TransferCoinsForm minAmount={transferMinAmount} /> : null}
+
+      {transferHistory ? (
+        <TransferHistoryList sent={transferHistory.sent} received={transferHistory.received} />
       ) : null}
 
       <ProfileForm fullName={fullName} avatarUrl={avatarUrl} />
