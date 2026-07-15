@@ -104,3 +104,11 @@ $$;
 -- so this is only callable via the service-role client (lib/chat/rateLimit.ts),
 -- never directly by an authenticated or anon client.
 revoke execute on function check_chat_rate_limit(uuid, int, int, int) from public, anon, authenticated;
+
+-- NOTE (added retroactively, see 0037_grant_service_role_rpc_execute.sql):
+-- the above revoke also strips service_role's implicit PUBLIC-derived
+-- execute access, since service_role is not a superuser and is never
+-- separately granted here. This went unnoticed until 0037 because the
+-- caller (lib/chat/rateLimit.ts) fails open on RPC error. For reference,
+-- the fix applied in 0037 (do not re-run here — 0023 is already applied):
+--   grant execute on function check_chat_rate_limit(uuid, int, int, int) to service_role;

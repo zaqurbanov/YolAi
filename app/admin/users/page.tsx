@@ -4,14 +4,14 @@ import Link from 'next/link';
 import { requireAdmin } from '@/lib/auth/requireAdmin';
 import { getAdminUsers } from '@/lib/admin/getUsers';
 import { Chip } from '@heroui/react';
+import { formatAzDate } from '@/lib/format/date';
+import { formatCoinBalance } from '@/lib/format/coins';
 import GlobalRateLimitControl from './GlobalRateLimitControl';
 import GlobalCoinPriceControl from './GlobalCoinPriceControl';
 
 export const metadata: Metadata = {
   title: 'İstifadəçilər',
 };
-
-const dateFormatter = new Intl.DateTimeFormat('az-AZ', { year: 'numeric', month: 'short', day: 'numeric' });
 
 export default async function AdminUsersPage() {
   const auth = await requireAdmin();
@@ -40,6 +40,8 @@ export default async function AdminUsersPage() {
               <tr className="border-b border-outline-variant/40 text-left">
                 <th className="px-4 py-3 font-medium text-on-surface-variant">E-poçt</th>
                 <th className="px-4 py-3 font-medium text-on-surface-variant">Rol</th>
+                <th className="px-4 py-3 font-medium text-on-surface-variant text-right">Coin balansı</th>
+                <th className="px-4 py-3 font-medium text-on-surface-variant text-right">Ümumi xərclənib</th>
                 <th className="px-4 py-3 font-medium text-on-surface-variant text-right">Qeydiyyat tarixi</th>
               </tr>
             </thead>
@@ -66,7 +68,23 @@ export default async function AdminUsersPage() {
                       href={`/admin/users/${u.id}`}
                       className="block px-4 py-3 mono-label text-right text-on-surface-variant cursor-pointer"
                     >
-                      {dateFormatter.format(new Date(u.created_at))}
+                      {u.coinBalance != null ? formatCoinBalance(u.coinBalance) : '—'}
+                    </Link>
+                  </td>
+                  <td className="p-0">
+                    <Link
+                      href={`/admin/users/${u.id}`}
+                      className="block px-4 py-3 mono-label text-right text-on-surface-variant cursor-pointer"
+                    >
+                      {u.totalSpent != null ? formatCoinBalance(u.totalSpent) : '—'}
+                    </Link>
+                  </td>
+                  <td className="p-0">
+                    <Link
+                      href={`/admin/users/${u.id}`}
+                      className="block px-4 py-3 mono-label text-right text-on-surface-variant cursor-pointer"
+                    >
+                      {formatAzDate(u.created_at)}
                     </Link>
                   </td>
                 </tr>

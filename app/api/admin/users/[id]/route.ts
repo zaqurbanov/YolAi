@@ -11,13 +11,8 @@ const MAX_LIMIT = 50;
 // Only the two real role tiers are assignable through this API.
 const ASSIGNABLE_ROLES = new Set(['admin', 'user']);
 
-// Sane upper bound to reject fat-fingered values (e.g. 9999999) — chosen
-// well above any realistic legitimate per-user daily cap.
-const MAX_ALLOWED_RATE_LIMIT = 100000;
-
 // Coin values are numeric(10,2) and explicitly allowed to be fractional
-// (e.g. 0.5 grant), unlike MAX_ALLOWED_RATE_LIMIT above which is
-// integer-only — bounds chosen only to reject fat-fingered input.
+// (e.g. 0.5 grant) — bounds chosen only to reject fat-fingered input.
 const MAX_ALLOWED_DAILY_COIN_LIMIT = 100000;
 const MAX_ALLOWED_COIN_GRANT = 100000;
 
@@ -46,19 +41,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { id } = await params;
   const body = await request.json().catch(() => null);
   const hasRole = body?.role !== undefined;
-  const hasRateLimit = body?.customMaxPerDay !== undefined;
   const hasDailyCoinLimit = body?.dailyCoinLimit !== undefined;
   const hasGrantCoins = body?.grantCoins !== undefined;
 
-  if (!hasRole && !hasRateLimit && !hasDailyCoinLimit && !hasGrantCoins) {
-    return apiError(400, 'role, customMaxPerDay, dailyCoinLimit və ya grantCoins göndərilməlidir');
+  if (!hasRole && !hasDailyCoinLimit && !hasGrantCoins) {
+    return apiError(400, 'role, dailyCoinLimit və ya grantCoins göndərilməlidir');
   }
 
   // dailyCoinLimit/grantCoins are handled separately below (they write to
   // user_coins via the service-role client, not profiles via the
   // RLS-respecting one) — validated up front here so a bad value in either
   // field fails the whole request before any write happens, same
-  // all-or-nothing validation posture as role/customMaxPerDay below.
+  // all-or-nothing validation posture as role below.
   if (hasDailyCoinLimit) {
     const dailyCoinLimit = body.dailyCoinLimit;
     if (
@@ -79,7 +73,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
   }
 
-  const update: { role?: string; custom_max_per_day?: number | null } = {};
+  const update: { role?: string } = {};
 
   if (hasRole) {
     const role = body.role;
@@ -92,25 +86,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     update.role = role;
   }
 
-  if (hasRateLimit) {
-    const customMaxPerDay = body.customMaxPerDay;
-    if (
-      customMaxPerDay !== null &&
-      (typeof customMaxPerDay !== 'number' ||
-        !Number.isInteger(customMaxPerDay) ||
-        customMaxPerDay <= 0 ||
-        customMaxPerDay > MAX_ALLOWED_RATE_LIMIT)
-    ) {
-      return apiError(400, `customMaxPerDay null və ya 1-${MAX_ALLOWED_RATE_LIMIT} arasında tam ədəd olmalıdır`);
-    }
-    update.custom_max_per_day = customMaxPerDay ?? null;
-  }
-
   const supabase = await createClient();
 
-  let profile: { id: string; role: string; custom_max_per_day: number | null } | null;
+  let profile: { id: string; role: string } | null;
 
-  if (hasRole || hasRateLimit) {
+  if (hasRole) {
     // RLS-respecting client: relies on the profiles_update_admin policy
     // (0026_remove_super_admin.sql), which itself checks is_admin() — so this
     // update fails closed even if the requireAdmin() check above were ever
@@ -119,7 +99,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       .from('profiles')
       .update(update)
       .eq('id', id)
-      .select('id, role, custom_max_per_day')
+      .select('id, role')
       .maybeSingle();
 
     if (error) return serverError(error, 'İstifadəçini yeniləmək uğursuz oldu');
@@ -127,7 +107,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   } else {
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, role, custom_max_per_day')
+      .select('id, role')
       .eq('id', id)
       .maybeSingle();
 

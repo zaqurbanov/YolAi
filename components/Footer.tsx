@@ -29,7 +29,7 @@ export default function Footer() {
               <ArrowRightIcon className="-rotate-90" />
             </a>
             <a
-              href="mailto:support@yol-qa.az"
+              href="mailto:qurbanovzaur078@gmail.com"
               aria-label="Dəstək"
               className="glass-card flex size-10 items-center justify-center rounded-full border-0 text-on-surface-variant transition-colors hover:text-primary"
             >

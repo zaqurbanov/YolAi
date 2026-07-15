@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { getSharedConversation, type SharedConversationMessage } from '@/lib/chat/getSharedConversation';
 import { renderCitationText } from '@/lib/chat/renderCitationText';
+import { formatAzTime } from '@/lib/format/date';
 import { Chip } from '@heroui/react';
 
 interface Citation {
@@ -9,8 +10,6 @@ interface Citation {
   page: number | null;
   article_label: string | null;
 }
-
-const timeFormatter = new Intl.DateTimeFormat('az-AZ', { hour: '2-digit', minute: '2-digit' });
 
 function citationsOf(message: SharedConversationMessage): Citation[] {
   return Array.isArray(message.citations) ? (message.citations as Citation[]) : [];
@@ -91,7 +90,7 @@ export default async function SharedConversationPage({
                 )}
 
                 <span className="mono-label px-1 uppercase text-on-surface-variant">
-                  {isUser ? 'Sən' : 'Yol AI'} · {timeFormatter.format(new Date(message.created_at))}
+                  {isUser ? 'Sən' : 'Yol AI'} · {formatAzTime(message.created_at)}
                 </span>
               </div>
             );

@@ -119,6 +119,15 @@ $$;
 revoke execute on function check_and_reserve_coins(uuid, numeric, numeric) from public, anon, authenticated;
 revoke execute on function debit_coins(uuid, numeric) from public, anon, authenticated;
 
+-- NOTE (added retroactively, see 0037_grant_service_role_rpc_execute.sql):
+-- the above revokes also strip service_role's implicit PUBLIC-derived
+-- execute access, since service_role is not a superuser and is never
+-- separately granted here. This went unnoticed until 0037 because both
+-- callers (lib/chat/coins.ts) fail open on RPC error. For reference, the
+-- fix applied in 0037 (do not re-run here — 0036 is already applied):
+--   grant execute on function check_and_reserve_coins(uuid, numeric, numeric) to service_role;
+--   grant execute on function debit_coins(uuid, numeric) to service_role;
+
 -- Global per-message coin price, reusing the existing app_settings
 -- key-value table (0024) rather than a new one — same pattern as
 -- chat_rate_limit_max_per_day. No env var fallback (unlike

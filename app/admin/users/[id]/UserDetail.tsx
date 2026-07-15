@@ -4,6 +4,8 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { Chip, Button, EmptyState, TextField, Input } from '@heroui/react';
 import { Spinner } from '@/components/Spinner';
+import { formatAzDate, formatAzDateTime } from '@/lib/format/date';
+import { formatCoinBalance } from '@/lib/format/coins';
 import type {
   AdminUserDetail,
   AdminUserConversationsPage,
@@ -17,15 +19,6 @@ interface Citation {
   page?: number | null;
   article_label?: string | null;
 }
-
-const dateFormatter = new Intl.DateTimeFormat('az-AZ', { year: 'numeric', month: 'short', day: 'numeric' });
-const dateTimeFormatter = new Intl.DateTimeFormat('az-AZ', {
-  year: 'numeric',
-  month: 'short',
-  day: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit',
-});
 
 function formatCitation(c: Citation): string {
   const parts = [c.title ?? 'Naməlum sənəd'];
@@ -61,7 +54,7 @@ function ConversationMessages({ messages }: { messages: AdminUserMessage[] }) {
               </div>
             )}
             <span className="mono-label px-1 text-on-surface-variant" suppressHydrationWarning>
-              {dateTimeFormatter.format(new Date(m.created_at))}
+              {formatAzDateTime(m.created_at)}
             </span>
           </div>
         );
@@ -89,7 +82,7 @@ function ConversationItem({ conversation, index }: { conversation: AdminUserConv
         </div>
         <div className="flex items-center gap-3 shrink-0">
           <span className="mono-label text-on-surface-variant" suppressHydrationWarning>
-            {dateFormatter.format(new Date(conversation.created_at))}
+            {formatAzDate(conversation.created_at)}
           </span>
           <span className="mono-label text-on-surface-variant">{expanded ? '▲' : '▼'}</span>
         </div>
@@ -146,10 +139,6 @@ function RoleControl({
       {error && <span className="mono-label text-danger">{error}</span>}
     </div>
   );
-}
-
-function formatCoinBalance(n: number): string {
-  return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.?0+$/, '');
 }
 
 function DailyCoinLimitControl({
@@ -294,74 +283,6 @@ function GrantCoinsControl({
   );
 }
 
-function RateLimitControl({
-  userId,
-  customMaxPerDay,
-  onChanged,
-}: {
-  userId: string;
-  customMaxPerDay: number | null;
-  onChanged: (value: number | null) => void;
-}) {
-  const [inputValue, setInputValue] = useState(customMaxPerDay != null ? String(customMaxPerDay) : '');
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const dirty = inputValue.trim() !== (customMaxPerDay != null ? String(customMaxPerDay) : '');
-
-  async function save() {
-    const trimmed = inputValue.trim();
-    const customMaxPerDayValue = trimmed === '' ? null : Number(trimmed);
-
-    if (customMaxPerDayValue !== null && (!Number.isInteger(customMaxPerDayValue) || customMaxPerDayValue <= 0)) {
-      setError('Limit müsbət tam ədəd olmalıdır');
-      return;
-    }
-
-    setPending(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/admin/users/${userId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ customMaxPerDay: customMaxPerDayValue }),
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        setError(data?.error ?? 'Limiti dəyişmək uğursuz oldu');
-        return;
-      }
-      onChanged(data.profile.custom_max_per_day);
-      setInputValue(data.profile.custom_max_per_day != null ? String(data.profile.custom_max_per_day) : '');
-    } finally {
-      setPending(false);
-    }
-  }
-
-  return (
-    <div className="flex items-center gap-2 flex-wrap">
-      <TextField
-        type="number"
-        value={inputValue}
-        onChange={setInputValue}
-        className="w-32"
-        aria-label="Gündəlik mesaj limiti"
-      >
-        <Input placeholder="Standart" min={1} max={100000} />
-      </TextField>
-      <Button variant="outline" size="sm" isPending={pending} isDisabled={!dirty} onPress={save}>
-        {({ isPending }) => (
-          <>
-            {isPending ? <Spinner size="sm" tone="current" /> : null}
-            Yadda saxla
-          </>
-        )}
-      </Button>
-      {error && <span className="mono-label text-danger">{error}</span>}
-    </div>
-  );
-}
-
 export default function UserDetail({
   userId,
   detail,
@@ -371,9 +292,8 @@ export default function UserDetail({
   detail: AdminUserDetail;
   initialConversations: AdminUserConversationsPage;
 }) {
-  const { profile, stats } = detail;
+  const { profile, stats, lastSignInAt } = detail;
   const [role, setRole] = useState(profile.role);
-  const [customMaxPerDay, setCustomMaxPerDay] = useState(profile.custom_max_per_day);
   const [coinBalance, setCoinBalance] = useState(detail.coins?.balance ?? null);
   const [dailyCoinLimit, setDailyCoinLimit] = useState(detail.coins?.daily_limit ?? null);
 
@@ -404,11 +324,11 @@ export default function UserDetail({
     { label: 'Köməkçi cavabları', value: stats.totalAssistantMessages },
     {
       label: 'İlk fəaliyyət',
-      value: stats.firstActivityAt ? dateFormatter.format(new Date(stats.firstActivityAt)) : '—',
+      value: stats.firstActivityAt ? formatAzDate(stats.firstActivityAt) : '—',
     },
     {
       label: 'Son fəaliyyət',
-      value: stats.lastActivityAt ? dateFormatter.format(new Date(stats.lastActivityAt)) : '—',
+      value: stats.lastActivityAt ? formatAzDate(stats.lastActivityAt) : '—',
     },
   ];
 
@@ -433,19 +353,11 @@ export default function UserDetail({
         <div className="flex flex-wrap gap-6 mono-label text-on-surface-variant">
           <span>E-poçt: {profile.email ?? '—'}</span>
           <span suppressHydrationWarning>
-            Üzv olub: {dateFormatter.format(new Date(profile.created_at))}
+            Üzv olub: {formatAzDate(profile.created_at)}
           </span>
-        </div>
-        <div className="flex items-center gap-3 flex-wrap pt-1">
-          <span className="mono-label text-on-surface-variant">
-            Gündəlik mesaj limiti:{' '}
-            {customMaxPerDay != null ? (
-              <span className="text-on-surface font-medium">{customMaxPerDay}</span>
-            ) : (
-              <span className="text-on-surface font-medium">standart</span>
-            )}
+          <span suppressHydrationWarning>
+            Son giriş: {lastSignInAt ? formatAzDateTime(lastSignInAt) : '—'}
           </span>
-          <RateLimitControl userId={userId} customMaxPerDay={customMaxPerDay} onChanged={setCustomMaxPerDay} />
         </div>
         <div className="flex items-center gap-3 flex-wrap pt-1">
           <span className="mono-label text-on-surface-variant">

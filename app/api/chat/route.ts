@@ -101,9 +101,9 @@ export async function POST(request: Request) {
   // the per-user rate limit check right below can gate a non-admin request before any
   // expensive work (retrieval, embedding, LLM call) starts — a rejected request must
   // cost nothing beyond this one indexed `profiles` PK lookup.
-  const profilePromise: Promise<{ role: string | null; custom_max_per_day: number | null } | undefined> = user
+  const profilePromise: Promise<{ role: string | null } | undefined> = user
     ? Promise.resolve(
-        supabase.from('profiles').select('role, custom_max_per_day').eq('id', user.id).single(),
+        supabase.from('profiles').select('role').eq('id', user.id).single(),
       ).then(({ data }) => data ?? undefined)
     : Promise.resolve(undefined);
   const profile = await profilePromise;
@@ -301,7 +301,7 @@ export async function POST(request: Request) {
   const fallbackModel = getChatModelFallback();
   const fallbackModelId = getChatModelFallbackId();
 
-  const { stream, usedFallback, modelUsed } = await streamTextWithFallback(
+  const { stream: rawStream, usedFallback, modelUsed } = await streamTextWithFallback(
     { model: getChatModel(), modelId: getChatModelId() },
     fallbackModel && fallbackModelId ? { model: fallbackModel, modelId: fallbackModelId } : null,
     {
@@ -317,18 +317,6 @@ export async function POST(request: Request) {
         }
       },
       onFinish: async ({ text, usage }) => {
-        // Coins are spent only here — a fully successful stream — never on
-        // error/abort (see onError below and toUIMessageStream's own onError,
-        // neither of which call debitCoins). This callback runs before the
-        // 'finish' UI message part reaches messageMetadata below (see the
-        // assistantMessageId comment above for the same ai@7.0.16 timing
-        // guarantee this relies on), so the debited balance is available in
-        // time for the client's final metadata payload.
-        if (user && !isAdmin && coinPrice !== null) {
-          const newBalance = await debitCoins(user.id, coinPrice);
-          if (newBalance !== null) coinBalance = newBalance;
-        }
-
         const llmTotalMs = performance.now() - llmStartTime;
         const citations = buildCitations(filterCitedChunks(relevantChunks, text));
         const promptTokens = usage?.inputTokens ?? null;
@@ -442,6 +430,36 @@ export async function POST(request: Request) {
         console.error('[chat] streamText error:', error);
       },
     },
+  );
+
+  // Debiting inside streamText's own onFinish is too late: that callback maps
+  // internally to the 'ai' package's onEnd, which only fires from the
+  // eventProcessor's flush() — after the 'finish' part has already been
+  // enqueued and forwarded to toUIMessageStream's messageMetadata below (read
+  // node_modules/ai/dist/index.js's DefaultStreamTextResult: transform()
+  // enqueues each chunk before awaiting onChunk, and flush() — which invokes
+  // onEnd/onFinish — only runs once the writable side has fully closed, i.e.
+  // strictly after every chunk, including 'finish', has already gone out).
+  // That mismatch meant a correct debit's balance would still have shown up
+  // one message late. Gating here — awaiting the debit before re-enqueueing
+  // 'finish' — guarantees messageMetadata sees the post-debit balance. (A
+  // separate, since-fixed bug in check_and_reserve_coins — see migration
+  // 0040 — meant debits weren't actually persisting yet either; this gate is
+  // still needed independently of that.)
+  const stream = rawStream.pipeThrough(
+    new TransformStream({
+      async transform(part, controller) {
+        // coinBalance === null means checkAndReserveCoins failed open — the
+        // balance is unknown, so skip the debit too (fail-open bias: an infra
+        // hiccup on the reserve path must not produce a debit whose displayed
+        // result we can't trust).
+        if (part.type === 'finish' && user && !isAdmin && coinPrice !== null && coinBalance !== null) {
+          const newBalance = await debitCoins(user.id, coinPrice);
+          if (newBalance !== null) coinBalance = newBalance;
+        }
+        controller.enqueue(part);
+      },
+    }),
   );
 
   return createUIMessageStreamResponse({

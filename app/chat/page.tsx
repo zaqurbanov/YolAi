@@ -9,6 +9,9 @@ import { Avatar, Badge, Input, Button, Chip, Select, ListBox, AlertDialog, Modal
 import { SendIcon, ShareIcon, MoreIcon, TrashIcon, InfoIcon, CopyIcon, CheckIcon } from '@/components/icons';
 import { Spinner } from '@/components/Spinner';
 import { renderCitationText } from '@/lib/chat/renderCitationText';
+import { formatAzTime } from '@/lib/format/date';
+import { formatCoinBalance } from '@/lib/format/coins';
+import { ADMIN_CONTACT_EMAIL } from '@/lib/contact';
 
 interface Citation {
   document_id: string;
@@ -28,10 +31,6 @@ interface HistoryMessage {
 type CoinInfo = { balance: number; price: number };
 
 type ChatMessageMetadata = { citations?: Citation[]; modelUsed?: string; messageId?: string; coins?: CoinInfo };
-
-function formatCoinBalance(n: number): string {
-  return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.?0+$/, '');
-}
 
 type ChatUIMessage = UIMessage<ChatMessageMetadata>;
 
@@ -63,6 +62,18 @@ function extractApiErrorMessage(err: Error): string | null {
   try {
     const parsed = JSON.parse(err.message);
     return typeof parsed?.error === 'string' ? parsed.error : null;
+  } catch {
+    return null;
+  }
+}
+
+// Same parse as extractApiErrorMessage, for the `code` field (e.g.
+// 'insufficient_coins') apiError() attaches — lets the UI branch on error
+// type instead of only displaying free text.
+function extractApiErrorCode(err: Error): string | null {
+  try {
+    const parsed = JSON.parse(err.message);
+    return typeof parsed?.code === 'string' ? parsed.code : null;
   } catch {
     return null;
   }
@@ -268,8 +279,6 @@ function BusyIndicator({ isBusy }: { isBusy: boolean }) {
 }
 
 const ALL_DOCUMENTS_KEY = 'all';
-
-const timeFormatter = new Intl.DateTimeFormat('az-AZ', { hour: '2-digit', minute: '2-digit' });
 
 // Rotates through short status phrases so a long wait doesn't look identical/dead
 // at second 2 and second 20 — paired with an elapsed-time counter below.
@@ -486,7 +495,7 @@ export default function ChatPage() {
   const timestampFor = useCallback(
     (id: string) => {
       const t = timestamps[id];
-      return t ? timeFormatter.format(t) : '';
+      return t ? formatAzTime(new Date(t)) : '';
     },
     [timestamps]
   );
@@ -622,6 +631,15 @@ export default function ChatPage() {
       toast.success('Link kopyalandı');
     } catch {
       toast.danger('Linki kopyalamaq uğursuz oldu');
+    }
+  }
+
+  async function copyAdminEmail() {
+    try {
+      await navigator.clipboard.writeText(ADMIN_CONTACT_EMAIL);
+      toast.success('E-poçt kopyalandı');
+    } catch {
+      toast.danger('E-poçtu kopyalamaq uğursuz oldu');
     }
   }
 
@@ -886,11 +904,17 @@ export default function ChatPage() {
 
         {error && !isBusy && (
           <div className="glass-panel mt-6 max-w-[85%] rounded-2xl rounded-tl-none border-l-2 border-error px-4 py-3 text-sm text-error">
-            <p>Cavab alınmadı, yenidən cəhd edin.</p>
-            {error.message && (
-              <p className="mono-label mt-1 text-on-surface-variant">
-                {extractApiErrorMessage(error) ?? error.message}
-              </p>
+            <p>{extractApiErrorMessage(error) ?? 'Cavab alınmadı, yenidən cəhd edin.'}</p>
+            {extractApiErrorCode(error) === 'insufficient_coins' && (
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-on-surface-variant">
+                <a href={`mailto:${ADMIN_CONTACT_EMAIL}`} className="text-primary hover:underline">
+                  {ADMIN_CONTACT_EMAIL}
+                </a>
+                <Button variant="outline" size="sm" onPress={copyAdminEmail} className="gap-1.5">
+                  <CopyIcon width={14} height={14} />
+                  Kopyala
+                </Button>
+              </div>
             )}
           </div>
         )}

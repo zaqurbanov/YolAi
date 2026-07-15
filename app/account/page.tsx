@@ -7,7 +7,9 @@ import { SparkleIcon } from '@/components/icons';
 import { createClient } from '@/lib/supabase/server';
 import { logout } from '@/app/(auth)/actions';
 import { getAccountStats } from '@/lib/account/getAccountStats';
-import { getChatQuotaStatus } from '@/lib/chat/rateLimit';
+import { getCoinBalanceStatus } from '@/lib/chat/coins';
+import { formatAzDate } from '@/lib/format/date';
+import { formatMsUntilReset } from '@/lib/format/coins';
 import AdSlot from '@/components/AdSlot';
 import ProfileForm from '@/components/account/ProfileForm';
 import SecurityForms from '@/components/account/SecurityForms';
@@ -37,7 +39,7 @@ export default async function AccountPage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role, full_name, avatar_url, created_at, custom_max_per_day')
+    .select('role, full_name, avatar_url, created_at')
     .eq('id', user.id)
     .single();
 
@@ -46,11 +48,9 @@ export default async function AccountPage() {
   const fullName = profile?.full_name ?? '';
   const avatarUrl = profile?.avatar_url ?? '';
   const isAdmin = profile?.role === 'admin';
-  const memberSince = profile?.created_at
-    ? new Date(profile.created_at).toLocaleDateString('az-AZ', { year: 'numeric', month: 'short', day: 'numeric' })
-    : '—';
+  const memberSince = profile?.created_at ? formatAzDate(profile.created_at) : '—';
 
-  const quota = isAdmin ? null : await getChatQuotaStatus(user.id, profile?.custom_max_per_day ?? null);
+  const coins = isAdmin ? null : await getCoinBalanceStatus(user.id);
 
   const statTiles = [
     { label: 'Söhbətlər', value: stats.conversations },
@@ -91,18 +91,21 @@ export default async function AccountPage() {
         ))}
       </div>
 
-      {quota ? (
+      {coins ? (
         <div className="glass-card rounded-2xl p-4">
           <div className="mono-label uppercase text-on-surface-variant">Gündəlik limit</div>
           <div className="mt-2 text-sm text-on-surface">
-            Bugünkü mesaj limiti: {quota.used}/{quota.max} istifadə olunub
+            Qalan coin: {coins.balance}
+          </div>
+          <div className="mt-1 text-sm text-on-surface-variant">
+            Sıfırlanmaya qalan vaxt: {formatMsUntilReset(coins.msUntilReset)}
           </div>
           <Link
             href="/qiymetler"
             className={buttonVariants({ variant: 'primary', size: 'sm' }) + ' glow-primary mt-4 gap-1.5'}
           >
             <SparkleIcon />
-            Gündəlik limiti artır
+            Yeni coin paketi al
           </Link>
         </div>
       ) : null}

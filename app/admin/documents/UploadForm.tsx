@@ -20,6 +20,7 @@ import {
   Skeleton,
 } from '@heroui/react';
 import { Spinner } from '@/components/Spinner';
+import { formatAzDate } from '@/lib/format/date';
 
 interface DocumentRow {
   id: string;
@@ -39,7 +40,6 @@ const STATUS_COLOR: Record<DocumentRow['status'], 'default' | 'success' | 'dange
   failed: 'danger',
 };
 
-const dateFormatter = new Intl.DateTimeFormat('az-AZ', { year: 'numeric', month: 'short', day: 'numeric' });
 
 type ConfirmTarget = { kind: 'single'; id: string; title: string } | { kind: 'bulk'; ids: string[] };
 
@@ -136,7 +136,7 @@ function DocsTableRow({
         </div>
       </Table.Cell>
       <Table.Cell className="mono-label">{item.page_count ?? '—'}</Table.Cell>
-      <Table.Cell className="mono-label">{dateFormatter.format(new Date(item.created_at))}</Table.Cell>
+      <Table.Cell className="mono-label">{formatAzDate(item.created_at)}</Table.Cell>
       <Table.Cell>
         <div className="flex items-center gap-2">
           <Button

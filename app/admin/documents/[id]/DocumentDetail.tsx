@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Card, Chip, Button, Skeleton, EmptyState, toast, TextField, Input } from '@heroui/react';
 import { Spinner } from '@/components/Spinner';
+import { formatAzDateTime } from '@/lib/format/date';
 
 interface DocumentMeta {
   id: string;
@@ -42,14 +43,6 @@ const STATUS_COLOR: Record<DocumentMeta['status'], 'default' | 'success' | 'dang
 
 const PAGE_SIZE = 25;
 const EMBEDDING_MODEL = 'Xenova/paraphrase-multilingual-MiniLM-L12-v2';
-
-const dateFormatter = new Intl.DateTimeFormat('az-AZ', {
-  year: 'numeric',
-  month: 'short',
-  day: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit',
-});
 
 function ContentPreview({ content }: { content: string }) {
   const [expanded, setExpanded] = useState(false);
@@ -259,7 +252,7 @@ export default function DocumentDetail({ id }: { id: string }) {
           </div>
           <div className="flex flex-wrap gap-6 mono-label text-on-surface-variant">
             <span>Səhifə: {document.page_count ?? '—'}</span>
-            <span>Yaradılma tarixi: {dateFormatter.format(new Date(document.created_at))}</span>
+            <span>Yaradılma tarixi: {formatAzDateTime(document.created_at)}</span>
           </div>
           {document.error_message && (
             <div className="rounded-xl bg-error-container/40 px-4 py-2 text-sm text-error">

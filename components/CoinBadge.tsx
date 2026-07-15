@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { CoinIcon } from '@/components/icons';
 
 interface CoinState {
   balance: number;
@@ -81,7 +80,8 @@ export default function CoinBadge() {
         pulsing ? 'coin-badge-pulse' : ''
       }`}
     >
-      <CoinIcon width={15} height={15} className={pulsing ? 'text-primary' : 'text-on-surface-variant'} />
+      {/* eslint-disable-next-line @next/next/no-img-element -- animated GIF, next/image would strip the animation without unoptimized */}
+      <img src="/coin.gif" alt="" width={15} height={15} />
       <span className={pulsing ? 'text-primary' : ''}>{formatCoinBalance(state.balance)}</span>
     </div>
   );

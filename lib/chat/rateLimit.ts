@@ -39,19 +39,22 @@ async function getGlobalDefaultMaxPerWindow(): Promise<number> {
   return value;
 }
 
-// Single source of truth for the "what max applies to this user" precedence
-// (per-user custom_max_per_day override -> admin-configured global default ->
-// env default), so checkChatRateLimit and the read-only quota status below
-// never drift apart on this logic.
-async function resolveEffectiveMaxPerDay(customMaxPerDay?: number | null): Promise<number> {
-  return customMaxPerDay ?? (await getGlobalDefaultMaxPerWindow());
+// The per-user override this used to resolve (profiles.custom_max_per_day)
+// was removed along with the message-count limit UI it powered — the coin
+// economy (lib/chat/coins.ts) is now the sole count-style gate, and this
+// function only enforces min-spacing (see app/api/chat/route.ts's
+// SPACING_ONLY_MAX_PER_DAY, an effectively-unlimited value passed as
+// maxOverride below). Kept as a parameter rather than removed outright in
+// case a future per-user override is reintroduced for spacing itself.
+async function resolveEffectiveMaxPerDay(maxOverride?: number | null): Promise<number> {
+  return maxOverride ?? (await getGlobalDefaultMaxPerWindow());
 }
 
 export async function checkChatRateLimit(
   userId: string,
-  customMaxPerDay?: number | null,
+  maxOverride?: number | null,
 ): Promise<{ allowed: boolean; message: string | null; used: number | null; max: number }> {
-  const effectiveMax = await resolveEffectiveMaxPerDay(customMaxPerDay);
+  const effectiveMax = await resolveEffectiveMaxPerDay(maxOverride);
   const { data, error } = await createAdminClient()
     .rpc('check_chat_rate_limit', {
       p_user_id: userId,
@@ -62,7 +65,12 @@ export async function checkChatRateLimit(
     .single<RateLimitCheckResult>();
 
   if (error) {
-    console.error('[chat] rate limit check failed:', error);
+    console.error('[chat] rate limit check failed:', {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+    });
     // fail open — infra hiccup shouldn't block chat; used is unknown, so
     // callers must treat a null `used` as "don't show quota metadata".
     return { allowed: true, message: null, used: null, max: effectiveMax };
@@ -90,34 +98,4 @@ export async function checkChatRateLimit(
     used: data.window_count,
     max: effectiveMax,
   };
-}
-
-// Read-only, non-incrementing usage check for surfaces that need to show
-// remaining quota without sending a message (account page, chat page on
-// mount). Deliberately bypasses check_chat_rate_limit (which inserts/locks/
-// increments) and reads chat_rate_limits directly via the service-role
-// client — this table has no authenticated/anon RLS policies by design, so
-// this is the only legitimate read path. Reapplies the same "window expired
-// -> treat count as 0" rule the SQL function uses internally, kept here as
-// the single place that logic lives in TypeScript.
-export async function getChatQuotaStatus(
-  userId: string,
-  customMaxPerDay?: number | null,
-): Promise<{ used: number; max: number }> {
-  const effectiveMax = await resolveEffectiveMaxPerDay(customMaxPerDay);
-  const { data, error } = await createAdminClient()
-    .from('chat_rate_limits')
-    .select('window_start, window_count')
-    .eq('user_id', userId)
-    .maybeSingle();
-
-  if (error) {
-    console.error('[chat] quota status read failed:', error);
-    return { used: 0, max: effectiveMax }; // fail open, consistent with checkChatRateLimit
-  }
-  if (!data) return { used: 0, max: effectiveMax };
-
-  const windowStart = new Date(data.window_start).getTime();
-  const windowExpired = (Date.now() - windowStart) / 1000 >= WINDOW_SECONDS;
-  return { used: windowExpired ? 0 : data.window_count, max: effectiveMax };
 }

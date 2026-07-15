@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import { requireAdmin } from '@/lib/auth/requireAdmin';
 import { createClient } from '@/lib/supabase/server';
+import { formatAzDateTime } from '@/lib/format/date';
 
 export const metadata: Metadata = {
   title: 'Loglar',
@@ -48,15 +49,6 @@ function truncate(text: string | null, max: number): string {
   if (!text) return '—';
   return text.length > max ? `${text.slice(0, max)}…` : text;
 }
-
-const dateFormatter = new Intl.DateTimeFormat('az-AZ', {
-  year: 'numeric',
-  month: 'short',
-  day: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit',
-  second: '2-digit',
-});
 
 export default async function AdminLogsPage() {
   const auth = await requireAdmin();
@@ -176,7 +168,7 @@ export default async function AdminLogsPage() {
                     </td>
                     <td className="px-4 py-3 mono-label text-right">{formatMs(row.llm_total_ms)}</td>
                     <td className="px-4 py-3 mono-label text-right text-on-surface-variant">
-                      {dateFormatter.format(new Date(row.created_at))}
+                      {formatAzDateTime(row.created_at, { seconds: true })}
                     </td>
                   </tr>
                 ))}

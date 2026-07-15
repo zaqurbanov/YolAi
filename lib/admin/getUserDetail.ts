@@ -12,7 +12,6 @@ import { createAdminClient } from '@/lib/supabase/admin';
  *   created_at: string;
  *   full_name: string | null;
  *   avatar_url: string | null;
- *   custom_max_per_day: number | null; // per-user daily chat rate-limit override; null = use effective global default
  * }
  *
  * interface AdminUserCitedDocument {
@@ -34,6 +33,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
  *   profile: AdminUserProfile;
  *   stats: AdminUserStats;
  *   coins: { balance: number; daily_limit: number | null } | null; // null only if the user_coins row lookup itself failed
+ *   lastSignInAt: string | null; // auth.users.last_sign_in_at via admin API; null if never signed in or lookup failed
  * }
  *
  * getAdminUserDetail(userId) resolves to `AdminUserDetail | null` (null when
@@ -71,7 +71,6 @@ export interface AdminUserProfile {
   created_at: string;
   full_name: string | null;
   avatar_url: string | null;
-  custom_max_per_day: number | null;
 }
 
 export interface AdminUserCitedDocument {
@@ -93,6 +92,7 @@ export interface AdminUserDetail {
   profile: AdminUserProfile;
   stats: AdminUserStats;
   coins: { balance: number; daily_limit: number | null } | null;
+  lastSignInAt: string | null;
 }
 
 export interface AdminUserMessage {
@@ -131,7 +131,7 @@ export async function getAdminUserDetail(userId: string): Promise<AdminUserDetai
 
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
-    .select('id, email, role, created_at, full_name, avatar_url, custom_max_per_day')
+    .select('id, email, role, created_at, full_name, avatar_url')
     .eq('id', userId)
     .maybeSingle();
 
@@ -151,6 +151,19 @@ export async function getAdminUserDetail(userId: string): Promise<AdminUserDetai
     .maybeSingle();
   const coins = coinRow ? { balance: Number(coinRow.balance), daily_limit: coinRow.daily_limit } : null;
 
+  // auth.users.last_sign_in_at is only reachable via the admin API (no such
+  // column on profiles). Best-effort like coins above: degrade to null on
+  // error rather than failing the whole page.
+  let lastSignInAt: string | null = null;
+  try {
+    const { data: authUser, error: authError } = await admin.auth.admin.getUserById(userId);
+    if (!authError && authUser?.user) {
+      lastSignInAt = authUser.user.last_sign_in_at ?? null;
+    }
+  } catch {
+    lastSignInAt = null;
+  }
+
   const { data: conversationRows, error: conversationsError } = await supabase
     .from('conversations')
     .select('id')
@@ -165,6 +178,7 @@ export async function getAdminUserDetail(userId: string): Promise<AdminUserDetai
     return {
       profile,
       coins,
+      lastSignInAt,
       stats: {
         totalConversations: 0,
         totalUserMessages: 0,
@@ -215,6 +229,7 @@ export async function getAdminUserDetail(userId: string): Promise<AdminUserDetai
   return {
     profile,
     coins,
+    lastSignInAt,
     stats: {
       totalConversations,
       totalUserMessages,

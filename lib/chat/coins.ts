@@ -1,5 +1,7 @@
 import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { formatMsUntilReset } from '@/lib/format/coins';
+import { ADMIN_CONTACT_EMAIL } from '@/lib/contact';
 
 // Hardcoded TS default (not an env var) — this is a brand-new concept with
 // no prior env var to preserve compatibility with, unlike
@@ -44,7 +46,7 @@ export async function getGlobalMessagePrice(): Promise<number> {
 // a rejected request costs nothing.
 export async function checkAndReserveCoins(
   userId: string,
-): Promise<{ allowed: boolean; balance: number; dailyLimit: number | null; price: number; message: string | null }> {
+): Promise<{ allowed: boolean; balance: number | null; dailyLimit: number | null; price: number; message: string | null }> {
   const price = await getGlobalMessagePrice();
   const { data, error } = await createAdminClient()
     .rpc('check_and_reserve_coins', {
@@ -55,19 +57,31 @@ export async function checkAndReserveCoins(
     .single<ReserveCoinsResult>();
 
   if (error) {
-    console.error('[chat] coin reservation check failed:', error);
+    console.error('[chat] coin reservation check failed:', {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+    });
     // fail open — infra hiccup shouldn't block chat, mirrors
     // checkChatRateLimit's fail-open behavior in lib/chat/rateLimit.ts.
-    return { allowed: true, balance: 0, dailyLimit: null, price, message: null };
+    // balance: null (not 0) so callers/messageMetadata omit coins metadata
+    // entirely instead of visibly showing a wrong "0" to the user.
+    return { allowed: true, balance: null, dailyLimit: null, price, message: null };
   }
 
   if (!data.allowed) {
+    // Only on the (rare) rejection path — worth one extra read to give an
+    // exact reset time instead of a vague "sabah" (tomorrow), reusing the
+    // same last_reset_at-based calculation the account page's countdown uses.
+    const { msUntilReset } = await getCoinBalanceStatus(userId);
+    const effectiveLimit = data.daily_limit ?? DEFAULT_DAILY_LIMIT;
     return {
       allowed: false,
       balance: data.balance,
       dailyLimit: data.daily_limit,
       price,
-      message: 'Kifayət qədər coininiz yoxdur. Balansınız sabah bərpa olunacaq.',
+      message: `Gündəlik pulsuz limitiniz (${effectiveLimit} coin) bitib. Balansınız ${formatMsUntilReset(msUntilReset)} sonra yenilənəcək. Limitinizi artırmaq istəyirsinizsə, ${ADMIN_CONTACT_EMAIL} ünvanına müraciət edə bilərsiniz.`,
     };
   }
 
@@ -84,24 +98,30 @@ export async function debitCoins(userId: string, price: number): Promise<number 
   });
 
   if (error) {
-    console.error('[chat] coin debit failed:', error);
+    console.error('[chat] coin debit failed:', {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+    });
     return null;
   }
 
   return typeof data === 'number' ? data : null;
 }
 
-// Read-only balance lookup for GET /api/chat/quota — deliberately bypasses
-// check_and_reserve_coins (which inserts/locks/resets) and reads user_coins
-// directly via the service-role client, same pattern as
-// getChatQuotaStatus in lib/chat/rateLimit.ts. Reapplies the same "24h since
-// last_reset_at -> raise balance to the floor if below it" rule the SQL
+// Read-only balance lookup for GET /api/chat/quota and the account page —
+// deliberately bypasses check_and_reserve_coins (which inserts/locks/resets)
+// and reads user_coins directly via the service-role client. Reapplies the
+// same "24h since last_reset_at -> raise balance to the floor if below it" rule the SQL
 // function uses internally (greatest(balance, effectiveLimit), never
 // lowers), without writing anything, so viewing the balance never itself
 // triggers a reset a moment before the user's next real request would.
+const RESET_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
 export async function getCoinBalanceStatus(
   userId: string,
-): Promise<{ balance: number; dailyLimit: number | null; price: number }> {
+): Promise<{ balance: number; dailyLimit: number | null; price: number; msUntilReset: number }> {
   const price = await getGlobalMessagePrice();
   const { data, error } = await createAdminClient()
     .from('user_coins')
@@ -111,17 +131,22 @@ export async function getCoinBalanceStatus(
 
   if (error) {
     console.error('[chat] coin balance status read failed:', error);
-    return { balance: DEFAULT_DAILY_LIMIT, dailyLimit: null, price }; // fail open, consistent with checkAndReserveCoins
+    // fail open, consistent with checkAndReserveCoins
+    return { balance: DEFAULT_DAILY_LIMIT, dailyLimit: null, price, msUntilReset: RESET_INTERVAL_MS };
   }
-  if (!data) return { balance: DEFAULT_DAILY_LIMIT, dailyLimit: null, price };
+  if (!data) return { balance: DEFAULT_DAILY_LIMIT, dailyLimit: null, price, msUntilReset: RESET_INTERVAL_MS };
 
   const effectiveLimit = data.daily_limit ?? DEFAULT_DAILY_LIMIT;
   const lastResetAt = new Date(data.last_reset_at).getTime();
-  const resetDue = (Date.now() - lastResetAt) / 1000 >= 86400;
+  const msSinceReset = Date.now() - lastResetAt;
+  const resetDue = msSinceReset >= RESET_INTERVAL_MS;
 
   return {
     balance: resetDue ? Math.max(data.balance, effectiveLimit) : data.balance,
     dailyLimit: data.daily_limit,
     price,
+    // Only meaningful when !resetDue — a real request hitting checkAndReserveCoins
+    // resets the window server-side before this could ever be read as negative.
+    msUntilReset: resetDue ? 0 : RESET_INTERVAL_MS - msSinceReset,
   };
 }

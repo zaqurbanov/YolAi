@@ -1,4 +1,5 @@
 import Footer from '@/components/Footer';
+import { formatAzDate } from '@/lib/format/date';
 
 export const metadata = {
   title: 'İstifadə Şərtləri',
@@ -13,7 +14,7 @@ export default function TermsPage() {
             İstifadə Şərtləri
           </h1>
           <p className="mono-label mt-2 text-on-surface-variant">
-            Son yenilənmə: {new Date().toLocaleDateString('az-AZ', { year: 'numeric', month: 'long', day: 'numeric' })}
+            Son yenilənmə: {formatAzDate(new Date())}
           </p>
 
           <div className="glass-card mt-8 space-y-6 rounded-2xl p-6 text-sm leading-relaxed text-on-surface sm:p-8">
@@ -65,8 +66,8 @@ export default function TermsPage() {
               <h2 className="font-display text-lg font-semibold">6. Əlaqə</h2>
               <p className="text-on-surface-variant">
                 Suallarınız üçün{' '}
-                <a href="mailto:support@yol-qa.az" className="text-primary hover:underline">
-                  support@yol-qa.az
+                <a href="mailto:qurbanovzaur078@gmail.com" className="text-primary hover:underline">
+                  qurbanovzaur078@gmail.com
                 </a>{' '}
                 ünvanına yaza bilərsiniz.
               </p>
