@@ -8,6 +8,7 @@ import { formatAzDate } from '@/lib/format/date';
 import { formatCoinBalance } from '@/lib/format/coins';
 import GlobalRateLimitControl from './GlobalRateLimitControl';
 import GlobalCoinPriceControl from './GlobalCoinPriceControl';
+import GlobalDailyCoinGrantControl from './GlobalDailyCoinGrantControl';
 
 export const metadata: Metadata = {
   title: 'İstifadəçilər',
@@ -28,6 +29,7 @@ export default async function AdminUsersPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <GlobalRateLimitControl />
+        <GlobalDailyCoinGrantControl />
         <GlobalCoinPriceControl />
       </div>
 

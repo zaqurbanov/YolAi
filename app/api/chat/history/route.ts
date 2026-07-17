@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
   // .eq('user_id', ...) below is defense-in-depth, not a substitute for it.
   const { data: conversation, error: conversationError } = await supabase
     .from('conversations')
-    .select('id')
+    .select('id, title')
     .eq('id', conversationId)
     .eq('user_id', user.id)
     .maybeSingle();
@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
 
   if (error) return serverError(error, 'Söhbət tarixçəsini yükləmək uğursuz oldu');
 
-  return Response.json({ messages: messages ?? [] });
+  return Response.json({ messages: messages ?? [], title: conversation.title });
 }
 
 export async function POST() {

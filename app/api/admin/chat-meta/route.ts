@@ -5,7 +5,12 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { apiError, serverError } from '@/lib/api/errors';
 import { getChatModelId } from '@/lib/llm';
 import { GLOBAL_DEFAULT_SETTING_KEY, ENV_DEFAULT_MAX_PER_WINDOW } from '@/lib/chat/rateLimit';
-import { COIN_PRICE_SETTING_KEY, DEFAULT_MESSAGE_PRICE } from '@/lib/chat/coins';
+import {
+  COIN_PRICE_SETTING_KEY,
+  DEFAULT_MESSAGE_PRICE,
+  DAILY_COIN_GRANT_SETTING_KEY,
+  DEFAULT_DAILY_LIMIT,
+} from '@/lib/chat/coins';
 
 // Sane upper bound to reject fat-fingered values (e.g. 9999999) — same
 // convention as app/api/admin/users/[id]/rate-limit/route.ts.
@@ -110,6 +115,24 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       price: isTableConfigured ? tableValue : DEFAULT_MESSAGE_PRICE,
+      source: isTableConfigured ? 'table' : 'default',
+    });
+  }
+
+  if (type === 'daily-coin-grant') {
+    const { data, error } = await createAdminClient()
+      .from('app_settings')
+      .select('value')
+      .eq('key', DAILY_COIN_GRANT_SETTING_KEY)
+      .maybeSingle();
+
+    if (error) return serverError(error, 'Ayarları oxumaq uğursuz oldu');
+
+    const tableValue = data ? Number(data.value) : null;
+    const isTableConfigured = tableValue !== null && Number.isFinite(tableValue) && tableValue > 0;
+
+    return NextResponse.json({
+      dailyCoinGrant: isTableConfigured ? tableValue : DEFAULT_DAILY_LIMIT,
       source: isTableConfigured ? 'table' : 'default',
     });
   }
@@ -239,6 +262,38 @@ export async function PATCH(request: NextRequest) {
     if (error) return serverError(error, 'Ayarı yeniləmək uğursuz oldu');
 
     return NextResponse.json({ price, source: 'table' });
+  }
+
+  if (type === 'daily-coin-grant') {
+    const body = await request.json().catch(() => null);
+    const dailyCoinGrant = body?.dailyCoinGrant;
+
+    if (
+      dailyCoinGrant !== null &&
+      dailyCoinGrant !== undefined &&
+      (typeof dailyCoinGrant !== 'number' ||
+        !Number.isInteger(dailyCoinGrant) ||
+        dailyCoinGrant <= 0 ||
+        dailyCoinGrant > MAX_ALLOWED)
+    ) {
+      return apiError(400, `dailyCoinGrant null və ya 1-${MAX_ALLOWED} arasında tam ədəd olmalıdır`);
+    }
+
+    const admin = createAdminClient();
+
+    if (dailyCoinGrant === null || dailyCoinGrant === undefined) {
+      const { error } = await admin.from('app_settings').delete().eq('key', DAILY_COIN_GRANT_SETTING_KEY);
+      if (error) return serverError(error, 'Ayarı sıfırlamaq uğursuz oldu');
+      return NextResponse.json({ dailyCoinGrant: DEFAULT_DAILY_LIMIT, source: 'default' });
+    }
+
+    const { error } = await admin
+      .from('app_settings')
+      .upsert({ key: DAILY_COIN_GRANT_SETTING_KEY, value: dailyCoinGrant, updated_at: new Date().toISOString() });
+
+    if (error) return serverError(error, 'Ayarı yeniləmək uğursuz oldu');
+
+    return NextResponse.json({ dailyCoinGrant, source: 'table' });
   }
 
   if (type !== 'rate-limit') {

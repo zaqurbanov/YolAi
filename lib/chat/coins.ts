@@ -12,6 +12,7 @@ const DEFAULT_DAILY_LIMIT = 10;
 // Exported so app/api/admin/chat-meta/route.ts can read/write the same
 // app_settings row without duplicating the key.
 export const COIN_PRICE_SETTING_KEY = 'chat_message_price';
+export const DAILY_COIN_GRANT_SETTING_KEY = 'daily_coin_grant';
 export { DEFAULT_MESSAGE_PRICE, DEFAULT_DAILY_LIMIT };
 
 interface ReserveCoinsResult {
@@ -39,6 +40,23 @@ export async function getGlobalMessagePrice(): Promise<number> {
   return value;
 }
 
+// Reads the admin-configurable global daily coin grant from app_settings,
+// falling back to DEFAULT_DAILY_LIMIT when no row exists or the query errors
+// — same fail-open bias as getGlobalMessagePrice above.
+export async function getGlobalDailyCoinGrant(): Promise<number> {
+  const { data, error } = await createAdminClient()
+    .from('app_settings')
+    .select('value')
+    .eq('key', DAILY_COIN_GRANT_SETTING_KEY)
+    .maybeSingle();
+
+  if (error || !data) return DEFAULT_DAILY_LIMIT;
+
+  const value = typeof data.value === 'number' ? data.value : Number(data.value);
+  if (!Number.isFinite(value) || value <= 0) return DEFAULT_DAILY_LIMIT;
+  return value;
+}
+
 // Checks whether the user has enough balance to afford one message at the
 // current global price, resetting/creating their user_coins row as needed,
 // but does NOT decrement — see debitCoins below. Called before any
@@ -48,11 +66,12 @@ export async function checkAndReserveCoins(
   userId: string,
 ): Promise<{ allowed: boolean; balance: number | null; dailyLimit: number | null; price: number; message: string | null }> {
   const price = await getGlobalMessagePrice();
+  const dailyGrant = await getGlobalDailyCoinGrant();
   const { data, error } = await createAdminClient()
     .rpc('check_and_reserve_coins', {
       p_user_id: userId,
       p_price: price,
-      p_default_daily_limit: DEFAULT_DAILY_LIMIT,
+      p_default_daily_limit: dailyGrant,
     })
     .single<ReserveCoinsResult>();
 
@@ -75,7 +94,7 @@ export async function checkAndReserveCoins(
     // exact reset time instead of a vague "sabah" (tomorrow), reusing the
     // same last_reset_at-based calculation the account page's countdown uses.
     const { msUntilReset } = await getCoinBalanceStatus(userId);
-    const effectiveLimit = data.daily_limit ?? DEFAULT_DAILY_LIMIT;
+    const effectiveLimit = data.daily_limit ?? dailyGrant;
     return {
       allowed: false,
       balance: data.balance,
@@ -123,6 +142,7 @@ export async function getCoinBalanceStatus(
   userId: string,
 ): Promise<{ balance: number; dailyLimit: number | null; price: number; msUntilReset: number }> {
   const price = await getGlobalMessagePrice();
+  const dailyGrant = await getGlobalDailyCoinGrant();
   const { data, error } = await createAdminClient()
     .from('user_coins')
     .select('balance, daily_limit, last_reset_at')
@@ -132,11 +152,11 @@ export async function getCoinBalanceStatus(
   if (error) {
     console.error('[chat] coin balance status read failed:', error);
     // fail open, consistent with checkAndReserveCoins
-    return { balance: DEFAULT_DAILY_LIMIT, dailyLimit: null, price, msUntilReset: RESET_INTERVAL_MS };
+    return { balance: dailyGrant, dailyLimit: null, price, msUntilReset: RESET_INTERVAL_MS };
   }
-  if (!data) return { balance: DEFAULT_DAILY_LIMIT, dailyLimit: null, price, msUntilReset: RESET_INTERVAL_MS };
+  if (!data) return { balance: dailyGrant, dailyLimit: null, price, msUntilReset: RESET_INTERVAL_MS };
 
-  const effectiveLimit = data.daily_limit ?? DEFAULT_DAILY_LIMIT;
+  const effectiveLimit = data.daily_limit ?? dailyGrant;
   const lastResetAt = new Date(data.last_reset_at).getTime();
   const msSinceReset = Date.now() - lastResetAt;
   const resetDue = msSinceReset >= RESET_INTERVAL_MS;

@@ -392,6 +392,30 @@ export default function ChatClient({ conversationId: initialConversationId }: Ch
     conversationIdRef.current = conversationId;
   }, [conversationId]);
 
+  // Real conversation title (header falls back to the generic product name
+  // below when this is null — e.g. a brand-new conversation whose first
+  // message hasn't been auto-titled yet). Refetched on CONVERSATION_CHANGED_EVENT
+  // (already dispatched elsewhere in this component when an id-less chat gets
+  // its id, and again once an exchange settles — the same two moments the
+  // server may have just set/changed the title) rather than adding a new
+  // event, to avoid two competing "something about this conversation changed"
+  // signals.
+  const [conversationTitle, setConversationTitle] = useState<string | null>(null);
+  useEffect(() => {
+    function handleConversationChanged(e: Event) {
+      const id = (e as CustomEvent<{ id: string }>).detail?.id;
+      if (!id || id !== conversationIdRef.current) return;
+      fetch(`/api/chat/history?conversationId=${encodeURIComponent(id)}`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data: { title: string | null } | null) => {
+          if (data) setConversationTitle(data.title ?? null);
+        })
+        .catch(() => {});
+    }
+    window.addEventListener(CONVERSATION_CHANGED_EVENT, handleConversationChanged);
+    return () => window.removeEventListener(CONVERSATION_CHANGED_EVENT, handleConversationChanged);
+  }, []);
+
   const toggleCitations = useCallback((messageId: string) => {
     setExpandedCitationIds((prev) => {
       const next = new Set(prev);
@@ -613,8 +637,10 @@ export default function ChatClient({ conversationId: initialConversationId }: Ch
           return;
         }
         if (!res.ok) return;
-        const data: { messages: HistoryMessage[] } = await res.json();
-        if (cancelled || !Array.isArray(data.messages) || data.messages.length === 0) return;
+        const data: { messages: HistoryMessage[]; title: string | null } = await res.json();
+        if (cancelled) return;
+        setConversationTitle(data.title ?? null);
+        if (!Array.isArray(data.messages) || data.messages.length === 0) return;
 
         const hydrated: ChatUIMessage[] = data.messages.map((m) => ({
           id: m.id,
@@ -960,7 +986,7 @@ export default function ChatClient({ conversationId: initialConversationId }: Ch
           </Badge.Anchor>
           <div className="min-w-0">
             <h1 className="truncate font-display text-lg font-semibold text-on-surface">
-              Yol Hərəkəti Qaydaları üzrə sual-cavab
+              {conversationTitle ?? 'Yol Hərəkəti Qaydaları üzrə sual-cavab'}
             </h1>
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
               <Chip size="sm" variant="soft" color="accent">
