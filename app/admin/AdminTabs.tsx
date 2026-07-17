@@ -10,6 +10,7 @@ const TABS = [
   { id: 'questions', href: '/admin/questions', label: 'Suallar' },
   { id: 'stats', href: '/admin/stats', label: 'Statistika' },
   { id: 'logs', href: '/admin/logs', label: 'Loglar' },
+  { id: 'busy-phrases', href: '/admin/busy-phrases', label: 'Status cümlələri' },
 ] as const;
 
 export default function AdminTabs() {

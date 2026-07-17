@@ -1,9 +1,8 @@
 import crypto from 'crypto';
 import { createClient } from '@/lib/supabase/server';
 import { apiError, serverError, unauthorized } from '@/lib/api/errors';
-import { getLatestConversationId } from '@/lib/chat/getLatestConversationId';
 
-export async function POST() {
+export async function POST(request: Request) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -11,9 +10,9 @@ export async function POST() {
 
   if (!user) return unauthorized();
 
-  const conversationId = await getLatestConversationId(supabase, user.id);
+  const conversationId = new URL(request.url).searchParams.get('conversationId');
   if (!conversationId) {
-    return apiError(404, 'Paylaşılacaq söhbət yoxdur', { code: 'no_conversation' });
+    return apiError(400, 'conversationId parametri tələb olunur', { code: 'missing_conversation_id' });
   }
 
   const { data: existing, error: fetchError } = await supabase

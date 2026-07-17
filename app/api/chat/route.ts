@@ -40,30 +40,53 @@ interface ConversationState {
   id: string;
   contextSummary: object;
   summaryMessageCount: number;
+  title: string | null;
 }
 
-async function getOrCreateConversation(userId: string): Promise<ConversationState> {
-  const supabase = await createClient();
-  const { data: existing } = await supabase
-    .from('conversations')
-    .select('id, context_summary, summary_message_count')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+class ConversationNotFoundError extends Error {}
 
-  if (existing) {
+function truncateTitle(raw: string): string {
+  const trimmed = raw.trim();
+  const MAX = 50;
+  if (trimmed.length <= MAX) return trimmed;
+
+  const cut = trimmed.slice(0, MAX);
+  const lastSpace = cut.lastIndexOf(' ');
+  const boundary = lastSpace > 20 ? cut.slice(0, lastSpace) : cut;
+  return `${boundary.trim()}…`;
+}
+
+async function getOrCreateConversation(userId: string, conversationId?: string): Promise<ConversationState> {
+  const supabase = await createClient();
+
+  if (conversationId) {
+    // RLS (conversations_select_own) already scopes this to the caller, but
+    // the .eq('user_id', ...) below is defense-in-depth, not a substitute
+    // for it. A missing/foreign id must never silently fall back to
+    // creating a new conversation — the frontend already has this id in the
+    // URL, and a silent swap would be confusing.
+    const { data: existing, error } = await supabase
+      .from('conversations')
+      .select('id, context_summary, summary_message_count, title')
+      .eq('id', conversationId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!existing) throw new ConversationNotFoundError();
+
     return {
       id: existing.id,
       contextSummary: existing.context_summary ?? {},
       summaryMessageCount: existing.summary_message_count ?? 0,
+      title: existing.title ?? null,
     };
   }
 
   const { data: created, error } = await supabase
     .from('conversations')
     .insert({ user_id: userId })
-    .select('id, context_summary, summary_message_count')
+    .select('id, context_summary, summary_message_count, title')
     .single();
 
   if (error) throw error;
@@ -71,6 +94,7 @@ async function getOrCreateConversation(userId: string): Promise<ConversationStat
     id: created.id,
     contextSummary: created.context_summary ?? {},
     summaryMessageCount: created.summary_message_count ?? 0,
+    title: created.title ?? null,
   };
 }
 
@@ -78,8 +102,9 @@ export async function POST(request: Request) {
   const requestId = crypto.randomUUID();
   let messages: UIMessage[];
   let documentId: string | undefined;
+  let conversationId: string | undefined;
   try {
-    ({ messages, documentId } = await request.json());
+    ({ messages, documentId, conversationId } = await request.json());
   } catch (err) {
     return apiError(400, 'Yanlış sorğu formatı', { cause: err });
   }
@@ -163,7 +188,7 @@ export async function POST(request: Request) {
   let assistantMessageId: string | null = null;
   if (user) {
     try {
-      conversation = await getOrCreateConversation(user.id);
+      conversation = await getOrCreateConversation(user.id, conversationId);
       await supabase.from('messages').insert({
         conversation_id: conversation.id,
         role: 'user',
@@ -182,7 +207,24 @@ export async function POST(request: Request) {
 
       if (placeholderError) throw placeholderError;
       assistantMessageId = placeholder.id;
+
+      // updated_at drives the sidebar's "most recent activity" ordering;
+      // title is set once, from the raw first user message, truncated at a
+      // word boundary — no LLM call, to avoid extra latency/cost on every
+      // request just to name the chat.
+      const conversationUpdate: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      if (conversation.title === null) {
+        conversationUpdate.title = truncateTitle(query);
+      }
+      const { error: touchError } = await supabase
+        .from('conversations')
+        .update(conversationUpdate)
+        .eq('id', conversation.id);
+      if (touchError) console.error('[chat] failed to touch conversation:', touchError);
     } catch (err) {
+      if (err instanceof ConversationNotFoundError) {
+        return apiError(404, 'Söhbət tapılmadı', { code: 'not_found' });
+      }
       return serverError(err, 'Söhbəti yaratmaq uğursuz oldu');
     }
   }
@@ -471,11 +513,12 @@ export async function POST(request: Request) {
         // through onChunk) — filtering naturally yields an empty citation list
         // for the former and the real, referenced-only list for the latter.
         const citations = buildCitations(filterCitedChunks(relevantChunks, liveAnswerText));
-        if (isAdmin) return { citations, modelUsed, messageId: assistantMessageId };
+        const conversationIdMeta = conversation?.id;
+        if (isAdmin) return { citations, modelUsed, messageId: assistantMessageId, conversationId: conversationIdMeta };
         if (coinPrice !== null && coinBalance !== null) {
-          return { citations, coins: { balance: coinBalance, price: coinPrice } };
+          return { citations, coins: { balance: coinBalance, price: coinPrice }, conversationId: conversationIdMeta };
         }
-        return { citations };
+        return { citations, conversationId: conversationIdMeta };
       },
       onError: (error) => {
         // Fires only once a stream error is terminal and about to reach the client

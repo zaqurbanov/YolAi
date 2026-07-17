@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { logout } from '@/app/(auth)/actions';
 import { SidebarNav } from '@/components/SidebarNav';
 import { SidebarShell } from '@/components/SidebarShell';
+import { ChatConversationList } from '@/components/ChatConversationList';
 import { PlusIcon } from '@/components/icons';
 import ThemeToggle from '@/components/ThemeToggle';
 
@@ -41,6 +42,8 @@ export default async function Sidebar() {
       </Link>
 
       <SidebarNav items={navItems} />
+
+      {user && <ChatConversationList />}
 
       <div className="mt-4 flex items-center justify-between gap-1 px-3">
         <span className="text-xs font-medium text-muted">Tema</span>

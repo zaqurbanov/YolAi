@@ -16,12 +16,37 @@ const MAX_ALLOWED = 100000;
 // allowing sub-1 prices, unlike MAX_ALLOWED above which is integer-only.
 const MAX_ALLOWED_PRICE = 10000;
 
-export async function GET(request: NextRequest) {
-  const auth = await requireAdmin();
-  if (!auth.ok) return apiError(auth.status, auth.message);
+const BUSY_PHRASE_STAGES = ['analyzing', 'rewriting', 'searching', 'finalizing', 'streaming'] as const;
+type BusyPhraseStage = (typeof BUSY_PHRASE_STAGES)[number];
 
+function isBusyPhraseStage(value: unknown): value is BusyPhraseStage {
+  return typeof value === 'string' && (BUSY_PHRASE_STAGES as readonly string[]).includes(value);
+}
+
+export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const type = searchParams.get('type');
+
+  // busy-phrases must be readable by any authenticated user (the chat page
+  // itself fetches these, not just admins) — so this branch is handled
+  // before the requireAdmin() gate below, via the user-scoped client so
+  // normal RLS (chat_busy_phrases_select_authenticated, 0046) governs access.
+  if (type === 'busy-phrases') {
+    const supabase = await createClient();
+
+    const { data, error } = await supabase
+      .from('chat_busy_phrases')
+      .select('id, stage, phrase, display_order')
+      .order('stage', { ascending: true })
+      .order('display_order', { ascending: true });
+
+    if (error) return serverError(error, 'Status cümlələrini yükləmək uğursuz oldu');
+
+    return NextResponse.json({ phrases: data ?? [] });
+  }
+
+  const auth = await requireAdmin();
+  if (!auth.ok) return apiError(auth.status, auth.message);
 
   if (type === 'model') {
     return NextResponse.json({ modelId: getChatModelId() });
@@ -92,12 +117,100 @@ export async function GET(request: NextRequest) {
   return apiError(400, 'type parametri düzgün deyil');
 }
 
+export async function POST(request: NextRequest) {
+  const auth = await requireAdmin();
+  if (!auth.ok) return apiError(auth.status, auth.message);
+
+  const { searchParams } = new URL(request.url);
+  const type = searchParams.get('type');
+
+  if (type !== 'busy-phrases') {
+    return apiError(400, 'type parametri düzgün deyil');
+  }
+
+  const body = await request.json().catch(() => null);
+  const stage = body?.stage;
+  const phrase = body?.phrase;
+  const displayOrder = body?.display_order ?? 0;
+
+  if (!isBusyPhraseStage(stage)) {
+    return apiError(400, `stage aşağıdakılardan biri olmalıdır: ${BUSY_PHRASE_STAGES.join(', ')}`);
+  }
+
+  if (typeof phrase !== 'string' || phrase.trim().length === 0) {
+    return apiError(400, 'phrase boş ola bilməz');
+  }
+
+  if (typeof displayOrder !== 'number' || !Number.isInteger(displayOrder)) {
+    return apiError(400, 'display_order tam ədəd olmalıdır');
+  }
+
+  const { data, error } = await createAdminClient()
+    .from('chat_busy_phrases')
+    .insert({ stage, phrase: phrase.trim(), display_order: displayOrder })
+    .select('id, stage, phrase, display_order')
+    .single();
+
+  if (error) return serverError(error, 'Status cümləsini yaratmaq uğursuz oldu');
+
+  return NextResponse.json({ phrase: data });
+}
+
 export async function PATCH(request: NextRequest) {
   const auth = await requireAdmin();
   if (!auth.ok) return apiError(auth.status, auth.message);
 
   const { searchParams } = new URL(request.url);
   const type = searchParams.get('type');
+
+  if (type === 'busy-phrases') {
+    const body = await request.json().catch(() => null);
+    const id = body?.id;
+
+    if (typeof id !== 'string' || id.trim().length === 0) {
+      return apiError(400, 'id tələb olunur');
+    }
+
+    const update: Record<string, unknown> = {};
+
+    if (body?.stage !== undefined) {
+      if (!isBusyPhraseStage(body.stage)) {
+        return apiError(400, `stage aşağıdakılardan biri olmalıdır: ${BUSY_PHRASE_STAGES.join(', ')}`);
+      }
+      update.stage = body.stage;
+    }
+
+    if (body?.phrase !== undefined) {
+      if (typeof body.phrase !== 'string' || body.phrase.trim().length === 0) {
+        return apiError(400, 'phrase boş ola bilməz');
+      }
+      update.phrase = body.phrase.trim();
+    }
+
+    if (body?.display_order !== undefined) {
+      if (typeof body.display_order !== 'number' || !Number.isInteger(body.display_order)) {
+        return apiError(400, 'display_order tam ədəd olmalıdır');
+      }
+      update.display_order = body.display_order;
+    }
+
+    if (Object.keys(update).length === 0) {
+      return apiError(400, 'Yeniləmək üçün heç olmasa bir sahə tələb olunur');
+    }
+
+    update.updated_at = new Date().toISOString();
+
+    const { data, error } = await createAdminClient()
+      .from('chat_busy_phrases')
+      .update(update)
+      .eq('id', id)
+      .select('id, stage, phrase, display_order')
+      .single();
+
+    if (error) return serverError(error, 'Status cümləsini yeniləmək uğursuz oldu');
+
+    return NextResponse.json({ phrase: data });
+  }
 
   if (type === 'coin-price') {
     const body = await request.json().catch(() => null);
@@ -161,4 +274,32 @@ export async function PATCH(request: NextRequest) {
   if (error) return serverError(error, 'Ayarı yeniləmək uğursuz oldu');
 
   return NextResponse.json({ maxPerDay, source: 'table' });
+}
+
+export async function DELETE(request: NextRequest) {
+  const auth = await requireAdmin();
+  if (!auth.ok) return apiError(auth.status, auth.message);
+
+  const { searchParams } = new URL(request.url);
+  const type = searchParams.get('type');
+
+  if (type !== 'busy-phrases') {
+    return apiError(400, 'type parametri düzgün deyil');
+  }
+
+  let id = searchParams.get('id');
+  if (!id) {
+    const body = await request.json().catch(() => null);
+    id = body?.id ?? null;
+  }
+
+  if (typeof id !== 'string' || id.trim().length === 0) {
+    return apiError(400, 'id tələb olunur');
+  }
+
+  const { error } = await createAdminClient().from('chat_busy_phrases').delete().eq('id', id);
+
+  if (error) return serverError(error, 'Status cümləsini silmək uğursuz oldu');
+
+  return NextResponse.json({ ok: true });
 }

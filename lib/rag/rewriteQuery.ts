@@ -70,6 +70,12 @@ export async function rewriteQuery(query: string, contextSummary?: object): Prom
       prompt: `İstifadəçinin sualı: "${query}"${contextBlock}`,
       providerOptions: getProviderCallOptions(),
       temperature: 0,
+      // Bounds worst-case generation latency: without this, a model can keep
+      // generating well past what a useful rewrite needs, and every extra
+      // token adds directly to rewriteMs. 150 tokens (~300-450 chars at ~2-3
+      // chars/token for Azerbaijani) sits comfortably above real rewrite
+      // output but well below MAX_REWRITTEN_LENGTH-worth of runaway text.
+      maxOutputTokens: 150,
     });
 
     if (!isUsableRewrite(text)) return query;
