@@ -5,6 +5,7 @@ import "./globals.css";
 import NavBar from "@/components/NavBar";
 import Sidebar from "@/components/Sidebar";
 import { SidebarProvider } from "@/components/SidebarContext";
+import { PullToRefresh } from "@/components/PullToRefresh";
 
 const montserrat = Montserrat({
   variable: "--font-montserrat",
@@ -68,7 +69,9 @@ export default function RootLayout({
           <NavBar />
           <div className="flex flex-1 min-h-0">
             <Sidebar />
-            <main className="flex flex-1 flex-col min-h-0 overflow-y-auto">{children}</main>
+            <main className="flex flex-1 flex-col min-h-0 overflow-y-auto">
+              <PullToRefresh>{children}</PullToRefresh>
+            </main>
           </div>
         </SidebarProvider>
         <Toast.Provider placement="top end" />

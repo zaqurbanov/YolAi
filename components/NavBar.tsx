@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { SidebarToggleButton } from '@/components/SidebarToggleButton';
+import { BackButton } from '@/components/BackButton';
 import CoinBadge from '@/components/CoinBadge';
 import NotificationBell from '@/components/NotificationBell';
 import NavBarMenu from '@/components/NavBarMenu';
@@ -26,6 +27,7 @@ export default async function NavBar() {
   return (
     <nav className="border-b px-6 py-3 flex items-center justify-between">
       <div className="flex items-center gap-2">
+        <BackButton />
         <SidebarToggleButton />
         <Link href="/" className="font-semibold whitespace-nowrap shrink-0">
           Yol Hərəkəti QA

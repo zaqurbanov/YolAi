@@ -985,13 +985,10 @@ export default function ChatClient({ conversationId: initialConversationId }: Ch
             <Badge color="success" placement="bottom-right" size="sm" />
           </Badge.Anchor>
           <div className="min-w-0">
-            <h1 className="truncate font-display text-lg font-semibold text-on-surface">
+            <h1 className="truncate font-display text-sm font-semibold text-on-surface">
               {conversationTitle ?? 'Yol Hərəkəti Qaydaları üzrə sual-cavab'}
             </h1>
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
-              <Chip size="sm" variant="soft" color="accent">
-                Yol Hərəkəti Eksperti
-              </Chip>
               {adminPrimaryModelId && (
                 <Chip size="sm" variant="soft" color="default" className="mono-label">
                   Model: {displayedModelId}
