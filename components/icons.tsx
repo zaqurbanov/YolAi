@@ -281,6 +281,15 @@ export function CoinIcon(props: IconProps) {
   );
 }
 
+export function DownloadIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M12 4v11M7 10l5 5 5-5" />
+      <path d="M4 19.5h16" />
+    </svg>
+  );
+}
+
 // Deliberate exception to base(): brand mark requires the official 4-color "G", not currentColor stroke.
 export function GoogleIcon(props: IconProps) {
   return (

@@ -7,6 +7,7 @@ import { SidebarShell } from '@/components/SidebarShell';
 import { ChatConversationList } from '@/components/ChatConversationList';
 import { PlusIcon } from '@/components/icons';
 import ThemeToggle from '@/components/ThemeToggle';
+import InstallAppButton from '@/components/InstallAppButton';
 
 const NAV_ITEMS = [
   { href: '/', label: 'Ana Səhifə', icon: 'home' as const },
@@ -94,7 +95,8 @@ export default async function Sidebar() {
         )}
       </div>
 
-      <div className="mt-auto p-4">
+      <div className="mt-auto flex flex-col gap-2 p-4">
+        <InstallAppButton />
         <Link href="/sual" className={buttonVariants({ variant: 'primary', size: 'md' }) + ' w-full justify-center gap-2'}>
           <PlusIcon className="shrink-0" />
           Bizə yazın
