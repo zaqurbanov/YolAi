@@ -1,6 +1,8 @@
+import crypto from 'crypto';
 import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { apiError, notFound, serverError, unauthorized } from '@/lib/api/errors';
+import { getCoinBalanceStatus, DEFAULT_DAILY_LIMIT } from '@/lib/chat/coins';
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -11,6 +13,31 @@ export async function GET(request: NextRequest) {
   if (!user) return unauthorized();
 
   const { searchParams } = new URL(request.url);
+
+  if (searchParams.get('type') === 'quota') {
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+
+    if (error) return serverError(error, 'Profil məlumatı alınmadı');
+
+    if (profile.role === 'admin') {
+      return Response.json({ exempt: true });
+    }
+
+    const { balance, dailyLimit, price, msUntilReset } = await getCoinBalanceStatus(user.id);
+
+    return Response.json({
+      exempt: false,
+      balance,
+      dailyLimit: dailyLimit ?? DEFAULT_DAILY_LIMIT,
+      price,
+      msUntilReset,
+    });
+  }
+
   const conversationId = searchParams.get('conversationId');
 
   if (!conversationId) {
@@ -48,13 +75,48 @@ export async function GET(request: NextRequest) {
   return Response.json({ messages: messages ?? [], title: conversation.title });
 }
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (!user) return unauthorized();
+
+  const { searchParams } = new URL(request.url);
+
+  if (searchParams.get('action') === 'share') {
+    const conversationId = searchParams.get('conversationId');
+    if (!conversationId) {
+      return apiError(400, 'conversationId parametri tələb olunur', { code: 'missing_conversation_id' });
+    }
+
+    const { data: existing, error: fetchError } = await supabase
+      .from('conversations')
+      .select('share_token')
+      .eq('id', conversationId)
+      .maybeSingle();
+
+    if (fetchError) return serverError(fetchError, 'Söhbəti paylaşmaq uğursuz oldu');
+
+    let token = existing?.share_token ?? null;
+
+    if (!token) {
+      token = crypto.randomBytes(24).toString('base64url');
+
+      // RLS conversations_update_own (0004) scopes this to auth.uid() = user_id,
+      // so this can only ever touch the caller's own conversation.
+      const { error: updateError } = await supabase
+        .from('conversations')
+        .update({ share_token: token })
+        .eq('id', conversationId)
+        .eq('user_id', user.id);
+
+      if (updateError) return serverError(updateError, 'Söhbəti paylaşmaq uğursuz oldu');
+    }
+
+    return Response.json({ url: `/share/${token}` });
+  }
 
   const { data: created, error } = await supabase
     .from('conversations')

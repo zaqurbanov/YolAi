@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Montserrat, Inter } from "next/font/google";
 import { Toast } from "@heroui/react";
 import "./globals.css";
@@ -24,6 +24,17 @@ export const metadata: Metadata = {
     template: "%s | Yol Hərəkəti Qaydaları",
   },
   description: "Yol hərəkəti qaydaları üzrə AI dəstəkli sual-cavab sistemi",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "Yol QA",
+    statusBarStyle: "black-translucent",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#16181d",
+  colorScheme: "dark",
 };
 
 // Sets the `dark` class on <html> from localStorage before hydration/paint, so

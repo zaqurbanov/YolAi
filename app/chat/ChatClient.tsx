@@ -556,7 +556,7 @@ export default function ChatClient({ conversationId: initialConversationId }: Ch
     let cancelled = false;
     async function loadCoins() {
       try {
-        const res = await fetch('/api/chat/quota');
+        const res = await fetch('/api/chat/history?type=quota');
         if (!res.ok) return;
         const data: { exempt: boolean; balance?: number; price?: number } = await res.json();
         if (cancelled || data.exempt) return;
@@ -836,7 +836,7 @@ export default function ChatClient({ conversationId: initialConversationId }: Ch
       return null;
     }
     try {
-      const res = await fetch(`/api/chat/share?conversationId=${encodeURIComponent(conversationId)}`, {
+      const res = await fetch(`/api/chat/history?action=share&conversationId=${encodeURIComponent(conversationId)}`, {
         method: 'POST',
       });
       if (!res.ok) {

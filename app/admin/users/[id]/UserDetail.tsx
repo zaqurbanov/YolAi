@@ -110,7 +110,7 @@ function RoleControl({
     setPending(true);
     setError(null);
     try {
-      const res = await fetch(`/api/admin/users/${userId}`, {
+      const res = await fetch(`/api/admin/chat-meta?type=user&id=${userId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ role: target }),
@@ -168,7 +168,7 @@ function DailyCoinLimitControl({
     setPending(true);
     setError(null);
     try {
-      const res = await fetch(`/api/admin/users/${userId}`, {
+      const res = await fetch(`/api/admin/chat-meta?type=user&id=${userId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ dailyCoinLimit: dailyCoinLimitValue }),
@@ -225,7 +225,7 @@ function GrantCoinsControl({
     setPending(true);
     setError(null);
     try {
-      const res = await fetch(`/api/admin/users/${userId}`, {
+      const res = await fetch(`/api/admin/chat-meta?type=user&id=${userId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ grantCoins: amount }),
@@ -307,7 +307,7 @@ export default function UserDetail({
   async function loadMore() {
     setLoadingMore(true);
     const res = await fetch(
-      `/api/admin/users/${userId}?limit=10&offset=${conversations.length}`
+      `/api/admin/chat-meta?type=user&id=${userId}&limit=10&offset=${conversations.length}`
     );
     if (res.ok) {
       const data: AdminUserConversationsPage = await res.json();

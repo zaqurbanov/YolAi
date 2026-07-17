@@ -244,7 +244,7 @@ export default function UploadForm() {
 
   async function handleReprocess(id: string) {
     setReprocessingId(id);
-    const res = await fetch(`/api/admin/documents/${id}`, { method: 'POST' });
+    const res = await fetch(`/api/admin/documents?id=${id}`, { method: 'POST' });
 
     if (!res.ok) {
       const data = await res.json().catch(() => null);
@@ -274,7 +274,7 @@ export default function UploadForm() {
 
     if (confirmTarget.kind === 'single') {
       setDeletingId(confirmTarget.id);
-      const res = await fetch(`/api/admin/documents/${confirmTarget.id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/admin/documents?id=${confirmTarget.id}`, { method: 'DELETE' });
 
       if (!res.ok) {
         const data = await res.json().catch(() => null);

@@ -18,7 +18,7 @@ function formatCoinBalance(n: number): string {
 
 // Lives in NavBar (server component) as a client child so the coin count can
 // live-update without converting the whole nav to a client component. Two
-// sources feed it: a mount-time /api/chat/quota fetch (authoritative on page
+// sources feed it: a mount-time /api/chat/history?type=quota fetch (authoritative on page
 // load/navigation) and the 'coin-balance-update' window CustomEvent, dispatched
 // by app/chat/page.tsx after each message's metadata.coins arrives — the
 // lowest-risk way to bridge chat-page state into a persistent layout region.
@@ -34,7 +34,7 @@ export default function CoinBadge() {
     let cancelled = false;
     async function loadQuota() {
       try {
-        const res = await fetch('/api/chat/quota');
+        const res = await fetch('/api/chat/history?type=quota');
         if (!res.ok) return;
         const data: { exempt: boolean; balance?: number; dailyLimit?: number; msUntilReset?: number } =
           await res.json();
