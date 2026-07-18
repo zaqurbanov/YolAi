@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { RadioGroup, Radio, Button, Alert } from '@heroui/react';
 import { Spinner } from '@/components/Spinner';
 import { claimDailyQuizReward, type QuizClaimState } from '@/app/chat/actions';
+import { CoinIcon } from '@/components/icons';
 
 interface DailyQuizCardProps {
   question: string;
@@ -37,11 +38,20 @@ export default function DailyQuizCard({ question, options, alreadyClaimed, rewar
 
   return (
     <div className="glass-card rounded-2xl p-6 space-y-4">
-      <div className="flex items-center justify-between gap-4">
-        <h2 className="mono-label uppercase text-on-surface-variant">Bugünkü sual</h2>
-        {!isLocked && <span className="mono-label text-xs text-on-surface-variant">+{reward} coin</span>}
+      <div className="flex items-center justify-between gap-4 border-b border-outline-variant/30 pb-4">
+        <div className="flex items-center gap-3">
+          <div className="flex size-10 items-center justify-center rounded-xl bg-go-green/15 text-go-green">
+            <CoinIcon />
+          </div>
+          <h2 className="text-headline-md text-[18px]">Bugünkü sual</h2>
+        </div>
+        {!isLocked && (
+          <span className="text-legal-citation rounded-full bg-safety-yellow/15 px-2.5 py-1 text-safety-yellow">
+            +{reward} coin
+          </span>
+        )}
       </div>
-      <p className="text-sm text-on-surface">{question}</p>
+      <p className="text-body-lg text-on-surface">{question}</p>
 
       <RadioGroup
         value={selected ?? undefined}

@@ -22,10 +22,10 @@ export default function TransferHistoryList({ sent, received }: TransferHistoryL
 
   return (
     <div className="glass-card rounded-2xl p-6 space-y-4">
-      <h2 className="mono-label uppercase text-on-surface-variant">Köçürmə tarixçəsi</h2>
+      <h2 className="text-headline-md text-[18px]">Köçürmə tarixçəsi</h2>
 
       {combined.length === 0 ? (
-        <p className="text-sm text-on-surface-variant">Hələ heç bir coin köçürməsi yoxdur.</p>
+        <p className="text-body-md text-on-surface-variant">Hələ heç bir coin köçürməsi yoxdur.</p>
       ) : (
         <ul className="space-y-2">
           {combined.map((row) => (
@@ -36,21 +36,21 @@ export default function TransferHistoryList({ sent, received }: TransferHistoryL
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <span
-                    className={`mono-label rounded-full px-2 py-0.5 text-[10px] uppercase ${
+                    className={`text-legal-citation rounded-full px-2 py-0.5 text-[10px] ${
                       row.direction === 'sent'
                         ? 'bg-error-container/30 text-error'
-                        : 'bg-secondary-container/40 text-secondary'
+                        : 'bg-go-green/15 text-go-green'
                     }`}
                   >
                     {row.direction === 'sent' ? 'Göndərilib' : 'Alınıb'}
                   </span>
-                  <span className="truncate text-sm text-on-surface">{row.counterpartyLabel}</span>
+                  <span className="truncate text-body-md text-on-surface">{row.counterpartyLabel}</span>
                 </div>
-                <p className="mt-1 text-xs text-on-surface-variant">{formatAzDateTime(row.createdAt)}</p>
+                <p className="mt-1 text-label-sm text-on-surface-variant">{formatAzDateTime(row.createdAt)}</p>
               </div>
               <div
-                className={`mono-label shrink-0 text-sm font-semibold ${
-                  row.direction === 'sent' ? 'text-error' : 'text-on-surface'
+                className={`shrink-0 text-body-md font-semibold ${
+                  row.direction === 'sent' ? 'text-error' : 'text-go-green'
                 }`}
               >
                 {row.direction === 'sent' ? '-' : '+'}

@@ -4,7 +4,7 @@ import { useActionState } from 'react';
 import { TextField, Label, Input, Description, Button, Alert } from '@heroui/react';
 import { transferCoins, type AccountFormState } from '@/app/account/actions';
 import { Spinner } from '@/components/Spinner';
-import { SendIcon } from '@/components/icons';
+import { SendIcon, CoinIcon } from '@/components/icons';
 
 const initialState: AccountFormState = {};
 
@@ -17,7 +17,12 @@ export default function TransferCoinsForm({ minAmount }: TransferCoinsFormProps)
 
   return (
     <div className="glass-card rounded-2xl p-6 space-y-4">
-      <h2 className="mono-label uppercase text-on-surface-variant">Coin göndər</h2>
+      <div className="flex items-center gap-3 border-b border-outline-variant/30 pb-4">
+        <div className="flex size-10 items-center justify-center rounded-xl bg-safety-yellow/15 text-safety-yellow">
+          <CoinIcon />
+        </div>
+        <h2 className="text-headline-md text-[18px]">Coin göndər</h2>
+      </div>
 
       <form action={formAction} className="space-y-4" key={state.success}>
         <TextField name="recipientEmail" isRequired>

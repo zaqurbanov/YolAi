@@ -31,7 +31,7 @@ html.dark {
      background/surface, with exactly one moderate-saturation indigo-blue accent
      (H~231deg) for primary/interactive elements. No second competing vivid accent —
      the old warning/secondary slot is now a quiet desaturated slate tone. */
-  --background: #16181d;
+  --background: #051424;
   --foreground: #e7e9ee;
 
   --surface: #1e2128;
@@ -47,8 +47,8 @@ html.dark {
   --default: #2a2e37;
   --default-foreground: #e7e9ee;
 
-  --accent: #7c93f2;
-  --accent-foreground: #12141a;
+  --accent: #c0c1ff;
+  --accent-foreground: #1000a9;
 
   --border: #2e323c;
   --separator: #363b46;
@@ -83,10 +83,25 @@ html.dark {
   --surface-container-highest: #3a3f4b;
   --surface-bright: #454b59;
   --outline: #6b7280;
-  --primary-container: #2c3560;
+  --primary-container: #8083ff;
+  --on-primary-container: #0d0096;
   --secondary-container: #333947;
   --tertiary: #7a8699;
   --error-container: #93000a;
+
+  /* Deepest recessed canvas layer (Stitch "LegalDrive HUD" navy/indigo palette,
+     see skill "Palette update (latest)") — distinct from --surface-container-lowest
+     above (that's the M3 surface ramp's floor; this is the page-canvas-level "deep"
+     background named explicitly in the Stitch design-system.md frontmatter). */
+  --background-deep: #0b0e14;
+
+  /* Traffic-accent functional colors (warnings, legal-citation highlights,
+     progress/correct-answer indicators) — literal Stitch spec values, kept as-is
+     in dark mode since they already read at AA+ contrast against this background. */
+  --safety-yellow: #facc15;
+  --caution-orange: #fb923c;
+  --regulatory-blue: #3b82f6;
+  --go-green: #22c55e;
 
   /* Home hero background image (app/page.tsx, public/bg.png — a near-black asphalt
      HUD illustration, see skill "Brand & mood"). It's a single dark asset with no
@@ -111,7 +126,7 @@ html:not(.dark) {
      saturation) used in dark mode for primary/interactive elements. No second
      competing vivid accent — the old warning/secondary slot is a quiet desaturated
      slate tone instead. */
-  --background: #f7f8fa;
+  --background: #f3f6fb;
   --foreground: #1b1f27;
 
   --surface: #ffffff;
@@ -127,7 +142,7 @@ html:not(.dark) {
   --default: #f0f2f5;
   --default-foreground: #1b1f27;
 
-  --accent: #3e63dd;
+  --accent: #4338ca;
   --accent-foreground: #ffffff;
 
   --border: #e4e7ec;
@@ -163,10 +178,25 @@ html:not(.dark) {
   --surface-container-highest: #d0d5dd;
   --surface-bright: #ffffff;
   --outline: #9aa1ae;
-  --primary-container: #dde4fb;
+  --primary-container: #c0c1ff;
+  --on-primary-container: #1000a9;
   --secondary-container: #e2e8f0;
   --tertiary: #94a3b8;
   --error-container: #ffdad4;
+
+  /* Deepest recessed canvas layer, light-mode sibling of the dark theme's
+     --background-deep (see dark block above for the full rationale). */
+  --background-deep: #e7ecf5;
+
+  /* Traffic-accent functional colors — same hues as dark mode, darkened
+     (same-hue Tailwind -700/-800 step) for AA text contrast on this lighter
+     background; the literal Stitch values (yellow-400/orange-400/blue-500/
+     green-500) fall well under 4.5:1 here. See skill "Palette update (latest)"
+     for the computed contrast ratios. */
+  --safety-yellow: #854d0e;
+  --caution-orange: #9a3412;
+  --regulatory-blue: #1d4ed8;
+  --go-green: #166534;
 
   /* See dark block above for what these control. The source image is a near-black
      asphalt illustration with no light variant — at dark-mode opacity with no filter
@@ -209,6 +239,16 @@ html:not(.dark) {
   --color-primary: var(--accent);
   --color-on-primary: var(--accent-foreground);
   --color-primary-container: var(--primary-container);
+  --color-on-primary-container: var(--on-primary-container);
+
+  /* Deep recessed canvas layer + traffic-accent functional colors (Stitch
+     "LegalDrive HUD" navy/indigo palette) — exposed as real Tailwind
+     utilities (bg-background-deep, text-safety-yellow, border-go-green, ...). */
+  --color-background-deep: var(--background-deep);
+  --color-safety-yellow: var(--safety-yellow);
+  --color-caution-orange: var(--caution-orange);
+  --color-regulatory-blue: var(--regulatory-blue);
+  --color-go-green: var(--go-green);
 
   --color-secondary: var(--warning);
   --color-on-secondary: var(--warning-foreground);
@@ -280,6 +320,62 @@ html:not(.dark) .glow-primary {
   line-height: 16px;
   font-weight: 500;
   letter-spacing: 0.04em;
+}
+
+/* New Stitch "LegalDrive HUD" type scale (design-system.md frontmatter) — added
+   as net-new utility classes, not applied to any screen yet. `.mono-label` above
+   is left untouched (still live across ~34 files at its previous values); a
+   later screen-by-screen restyle should migrate citation/timestamp call sites
+   from `.mono-label` to `.text-legal-citation` deliberately, not via a silent
+   rename here. */
+.text-display-lg {
+  font-family: var(--font-montserrat);
+  font-weight: 700;
+  font-size: 32px;
+  line-height: 1.2;
+}
+@media (min-width: 768px) {
+  .text-display-lg {
+    font-size: 48px;
+    letter-spacing: -0.02em;
+  }
+}
+
+.text-headline-md {
+  font-family: var(--font-montserrat);
+  font-weight: 600;
+  font-size: 24px;
+  line-height: 1.4;
+}
+
+.text-legal-citation {
+  font-family: var(--font-inter);
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.text-body-lg {
+  font-family: var(--font-inter);
+  font-weight: 400;
+  font-size: 18px;
+  line-height: 1.6;
+}
+
+.text-body-md {
+  font-family: var(--font-inter);
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.text-label-sm {
+  font-family: var(--font-inter);
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 20px;
 }
 
 /* Route-transition loading (components/RouteLoading.tsx): opacity 0 until

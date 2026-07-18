@@ -4,6 +4,7 @@ import { useActionState } from 'react';
 import { TextField, Label, Input, Button, Alert, Separator } from '@heroui/react';
 import { changeEmail, changePassword, type AccountFormState } from '@/app/account/actions';
 import { Spinner } from '@/components/Spinner';
+import { ShieldIcon } from '@/components/icons';
 
 const initialState: AccountFormState = {};
 
@@ -37,7 +38,12 @@ export default function SecurityForms() {
 
   return (
     <div className="glass-card rounded-2xl p-6 space-y-6">
-      <h2 className="mono-label uppercase text-on-surface-variant">Təhlükəsizlik</h2>
+      <div className="flex items-center gap-3 border-b border-outline-variant/30 pb-4">
+        <div className="flex size-10 items-center justify-center rounded-xl bg-regulatory-blue/15 text-regulatory-blue">
+          <ShieldIcon />
+        </div>
+        <h2 className="text-headline-md text-[18px]">Təhlükəsizlik</h2>
+      </div>
 
       <form action={emailAction} className="space-y-4">
         <TextField name="email" isRequired>

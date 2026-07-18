@@ -13,6 +13,31 @@ import {
   DEFAULT_DAILY_LIMIT,
 } from '@/lib/chat/coins';
 
+const HOME_BACKGROUND_SETTING_KEY = 'home_background_image_url';
+const SITE_LOGO_SETTING_KEY = 'site_logo_url';
+const PUBLIC_ASSETS_BUCKET = 'public-assets';
+
+// Storage keys must be ASCII-safe (same constraint as
+// app/api/admin/documents/route.ts's slugifyFilename, duplicated here rather
+// than imported since that one isn't exported and this route shouldn't
+// depend on the internals of an unrelated route file).
+function slugifyAssetFilename(name: string): string {
+  const dotIndex = name.lastIndexOf('.');
+  const base = dotIndex > 0 ? name.slice(0, dotIndex) : name;
+  const ext = dotIndex > 0 ? name.slice(dotIndex + 1) : '';
+
+  const slugBase = base
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase();
+
+  const slugExt = ext.replace(/[^a-zA-Z0-9]+/g, '').toLowerCase();
+
+  return slugExt ? `${slugBase || 'file'}.${slugExt}` : slugBase || 'file';
+}
+
 // Sane upper bound to reject fat-fingered values (e.g. 9999999) — same
 // convention as app/api/admin/users/[id]/rate-limit/route.ts.
 const MAX_ALLOWED = 100000;
@@ -60,6 +85,39 @@ export async function GET(request: NextRequest) {
     if (error) return serverError(error, 'Status cümlələrini yükləmək uğursuz oldu');
 
     return NextResponse.json({ phrases: data ?? [] });
+  }
+
+  // Like busy-phrases above, this must be readable by anyone hitting the
+  // public home page, not just admins — handled before the requireAdmin()
+  // gate. app_settings has no anon-readable RLS policy (0024), so this uses
+  // the service-role client the same way rate-limit/coin-price/
+  // daily-coin-grant do below, just without the admin gate first.
+  if (type === 'background-image') {
+    const { data, error } = await createAdminClient()
+      .from('app_settings')
+      .select('value')
+      .eq('key', HOME_BACKGROUND_SETTING_KEY)
+      .maybeSingle();
+
+    if (error) return serverError(error, 'Ayarları oxumaq uğursuz oldu');
+
+    const url = typeof data?.value === 'string' ? data.value : null;
+    return NextResponse.json({ url });
+  }
+
+  // Same public, no-admin-gate rationale as background-image above — the
+  // site logo is rendered in NavBar/Sidebar for all visitors, not just admins.
+  if (type === 'logo') {
+    const { data, error } = await createAdminClient()
+      .from('app_settings')
+      .select('value')
+      .eq('key', SITE_LOGO_SETTING_KEY)
+      .maybeSingle();
+
+    if (error) return serverError(error, 'Ayarları oxumaq uğursuz oldu');
+
+    const url = typeof data?.value === 'string' ? data.value : null;
+    return NextResponse.json({ url });
   }
 
   const auth = await requireAdmin();
@@ -176,6 +234,68 @@ export async function POST(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const type = searchParams.get('type');
+
+  if (type === 'background-image') {
+    const formData = await request.formData().catch(() => null);
+    const file = formData?.get('file');
+
+    if (!(file instanceof File)) {
+      return apiError(400, 'file tələb olunur');
+    }
+    if (!file.type.startsWith('image/')) {
+      return apiError(400, 'Yalnız şəkil faylları qəbul olunur');
+    }
+
+    const admin = createAdminClient();
+    const storagePath = `home-background/${crypto.randomUUID()}-${slugifyAssetFilename(file.name)}`;
+
+    const { error: uploadError } = await admin.storage
+      .from(PUBLIC_ASSETS_BUCKET)
+      .upload(storagePath, file, { contentType: file.type });
+    if (uploadError) return serverError(uploadError, 'Şəkli yükləmək uğursuz oldu');
+
+    const {
+      data: { publicUrl },
+    } = admin.storage.from(PUBLIC_ASSETS_BUCKET).getPublicUrl(storagePath);
+
+    const { error } = await admin
+      .from('app_settings')
+      .upsert({ key: HOME_BACKGROUND_SETTING_KEY, value: publicUrl, updated_at: new Date().toISOString() });
+    if (error) return serverError(error, 'Ayarı yeniləmək uğursuz oldu');
+
+    return NextResponse.json({ url: publicUrl });
+  }
+
+  if (type === 'logo') {
+    const formData = await request.formData().catch(() => null);
+    const file = formData?.get('file');
+
+    if (!(file instanceof File)) {
+      return apiError(400, 'file tələb olunur');
+    }
+    if (!file.type.startsWith('image/')) {
+      return apiError(400, 'Yalnız şəkil faylları qəbul olunur');
+    }
+
+    const admin = createAdminClient();
+    const storagePath = `logo/${crypto.randomUUID()}-${slugifyAssetFilename(file.name)}`;
+
+    const { error: uploadError } = await admin.storage
+      .from(PUBLIC_ASSETS_BUCKET)
+      .upload(storagePath, file, { contentType: file.type });
+    if (uploadError) return serverError(uploadError, 'Şəkli yükləmək uğursuz oldu');
+
+    const {
+      data: { publicUrl },
+    } = admin.storage.from(PUBLIC_ASSETS_BUCKET).getPublicUrl(storagePath);
+
+    const { error } = await admin
+      .from('app_settings')
+      .upsert({ key: SITE_LOGO_SETTING_KEY, value: publicUrl, updated_at: new Date().toISOString() });
+    if (error) return serverError(error, 'Ayarı yeniləmək uğursuz oldu');
+
+    return NextResponse.json({ url: publicUrl });
+  }
 
   if (type !== 'busy-phrases') {
     return apiError(400, 'type parametri düzgün deyil');
@@ -498,6 +618,24 @@ export async function DELETE(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const type = searchParams.get('type');
+
+  if (type === 'background-image') {
+    // Only clears the app_settings override so the home page falls back to
+    // the static /bg.png; the now-orphaned object is left in the
+    // public-assets bucket rather than deleted here — same low-stakes
+    // tradeoff as other reset branches in this file (e.g. coin-price PATCH
+    // null) which don't clean up anything beyond the setting row.
+    const { error } = await createAdminClient().from('app_settings').delete().eq('key', HOME_BACKGROUND_SETTING_KEY);
+    if (error) return serverError(error, 'Ayarı sıfırlamaq uğursuz oldu');
+    return NextResponse.json({ url: null });
+  }
+
+  if (type === 'logo') {
+    // Same orphaned-storage-object tradeoff as background-image above.
+    const { error } = await createAdminClient().from('app_settings').delete().eq('key', SITE_LOGO_SETTING_KEY);
+    if (error) return serverError(error, 'Ayarı sıfırlamaq uğursuz oldu');
+    return NextResponse.json({ url: null });
+  }
 
   if (type !== 'busy-phrases') {
     return apiError(400, 'type parametri düzgün deyil');

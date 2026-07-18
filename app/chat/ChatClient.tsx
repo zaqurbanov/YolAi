@@ -195,11 +195,14 @@ const MessageBubble = memo(function MessageBubble({
           <div className="flex max-w-[85%] flex-col gap-1.5">
             <div className="flex flex-wrap gap-1.5">
               {citations.map((c, i) => (
-                <Chip key={i} size="sm" variant="soft" color="accent" className="mono-label">
+                <span
+                  key={i}
+                  className="text-legal-citation rounded-lg border border-regulatory-blue/30 bg-regulatory-blue/15 px-2.5 py-1 text-regulatory-blue"
+                >
                   {c.title}
                   {c.article_label ? ` · ${c.article_label}` : ''}
                   {c.page ? ` · s.${c.page}` : ''}
-                </Chip>
+                </span>
               ))}
             </div>
             <button
@@ -1128,7 +1131,8 @@ export default function ChatClient({ conversationId: initialConversationId }: Ch
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Sürət həddi nə qədərdir?"
+            placeholder="Sualınızı yazın..."
+            autoFocus
             fullWidth
             className="bg-transparent"
           />
@@ -1140,7 +1144,15 @@ export default function ChatClient({ conversationId: initialConversationId }: Ch
             className="glow-primary shrink-0 focus-visible:ring-2 focus-visible:ring-primary/50"
             aria-label="Göndər"
           >
-            <SendIcon />
+            {/* Dips down on submit (isBusy true, tied to the same status the
+                button's own isDisabled uses) and springs back to its resting
+                position the moment isBusy clears — a "sent" micro-interaction
+                rather than a static disabled look. */}
+            <span
+              className={`inline-flex transition-transform duration-300 ease-out ${isBusy ? 'translate-y-1.5' : 'translate-y-0'}`}
+            >
+              <SendIcon />
+            </span>
           </Button>
         </form>
       </div>

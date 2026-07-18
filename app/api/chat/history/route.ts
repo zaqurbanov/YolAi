@@ -41,10 +41,18 @@ export async function GET(request: NextRequest) {
   const conversationId = searchParams.get('conversationId');
 
   if (!conversationId) {
+    // Untitled conversations are always empty (title is only ever set once
+    // the first message lands — see app/api/chat/route.ts's auto-title
+    // logic) and are meant to be transient: a "+ Yeni söhbət" click that
+    // never got a first message shouldn't clutter the sidebar as a ghost
+    // "Untitled" entry. Excluding them here is the read-side half of that;
+    // the write-side half (actually deleting them) happens below when their
+    // own conversationId is fetched and found empty.
     const { data: conversations, error } = await supabase
       .from('conversations')
       .select('id, title, created_at, updated_at')
       .eq('user_id', user.id)
+      .not('title', 'is', null)
       .order('updated_at', { ascending: false });
 
     if (error) return serverError(error, 'Söhbətlər siyahısını yükləmək uğursuz oldu');
@@ -71,6 +79,20 @@ export async function GET(request: NextRequest) {
     .order('created_at', { ascending: true });
 
   if (error) return serverError(error, 'Söhbət tarixçəsini yükləmək uğursuz oldu');
+
+  // Unnamed conversations are always meant to be temporary — a
+  // "+ Yeni söhbət" click that's never actually used (no message ever sent,
+  // so title was never auto-set — see app/api/chat/route.ts) shouldn't
+  // survive a page refresh as an empty, permanent row. Deleting here (rather
+  // than only hiding it from the list above) means visiting its URL again
+  // — the exact "create then refresh" scenario — cleans it up and reports
+  // 404, which ChatClient.tsx's history-load effect already treats as
+  // "start a fresh new chat" (router.replace('/chat')), so no separate
+  // client-side handling is needed for this.
+  if ((messages ?? []).length === 0) {
+    await supabase.from('conversations').delete().eq('id', conversationId).eq('user_id', user.id);
+    return notFound('Söhbət tapılmadı');
+  }
 
   return Response.json({ messages: messages ?? [], title: conversation.title });
 }
@@ -117,6 +139,18 @@ export async function POST(request: NextRequest) {
 
     return Response.json({ url: `/share/${token}` });
   }
+
+  // Opportunistic cleanup: an untitled conversation is by definition empty
+  // (title is only ever set alongside the first message — see
+  // app/api/chat/route.ts) and meant to be temporary. A user who repeatedly
+  // clicks "+ Yeni söhbət" without sending anything would otherwise leave
+  // orphaned empty rows behind indefinitely (the refresh-time cleanup in the
+  // GET handler above only fires if that exact draft's URL is revisited) —
+  // clearing them here, right before starting a fresh draft, keeps at most
+  // one abandoned empty conversation alive at a time instead of
+  // accumulating. Not scoped to `error`-checked since a failed cleanup
+  // shouldn't block creating the new conversation.
+  await supabase.from('conversations').delete().eq('user_id', user.id).is('title', null);
 
   const { data: created, error } = await supabase
     .from('conversations')

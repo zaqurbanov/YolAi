@@ -9,6 +9,8 @@ import { formatCoinBalance } from '@/lib/format/coins';
 import GlobalRateLimitControl from './GlobalRateLimitControl';
 import GlobalCoinPriceControl from './GlobalCoinPriceControl';
 import GlobalDailyCoinGrantControl from './GlobalDailyCoinGrantControl';
+import BackgroundImageControl from './BackgroundImageControl';
+import LogoControl from './LogoControl';
 
 export const metadata: Metadata = {
   title: 'İstifadəçilər',
@@ -31,6 +33,8 @@ export default async function AdminUsersPage() {
         <GlobalRateLimitControl />
         <GlobalDailyCoinGrantControl />
         <GlobalCoinPriceControl />
+        <BackgroundImageControl />
+        <LogoControl />
       </div>
 
       <div className="glass-panel rounded-2xl overflow-hidden overflow-x-auto">

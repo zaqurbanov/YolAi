@@ -4,7 +4,9 @@ export default function AdSlot({ className }: { className?: string }) {
   if (!ADS_ENABLED) return null;
 
   return (
-    <div className={`border rounded p-4 text-center text-sm text-gray-400 ${className ?? ''}`}>
+    <div
+      className={`glass-card rounded-2xl border border-outline-variant/30 p-4 text-center text-body-md text-on-surface-variant ${className ?? ''}`}
+    >
       Reklam yeri
     </div>
   );
