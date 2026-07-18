@@ -429,6 +429,21 @@ export default function ChatClient({ conversationId: initialConversationId }: Ch
   }, []);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const bottomSentinelRef = useRef<HTMLDivElement>(null);
+  const messageInputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-focus the composer on entering the chat, but desktop-only — same
+  // 'md' breakpoint this app already uses to split mobile/desktop behavior
+  // elsewhere (e.g. components/SidebarShell.tsx's md:hidden). On mobile,
+  // focusing on mount pops the on-screen keyboard immediately and shoves the
+  // whole layout up before the user has done anything, which is exactly the
+  // jank most mobile chat UIs (this app's own reference points included)
+  // deliberately avoid — so this can't be a plain `autoFocus` attribute,
+  // which has no way to condition on viewport size.
+  useEffect(() => {
+    if (window.matchMedia('(min-width: 768px)').matches) {
+      messageInputRef.current?.focus();
+    }
+  }, []);
   // Stable across the component's lifetime (empty deps) — conversationId is
   // read from the ref at send-time via prepareSendMessagesRequest, not
   // captured in a closure, so this never needs to be recreated when the id
@@ -1129,10 +1144,10 @@ export default function ChatClient({ conversationId: initialConversationId }: Ch
       <div className="border-t border-outline-variant/40 px-4 py-4 sm:px-8 print:hidden">
         <form onSubmit={handleSubmit} className="glass-panel flex items-center gap-2 rounded-2xl p-2">
           <Input
+            ref={messageInputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Sualınızı yazın..."
-            autoFocus
             fullWidth
             className="bg-transparent"
           />

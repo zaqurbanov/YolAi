@@ -29,8 +29,8 @@ export default async function NavBar() {
     : [0, []];
 
   return (
-    <nav className="border-b px-6 py-3 flex items-center justify-between">
-      <div className="flex items-center gap-2">
+    <nav className="border-b px-3 py-3 flex items-center justify-between gap-2 sm:px-6">
+      <div className="flex min-w-0 items-center gap-2">
         <BackButton />
         <SidebarToggleButton />
         <Link href="/" className="flex items-center gap-2 font-semibold whitespace-nowrap shrink-0">
@@ -53,10 +53,16 @@ export default async function NavBar() {
               className="shrink-0 object-contain"
             />
           )}
-          Yol Hərəkəti QA
+          {/* Hidden below sm: on a narrow phone, back button + sidebar
+              toggle + logo + wordmark + the right-side icon cluster don't
+              all fit in one row and overflow — dropping the wordmark (the
+              logo mark alone is still enough of a brand cue) is the
+              cheapest fix, matching the same md:hidden/sm:hidden pattern
+              this app already uses elsewhere for mobile-vs-desktop splits. */}
+          <span className="hidden sm:inline">Yol Hərəkəti QA</span>
         </Link>
       </div>
-      <div className="flex items-center gap-2 text-sm">
+      <div className="flex shrink-0 items-center gap-1 text-sm sm:gap-2">
         {user && !isAdmin && <CoinBadge />}
         {user && (
           <NotificationBell
