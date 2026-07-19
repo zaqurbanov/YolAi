@@ -18,9 +18,9 @@ export interface RuleCategory {
 }
 
 // Single source of truth for the traffic-rule category cards shown on both
-// app/page.tsx (a 6-item subset) and app/qaydalar/page.tsx (all 8) — keeps
-// title/description/citation wording in sync instead of drifting between
-// two hand-maintained copies.
+// app/page.tsx (a 6-item subset) and app/oyrenme/page.tsx (all 8, as lesson
+// cards with progress) — keeps title/description/citation wording in sync
+// instead of drifting between two hand-maintained copies.
 export const RULE_CATEGORIES: RuleCategory[] = [
   {
     icon: SignIcon,
@@ -71,3 +71,31 @@ export const RULE_CATEGORIES: RuleCategory[] = [
     citation: 'Maddə 74 | Dayanma və saxlanma qaydaları',
   },
 ];
+
+// Hardcoded category-title <-> URL-slug map for /oyrenme/[slug] routing.
+// Categories are static (this file is their single source of truth), so a
+// generic slugify utility would be overkill — this map is the whole
+// contract between lib/quiz/lessons.ts (reads) and the /oyrenme frontend
+// (routing), documented here rather than re-derived per callsite.
+const CATEGORY_SLUGS: Record<string, string> = {
+  'Nişanlar': 'nisanlar',
+  'Qaydalar': 'qaydalar',
+  'Cərimələr və Bal Sistemi': 'cerimeler-ve-bal-sistemi',
+  'Piyada Hərəkəti': 'piyada-hereketi',
+  'Kəsişmələr və Üstünlük Hüququ': 'kesismeler-ve-ustunluk-hququ',
+  'Sürət Həddi': 'suret-heddi',
+  'Sənədlər və Sığorta': 'senedler-ve-sigorta',
+  'Dayanma və Dayanacaq Qaydaları': 'dayanma-ve-dayanacaq-qaydalari',
+};
+
+const SLUGS_TO_CATEGORY: Record<string, string> = Object.fromEntries(
+  Object.entries(CATEGORY_SLUGS).map(([title, slug]) => [slug, title])
+);
+
+export function categoryToSlug(title: string): string {
+  return CATEGORY_SLUGS[title] ?? title;
+}
+
+export function slugToCategory(slug: string): string | undefined {
+  return SLUGS_TO_CATEGORY[slug];
+}

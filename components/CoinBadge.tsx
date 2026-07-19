@@ -29,6 +29,7 @@ export default function CoinBadge() {
   const [pulsing, setPulsing] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const prevBalanceRef = useRef<number | null>(null);
+  const badgeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -88,6 +89,8 @@ export default function CoinBadge() {
   return (
     <>
       <button
+        ref={badgeRef}
+        data-tour="coin-badge"
         type="button"
         onClick={() => setIsModalOpen(true)}
         role="status"
@@ -138,9 +141,9 @@ export default function CoinBadge() {
                 </div>
               </dl>
             </Modal.Body>
-            <Modal.Footer>
+            <Modal.Footer className="gap-2">
               <Button
-                className="w-full glow-primary"
+                className="flex-1 glow-primary"
                 variant="primary"
                 onPress={() => {
                   setIsModalOpen(false);
@@ -148,6 +151,16 @@ export default function CoinBadge() {
                 }}
               >
                 Coin al
+              </Button>
+              <Button
+                className="flex-1"
+                variant="outline"
+                onPress={() => {
+                  setIsModalOpen(false);
+                  router.push('/coin-qazan');
+                }}
+              >
+                Coin qazan
               </Button>
             </Modal.Footer>
           </Modal.Dialog>

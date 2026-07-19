@@ -14,19 +14,25 @@ export default function Footer() {
 
         <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 sm:flex-nowrap">
           <Link
-            href="/privacy"
+            href="/faq/faq"
+            className="whitespace-nowrap text-sm text-on-surface-variant hover:text-primary hover:underline"
+          >
+            Suallar
+          </Link>
+          <Link
+            href="/faq/privacy"
             className="whitespace-nowrap text-sm text-on-surface-variant hover:text-primary hover:underline"
           >
             Məxfilik Siyasəti
           </Link>
           <Link
-            href="/terms"
+            href="/faq/terms"
             className="whitespace-nowrap text-sm text-on-surface-variant hover:text-primary hover:underline"
           >
             İstifadə Şərtləri
           </Link>
           <Link
-            href="/istifade-qaydalari"
+            href="/faq/istifade-qaydalari"
             className="whitespace-nowrap text-sm text-on-surface-variant hover:text-primary hover:underline"
           >
             İstifadə Qaydaları

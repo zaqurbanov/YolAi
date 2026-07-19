@@ -1,8 +1,8 @@
 'use client';
 
 import { useActionState } from 'react';
-import { TextField, Label, Input, Button, Alert, Separator } from '@heroui/react';
-import { changeEmail, changePassword, type AccountFormState } from '@/app/account/actions';
+import { TextField, Label, Input, Button, Alert } from '@heroui/react';
+import { changePassword, type AccountFormState } from '@/app/account/actions';
 import { Spinner } from '@/components/Spinner';
 import { ShieldIcon } from '@/components/icons';
 
@@ -33,7 +33,6 @@ function FormAlert({ state }: { state: AccountFormState }) {
 }
 
 export default function SecurityForms() {
-  const [emailState, emailAction, emailPending] = useActionState(changeEmail, initialState);
   const [passwordState, passwordAction, passwordPending] = useActionState(changePassword, initialState);
 
   return (
@@ -44,24 +43,6 @@ export default function SecurityForms() {
         </div>
         <h2 className="text-headline-md text-[18px]">Təhlükəsizlik</h2>
       </div>
-
-      <form action={emailAction} className="space-y-4">
-        <TextField name="email" isRequired>
-          <Label>Yeni email</Label>
-          <Input type="email" placeholder="ad@nümunə.az" />
-        </TextField>
-        <FormAlert state={emailState} />
-        <Button type="submit" variant="outline" isPending={emailPending}>
-          {({ isPending }) => (
-            <>
-              {isPending ? <Spinner size="sm" tone="current" /> : null}
-              Email dəyişdir
-            </>
-          )}
-        </Button>
-      </form>
-
-      <Separator />
 
       <form action={passwordAction} className="space-y-4">
         <TextField name="password" isRequired>

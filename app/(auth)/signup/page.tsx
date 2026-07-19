@@ -14,6 +14,7 @@ function SignupForm() {
   const [state, formAction, pending] = useActionState(signup, initialState);
   const searchParams = useSearchParams();
   const error = state?.error ?? searchParams.get('error');
+  const ref = searchParams.get('ref');
 
   return (
     <div className="flex min-h-full w-full items-center justify-center px-4 py-16">
@@ -26,7 +27,16 @@ function SignupForm() {
         </div>
 
         <div className="glass-panel rounded-2xl p-6 sm:p-8">
+          <GoogleSignInButton />
+
+          <div className="my-6 flex items-center gap-3">
+            <Separator className="flex-1" />
+            <span className="mono-label uppercase text-on-surface-variant">və ya</span>
+            <Separator className="flex-1" />
+          </div>
+
           <form action={formAction} className="flex flex-col gap-5">
+            <input type="hidden" name="ref" value={ref ?? ''} />
             <TextField name="email" isRequired>
               <Label>Email</Label>
               <Input type="email" placeholder="ad@nümunə.com" />
@@ -61,14 +71,6 @@ function SignupForm() {
               )}
             </Button>
           </form>
-
-          <div className="my-6 flex items-center gap-3">
-            <Separator className="flex-1" />
-            <span className="mono-label uppercase text-on-surface-variant">və ya</span>
-            <Separator className="flex-1" />
-          </div>
-
-          <GoogleSignInButton />
         </div>
 
         <p className="mt-6 text-center text-sm text-on-surface-variant">

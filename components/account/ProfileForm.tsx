@@ -52,14 +52,12 @@ export default function ProfileForm({ fullName, avatarUrl, email }: ProfileFormP
           <Input placeholder="Adınız və soyadınız" />
         </TextField>
 
-        {/* Real data: e-poçt ünvanı auth.users-dən gəlir. Dəyişdirmək üçün ayrıca
-            təsdiq axını lazımdır (bax SecurityForms/changeEmail), ona görə bu sahə
-            read-only göstərilir — Stitch mockup-dakı "E-poçt Ünvanı" sahəsi ilə
-            vizual paritet üçün saxlanılıb. */}
+        {/* Email dəyişdirilə bilməz — hər hesabın email ünvanı unikal identifikator
+            kimi sabit qalmalıdır, ona görə bu sahə həmişə read-only göstərilir. */}
         <TextField isDisabled>
           <Label>E-poçt Ünvanı</Label>
           <Input value={email} readOnly />
-          <Description>Email dəyişdirmək üçün aşağıdakı Təhlükəsizlik bölməsini istifadə edin</Description>
+          <Description>Email ünvanı dəyişdirilə bilməz</Description>
         </TextField>
 
         {/* Mock data: "profiles" cədvəlində telefon nömrəsi sahəsi yoxdur (bax

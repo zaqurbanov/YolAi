@@ -5,10 +5,13 @@ import type { RuleCategory } from '@/lib/content/ruleCategories';
 // Literal Tailwind class names per accent (not built via template-string
 // interpolation) so Tailwind v4's content scanner — which extracts candidates
 // as raw text, not evaluated JS — can see every class it needs to generate.
-// Cycled across category-card grids (home preview + full /qaydalar catalog)
+// Cycled across category-card grids (home preview + full /oyrenme lesson list)
 // to mirror the Stitch bento grid's varied traffic-accent left borders
 // (regulatory-blue/safety-yellow/go-green/caution-orange) without touching
-// RULE_CATEGORIES data.
+// RULE_CATEGORIES data. Also reused (via the exported ACCENT_STYLES array
+// below) by app/oyrenme/page.tsx's lesson-card grid, which needs the same
+// accent cycling but with lesson-progress chrome CategoryCard itself
+// doesn't render.
 export const ACCENT_STYLES = [
   { chip: 'bg-primary/15 text-primary group-hover:bg-primary/25', border: 'border-l-primary', citation: 'text-primary' },
   { chip: 'bg-regulatory-blue/15 text-regulatory-blue group-hover:bg-regulatory-blue/25', border: 'border-l-regulatory-blue', citation: 'text-regulatory-blue' },
@@ -21,16 +24,17 @@ interface CategoryCardProps {
   category: RuleCategory;
   /** Index into ACCENT_STYLES — pass the item's position in the rendered grid. */
   index: number;
-  /** Wraps the card in a Link when provided (used by the full /qaydalar catalog). */
+  /** Wraps the card in a Link when provided (used by the home-page category preview). */
   href?: string;
   /** Stagger delay in ms for the topic-card-in entrance animation. */
   animationDelayMs?: number;
 }
 
 // Shared "category card" treatment for the traffic-rule category grid shown
-// on both app/page.tsx (6-item home preview) and app/qaydalar/page.tsx (full
-// 8-item catalog) — single source of truth so the two pages can't visually
-// drift from each other for the same underlying UI shape.
+// on app/page.tsx (6-item home preview) — single source of truth for that
+// card shape. app/oyrenme/page.tsx renders the same accent styling for its
+// lesson cards but with different content (progress bar, CTA), so it uses
+// ACCENT_STYLES directly rather than this component.
 export function CategoryCard({ category, index, href, animationDelayMs }: CategoryCardProps) {
   const { icon: Icon, title, description, citation } = category;
   const accent = ACCENT_STYLES[index % ACCENT_STYLES.length];

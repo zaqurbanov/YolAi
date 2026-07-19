@@ -110,6 +110,42 @@ export function getRewriteModelFallbackId(): string | null {
   return resolveRewriteModelFallbackId();
 }
 
+// Vision resolves independently of the text-chat provider choice (LLM_PROVIDER),
+// not as a variant of getChatModel()/getChatModelFallback() — a deployment can run
+// deepseek (no vision support) for everyday chat while still having a
+// GOOGLE_GENERATIVE_AI_API_KEY configured, and vision should work in that case.
+// Only gated on GOOGLE_GENERATIVE_AI_API_KEY being present, unlike
+// resolveChatModelFallbackId()/resolveRewriteModelFallbackId() above, which are
+// additionally gated on LLM_PROVIDER === 'openrouter' (those exist to route around
+// OpenRouter's account-wide free-tier limit specifically, a different concern).
+function resolveVisionModelFallbackId(): string | null {
+  if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) return null;
+  return process.env.GOOGLE_VISION_MODEL ?? process.env.GOOGLE_MODEL ?? 'gemini-2.5-flash';
+}
+
+// Anthropic Claude and Google Gemini both support vision; DeepSeek and the
+// OpenRouter free-tier default model do not. Anthropic branch reuses
+// resolveChatModelId() (rather than a second hardcoded model id string) since
+// that function already resolves the correct Anthropic model id whenever
+// LLM_PROVIDER === 'anthropic' — it must only be called inside that branch here,
+// since outside it resolveChatModelId() would resolve a different provider's id.
+export function getVisionModel(): LanguageModel | null {
+  const provider = process.env.LLM_PROVIDER ?? 'openrouter';
+  if (provider === 'anthropic') {
+    return anthropic(resolveChatModelId());
+  }
+
+  const modelId = resolveVisionModelFallbackId();
+  return modelId ? google(modelId) : null;
+}
+
+// Cheap/sync (no network call) by design — called both as a server-side route
+// guard and passed down as a prop to the /chat page on every load to decide
+// whether to show the image-attach UI at all.
+export function isVisionAvailable(): boolean {
+  return getVisionModel() !== null;
+}
+
 // deepseek-v4-flash defaults to 'adaptive' thinking, i.e. it may silently emit
 // hidden chain-of-thought tokens before any visible output — the same failure
 // mode DISABLE_REASONING exists to prevent for OpenRouter models, just gated

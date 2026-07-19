@@ -26,6 +26,14 @@ function LoginForm() {
         </div>
 
         <div className="glass-panel rounded-2xl p-6 sm:p-8">
+          <GoogleSignInButton />
+
+          <div className="my-6 flex items-center gap-3">
+            <Separator className="flex-1" />
+            <span className="mono-label uppercase text-on-surface-variant">və ya</span>
+            <Separator className="flex-1" />
+          </div>
+
           <form action={formAction} className="flex flex-col gap-5">
             <TextField name="email" isRequired>
               <Label>Email</Label>
@@ -60,14 +68,6 @@ function LoginForm() {
               )}
             </Button>
           </form>
-
-          <div className="my-6 flex items-center gap-3">
-            <Separator className="flex-1" />
-            <span className="mono-label uppercase text-on-surface-variant">və ya</span>
-            <Separator className="flex-1" />
-          </div>
-
-          <GoogleSignInButton />
         </div>
 
         <p className="mt-6 text-center text-sm text-on-surface-variant">

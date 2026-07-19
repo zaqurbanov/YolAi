@@ -7,7 +7,18 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Avatar, Badge, Input, Button, Chip, AlertDialog, Modal, Dropdown, Skeleton, toast } from '@heroui/react';
-import { SendIcon, ShareIcon, MoreIcon, TrashIcon, InfoIcon, CopyIcon, CheckIcon, ArrowUpIcon } from '@/components/icons';
+import {
+  SendIcon,
+  ShareIcon,
+  MoreIcon,
+  TrashIcon,
+  InfoIcon,
+  CopyIcon,
+  CheckIcon,
+  ArrowUpIcon,
+  CameraIcon,
+  CloseIcon,
+} from '@/components/icons';
 import { CONVERSATION_CHANGED_EVENT } from '@/lib/chat/conversationEvents';
 import { Spinner } from '@/components/Spinner';
 import { renderCitationText } from '@/lib/chat/renderCitationText';
@@ -28,6 +39,7 @@ interface HistoryMessage {
   content: string;
   citations: Citation[] | null;
   created_at: string;
+  imageUrl: string | null;
 }
 
 type CoinInfo = { balance: number; price: number };
@@ -172,6 +184,17 @@ const MessageBubble = memo(function MessageBubble({
           }
         >
           {message.parts.map((part, i) => {
+            if (part.type === 'file' && part.mediaType?.startsWith('image/')) {
+              return (
+                // eslint-disable-next-line @next/next/no-img-element -- remote signed/data URLs, not next/image-eligible.
+                <img
+                  key={i}
+                  src={part.url}
+                  alt="Əlavə edilmiş şəkil"
+                  className="mb-2 max-h-64 rounded-lg object-cover"
+                />
+              );
+            }
             if (part.type === 'text') {
               return <TextPart key={i} text={part.text} />;
             }
@@ -365,11 +388,53 @@ interface ChatClientProps {
   // between two *different* existing conversations, so this only needs to be
   // read once per mount, not re-synced from a changing prop.
   conversationId: string | null;
+  // Server-resolved (isVisionAvailable(), no network call) — controls whether
+  // the attach-image affordance renders at all. Not re-checked client-side;
+  // the backend still enforces this independently (422 vision_unavailable)
+  // as a backstop, this prop only decides what the composer offers to show.
+  visionAvailable: boolean;
 }
 
-export default function ChatClient({ conversationId: initialConversationId }: ChatClientProps) {
+export default function ChatClient({ conversationId: initialConversationId, visionAvailable }: ChatClientProps) {
   const router = useRouter();
   const [input, setInput] = useState('');
+  const [attachedFile, setAttachedFile] = useState<File | null>(null);
+  const [attachedPreviewUrl, setAttachedPreviewUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.danger('Yalnız şəkil faylları qəbul olunur');
+      return;
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      toast.danger('Şəkil 5MB-dan böyük ola bilməz');
+      return;
+    }
+    setAttachedFile(file);
+  }
+
+  function clearAttachedFile() {
+    setAttachedFile(null);
+  }
+
+  // Preview URL lifecycle tied to attachedFile so it can't leak: revoked both
+  // on change (old URL) and on unmount.
+  useEffect(() => {
+    if (!attachedFile) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing derived state (object URL) from a changing external File, not derivable during render.
+      setAttachedPreviewUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(attachedFile);
+    setAttachedPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [attachedFile]);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeletingHistory, setIsDeletingHistory] = useState(false);
@@ -660,18 +725,25 @@ export default function ChatClient({ conversationId: initialConversationId }: Ch
         setConversationTitle(data.title ?? null);
         if (!Array.isArray(data.messages) || data.messages.length === 0) return;
 
-        const hydrated: ChatUIMessage[] = data.messages.map((m) => ({
-          id: m.id,
-          role: m.role,
-          parts: [{ type: 'text', text: m.content }],
-          metadata:
-            m.role === 'assistant'
-              ? {
-                  citations: m.citations ?? undefined,
-                  messageId: adminPrimaryModelIdRef.current !== null ? m.id : undefined,
-                }
-              : undefined,
-        }));
+        const hydrated: ChatUIMessage[] = data.messages.map((m) => {
+          const parts: ChatUIMessage['parts'] = [];
+          if (m.imageUrl) {
+            parts.push({ type: 'file', mediaType: 'image/jpeg', url: m.imageUrl });
+          }
+          parts.push({ type: 'text', text: m.content });
+          return {
+            id: m.id,
+            role: m.role,
+            parts,
+            metadata:
+              m.role === 'assistant'
+                ? {
+                    citations: m.citations ?? undefined,
+                    messageId: adminPrimaryModelIdRef.current !== null ? m.id : undefined,
+                  }
+                : undefined,
+          };
+        });
 
         setMessages(hydrated);
         setTimestamps((prev) => {
@@ -940,9 +1012,19 @@ export default function ChatClient({ conversationId: initialConversationId }: Ch
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!input.trim()) return;
-    sendMessage({ text: input });
+    if (!input.trim() && !attachedFile) return;
+    if (attachedFile) {
+      // sendMessage's `files` accepts a FileList or FileUIPart[], not a bare
+      // File[] — DataTransfer is the standard way to construct a FileList
+      // from an in-memory File without going through a real <input> element.
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(attachedFile);
+      sendMessage({ text: input, files: dataTransfer.files });
+    } else {
+      sendMessage({ text: input });
+    }
     setInput('');
+    setAttachedFile(null);
     // Sending is a deliberate action — always follow it to the bottom, even if
     // the user had scrolled up to read earlier messages first, and re-arm
     // auto-follow for the reply that's about to stream in.
@@ -1142,9 +1224,49 @@ export default function ChatClient({ conversationId: initialConversationId }: Ch
       </div>
 
       <div className="border-t border-outline-variant/40 px-4 py-4 sm:px-8 print:hidden">
+        {attachedPreviewUrl && (
+          <div className="mb-2 flex items-center gap-2">
+            <div className="relative">
+              {/* eslint-disable-next-line @next/next/no-img-element -- local object URL, not next/image-eligible. */}
+              <img
+                src={attachedPreviewUrl}
+                alt="Əlavə ediləcək şəkil"
+                className="h-16 w-16 rounded-lg border border-outline-variant/40 object-cover"
+              />
+              <button
+                type="button"
+                onClick={clearAttachedFile}
+                className="absolute -right-1.5 -top-1.5 rounded-full bg-surface p-0.5 text-on-surface-variant shadow transition hover:text-on-surface"
+                aria-label="Şəkli sil"
+              >
+                <CloseIcon width={14} height={14} />
+              </button>
+            </div>
+          </div>
+        )}
         <form onSubmit={handleSubmit} className="glass-panel flex items-center gap-2 rounded-2xl p-2">
+          {visionAvailable && (
+            <>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleFileSelect}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="shrink-0 rounded-full p-2 text-on-surface-variant transition hover:bg-surface-hover hover:text-on-surface"
+                aria-label="Şəkil əlavə et"
+              >
+                <CameraIcon width={20} height={20} />
+              </button>
+            </>
+          )}
           <Input
             ref={messageInputRef}
+            data-tour="chat-input"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Sualınızı yazın..."
@@ -1159,17 +1281,20 @@ export default function ChatClient({ conversationId: initialConversationId }: Ch
             className="glow-primary shrink-0 focus-visible:ring-2 focus-visible:ring-primary/50"
             aria-label="Göndər"
           >
-            {/* Dips down on submit (isBusy true, tied to the same status the
-                button's own isDisabled uses) and springs back to its resting
-                position the moment isBusy clears — a "sent" micro-interaction
-                rather than a static disabled look. */}
+            {/* Spins 180° to face downward on submit (isBusy true, tied to the
+                same status the button's own isDisabled uses) and springs back
+                to its resting upward-facing position the moment isBusy clears
+                — a "sent" micro-interaction rather than a static disabled look. */}
             <span
-              className={`inline-flex transition-transform duration-300 ease-out ${isBusy ? 'translate-y-1.5' : 'translate-y-0'}`}
+              className={`inline-flex transition-transform duration-300 ease-out ${isBusy ? 'rotate-180' : 'rotate-0'}`}
             >
               <SendIcon />
             </span>
           </Button>
         </form>
+        <p className="mt-2 text-center text-xs text-on-surface-variant">
+          AI həmişə doğru cavab vermir, zəhmət olmasa cavabların doğru olduğundan əmin olun.
+        </p>
       </div>
 
       <div className="hidden print:block print:p-8 print:text-black">

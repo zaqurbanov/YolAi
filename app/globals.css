@@ -510,6 +510,58 @@ html:not(.dark) .glow-primary {
   animation: topic-card-in 400ms ease-out forwards;
 }
 
+/* Guided onboarding tour (components/onboarding/TourOverlay.tsx). Entrance
+   follows the same convention as .topic-card-in above. The spotlight cutout
+   uses the oversized box-shadow technique (a transparent "hole" ringed by a
+   9999px shadow that IS the dim backdrop) with a subtle pulsing glow layered
+   on top via a second box-shadow in the keyframe — deliberately restrained to
+   match .glow-primary's weight, not a flashy animation. */
+@keyframes tour-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.tour-card-in {
+  opacity: 0;
+  animation: tour-card-in 250ms ease-out forwards;
+}
+
+html.dark .tour-spotlight {
+  border: 2px solid var(--color-primary);
+  animation: tour-spotlight-pulse-dark 2.2s ease-in-out infinite;
+}
+
+html:not(.dark) .tour-spotlight {
+  border: 2px solid var(--color-primary);
+  animation: tour-spotlight-pulse-light 2.2s ease-in-out infinite;
+}
+
+@keyframes tour-spotlight-pulse-dark {
+  0%,
+  100% {
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.65);
+  }
+  50% {
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.65), 0 0 18px 4px rgba(124, 147, 242, 0.35);
+  }
+}
+
+@keyframes tour-spotlight-pulse-light {
+  0%,
+  100% {
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5), 0 0 14px 3px rgba(62, 99, 221, 0.3);
+  }
+}
+
 @keyframes sparkle-pulse {
   0%,
   100% {

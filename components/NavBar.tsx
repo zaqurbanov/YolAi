@@ -7,6 +7,7 @@ import CoinBadge from '@/components/CoinBadge';
 import NotificationBell from '@/components/NotificationBell';
 import NavBarMenu from '@/components/NavBarMenu';
 import ThemeToggle from '@/components/ThemeToggle';
+import { CoinIcon } from '@/components/icons';
 import { getUnreadCount, getRecentNotifications } from '@/lib/notifications/notifications';
 import { getSiteLogoUrl } from '@/lib/content/getSiteLogoUrl';
 
@@ -63,6 +64,16 @@ export default async function NavBar() {
         </Link>
       </div>
       <div className="flex shrink-0 items-center gap-1 text-sm sm:gap-2">
+        {user && !isAdmin && (
+          <Link
+            href="/coin-qazan"
+            data-tour="coin-qazan-link"
+            className="glass-card mono-label flex items-center gap-1.5 rounded-full px-3 py-1.5 text-on-surface transition-colors hover:bg-surface-tertiary/60"
+          >
+            <CoinIcon width={14} height={14} />
+            <span className="hidden sm:inline">Coin qazan</span>
+          </Link>
+        )}
         {user && !isAdmin && <CoinBadge />}
         {user && (
           <NotificationBell

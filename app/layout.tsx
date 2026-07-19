@@ -6,6 +6,7 @@ import NavBar from "@/components/NavBar";
 import Sidebar from "@/components/Sidebar";
 import { SidebarProvider } from "@/components/SidebarContext";
 import { PullToRefresh } from "@/components/PullToRefresh";
+import { TourProvider } from "@/components/onboarding/TourProvider";
 
 const montserrat = Montserrat({
   variable: "--font-montserrat",
@@ -65,15 +66,17 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body className="h-full flex flex-col overflow-hidden bg-background text-foreground">
-        <SidebarProvider>
-          <NavBar />
-          <div className="flex flex-1 min-h-0">
-            <Sidebar />
-            <main className="flex flex-1 flex-col min-h-0 overflow-y-auto">
-              <PullToRefresh>{children}</PullToRefresh>
-            </main>
-          </div>
-        </SidebarProvider>
+        <TourProvider>
+          <SidebarProvider>
+            <NavBar />
+            <div className="flex flex-1 min-h-0">
+              <Sidebar />
+              <main className="flex flex-1 flex-col min-h-0 overflow-y-auto">
+                <PullToRefresh>{children}</PullToRefresh>
+              </main>
+            </div>
+          </SidebarProvider>
+        </TourProvider>
         <Toast.Provider placement="top end" />
       </body>
     </html>

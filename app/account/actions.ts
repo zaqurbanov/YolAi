@@ -49,29 +49,6 @@ export async function updateProfile(
   return { success: 'Profil yeniləndi' };
 }
 
-export async function changeEmail(
-  _prevState: AccountFormState,
-  formData: FormData
-): Promise<AccountFormState> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) return { error: 'Giriş tələb olunur' };
-
-  const email = formData.get('email');
-  if (typeof email !== 'string' || !email.trim()) {
-    return { error: 'Email tələb olunur' };
-  }
-
-  const { error } = await supabase.auth.updateUser({ email: email.trim() });
-
-  if (error) return { error: error.message };
-
-  return { success: 'Təsdiq linki yeni ünvana göndərildi' };
-}
-
 export async function changePassword(
   _prevState: AccountFormState,
   formData: FormData

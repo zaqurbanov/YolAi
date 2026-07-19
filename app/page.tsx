@@ -14,7 +14,7 @@ const AVATAR_TONES = ['bg-primary/40', 'bg-regulatory-blue/40', 'bg-go-green/40'
 // Home page preview: the 6 most commonly-asked categories out of the full 8
 // in RULE_CATEGORIES — "Kəsişmələr və Üstünlük Hüququ" and "Dayanma və
 // Dayanacaq Qaydaları" are intentionally left off this preview and only
-// shown on the full /qaydalar list.
+// shown as lessons on the full /oyrenme list.
 const HOME_TOPIC_TITLES = [
   'Nişanlar',
   'Qaydalar',
@@ -160,12 +160,12 @@ export default async function Home() {
             <div>
               <h2 className="text-headline-md">Geniş Məlumat Bazası</h2>
               <p className="mt-1 text-body-md text-on-surface-variant">
-                Bütün yol hərəkəti mövzularını bir platformada birləşdirdik — tam siyahı Qaydalar
-                səhifəsindədir.
+                Hər kateqoriya üzrə dərslərlə qaydaları öyrənin, sualları cavablayıb irəliləyişinizi
+                izləyin.
               </p>
             </div>
-            <Link href="/qaydalar" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
-              Hamısına bax
+            <Link href="/oyrenme" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
+              Dərslərə başla
             </Link>
           </div>
 

@@ -52,6 +52,17 @@ const nextConfig: NextConfig = {
   experimental: {
     proxyClientMaxBodySize: "50mb",
   },
+  async redirects() {
+    return [
+      { source: "/privacy", destination: "/faq/privacy", permanent: true },
+      { source: "/terms", destination: "/faq/terms", permanent: true },
+      {
+        source: "/istifade-qaydalari",
+        destination: "/faq/istifade-qaydalari",
+        permanent: true,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

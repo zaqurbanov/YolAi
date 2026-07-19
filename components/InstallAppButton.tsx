@@ -29,6 +29,7 @@ export default function InstallAppButton() {
   const [visible, setVisible] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
   const [showIOSModal, setShowIOSModal] = useState(false);
+  const [showAndroidModal, setShowAndroidModal] = useState(false);
 
   useEffect(() => {
     if (isStandalone()) return;
@@ -42,10 +43,15 @@ export default function InstallAppButton() {
       return;
     }
 
+    // Non-iOS: show the button immediately rather than waiting for
+    // beforeinstallprompt (Chrome's engagement heuristic means it may never
+    // fire, or only fires after a delay) — click falls back to a manual-
+    // instructions modal unless/until the real event arrives.
+    setVisible(true);
+
     function handleBeforeInstallPrompt(event: Event) {
       event.preventDefault();
       deferredEventRef.current = event as BeforeInstallPromptEvent;
-      setVisible(true);
     }
 
     function handleAppInstalled() {
@@ -68,7 +74,10 @@ export default function InstallAppButton() {
     }
 
     const deferredEvent = deferredEventRef.current;
-    if (!deferredEvent) return;
+    if (!deferredEvent) {
+      setShowAndroidModal(true);
+      return;
+    }
 
     await deferredEvent.prompt();
     await deferredEvent.userChoice;
@@ -100,6 +109,28 @@ export default function InstallAppButton() {
             <Modal.Body>
               <p className="text-sm text-on-surface-variant">
                 Safari-də Paylaş düyməsinə basın, sonra &quot;Ana ekrana əlavə et&quot; seçin.
+              </p>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button className="w-full" slot="close" variant="secondary">
+                Bağla
+              </Button>
+            </Modal.Footer>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
+
+      <Modal.Backdrop isOpen={showAndroidModal} onOpenChange={setShowAndroidModal}>
+        <Modal.Container>
+          <Modal.Dialog className="sm:max-w-[380px]">
+            <Modal.CloseTrigger />
+            <Modal.Header>
+              <Modal.Heading>Ana ekrana əlavə et</Modal.Heading>
+            </Modal.Header>
+            <Modal.Body>
+              <p className="text-sm text-on-surface-variant">
+                Brauzerin yuxarı sağındakı menyu (⋮) düyməsinə basın, sonra &quot;Tətbiqi
+                quraşdır&quot; və ya &quot;Ana ekrana əlavə et&quot; seçin.
               </p>
             </Modal.Body>
             <Modal.Footer>

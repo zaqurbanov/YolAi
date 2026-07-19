@@ -8,6 +8,7 @@ const TABS = [
   { id: 'documents', href: '/admin/documents', label: 'Sənədlər' },
   { id: 'users', href: '/admin/users', label: 'İstifadəçilər' },
   { id: 'questions', href: '/admin/questions', label: 'Suallar' },
+  { id: 'quiz', href: '/admin/quiz', label: 'Test Sualları' },
   { id: 'stats', href: '/admin/stats', label: 'Statistika' },
   { id: 'logs', href: '/admin/logs', label: 'Loglar' },
   { id: 'busy-phrases', href: '/admin/busy-phrases', label: 'Status cümlələri' },

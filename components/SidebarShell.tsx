@@ -11,17 +11,28 @@ import { useSidebar } from '@/components/SidebarContext';
 // desktop-only (`md:` prefixed); below `md` the same content renders instead
 // as a left-side overlay Drawer (see below), sharing `isOpen`/`toggle` from
 // SidebarContext rather than a second piece of state.
-export function SidebarShell({ children }: { children: ReactNode }) {
+export function SidebarShell({
+  children,
+  isAuthenticated = false,
+}: {
+  children: ReactNode;
+  /** Marks the root DOM element with data-tour-root="authenticated" for the
+   * onboarding tour (components/onboarding/TourProvider.tsx) to detect once the
+   * sidebar has hydrated. Omitted entirely (not set to a falsy string) when false. */
+  isAuthenticated?: boolean;
+}) {
   const { isOpen, isMobile, close } = useSidebar();
+  const tourRootProps = isAuthenticated ? { 'data-tour-root': 'authenticated' as const } : {};
 
   return (
     <>
       <aside
+        {...tourRootProps}
         className={`hidden md:flex md:shrink-0 md:flex-col md:min-h-0 md:overflow-hidden border-r bg-surface transition-[width] duration-200 ${
-          isOpen ? 'md:w-56 border-border' : 'md:w-0 border-transparent'
+          isOpen ? 'md:w-[250px] border-border' : 'md:w-0 border-transparent'
         }`}
       >
-        <div className="flex h-full w-56 flex-col min-h-0 overflow-y-auto">{children}</div>
+        <div className="flex h-full w-[250px] flex-col min-h-0 overflow-y-auto">{children}</div>
       </aside>
 
       <Drawer.Backdrop
@@ -33,7 +44,10 @@ export function SidebarShell({ children }: { children: ReactNode }) {
         className="md:hidden"
       >
         <Drawer.Content placement="left" className="md:hidden">
-          <Drawer.Dialog className="glass-panel h-full w-72 max-w-[80vw] flex-col gap-0 rounded-r-2xl border-r border-border p-0">
+          <Drawer.Dialog
+            {...tourRootProps}
+            className="glass-panel h-full w-72 max-w-[80vw] flex-col gap-0 rounded-r-2xl border-r border-border p-0"
+          >
             <div className="flex h-full flex-col min-h-0 overflow-y-auto">{children}</div>
           </Drawer.Dialog>
         </Drawer.Content>

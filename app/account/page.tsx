@@ -4,13 +4,13 @@ import Link from 'next/link';
 import { Avatar, Chip, Button } from '@heroui/react';
 import { buttonVariants } from '@heroui/styles';
 import { SparkleIcon, CoinIcon, TrashIcon, LogoutIcon, CheckIcon } from '@/components/icons';
+import Footer from '@/components/Footer';
 import { createClient } from '@/lib/supabase/server';
 import { logout } from '@/app/(auth)/actions';
 import { getAccountStats } from '@/lib/account/getAccountStats';
 import { getCoinBalanceStatus } from '@/lib/chat/coins';
 import { getTransferMinAmount, getTransferHistory } from '@/lib/coins/transfers';
-import { getQuizRewardAmount, hasClaimedToday } from '@/lib/coins/quiz';
-import { getDailyQuestionForUser } from '@/lib/quiz/questions';
+import { getQuizClaimsCount } from '@/lib/coins/quiz';
 import { formatAzDate } from '@/lib/format/date';
 import { formatMsUntilReset } from '@/lib/format/coins';
 import AdSlot from '@/components/AdSlot';
@@ -19,10 +19,9 @@ import SecurityForms from '@/components/account/SecurityForms';
 import DeleteAccountDialog from '@/components/account/DeleteAccountDialog';
 import TransferCoinsForm from '@/components/account/TransferCoinsForm';
 import TransferHistoryList from '@/components/account/TransferHistoryList';
-import DailyQuizCard from '@/components/account/DailyQuizCard';
 import PreferencesCard from '@/components/account/PreferencesCard';
+import PushNotificationOptIn from '@/components/account/PushNotificationOptIn';
 import SecurityQuickView from '@/components/account/SecurityQuickView';
-import LearnedTopicsSection from '@/components/account/LearnedTopicsSection';
 
 export const metadata: Metadata = {
   title: 'Hesab',
@@ -61,22 +60,14 @@ export default async function AccountPage() {
 
   const coins = isAdmin ? null : await getCoinBalanceStatus(user.id);
 
-  const [transferMinAmount, transferHistory, quizReward, quizAlreadyClaimed] = isAdmin
-    ? [null, null, null, null]
-    : await Promise.all([
-        getTransferMinAmount(),
-        getTransferHistory(user.id),
-        getQuizRewardAmount(),
-        hasClaimedToday(user.id),
-      ]);
+  const [transferMinAmount, transferHistory, quizClaimsCount] = isAdmin
+    ? [null, null, null]
+    : await Promise.all([getTransferMinAmount(), getTransferHistory(user.id), getQuizClaimsCount(user.id)]);
 
-  // Strip correctIndex before it ever reaches the client component's props —
-  // the server action re-derives it server-side from (userId, today) when
-  // the answer is submitted.
-  const dailyQuestion = isAdmin ? null : getDailyQuestionForUser(user.id, new Date());
-  const quizQuestionForClient = dailyQuestion
-    ? { question: dailyQuestion.question, options: dailyQuestion.options }
-    : null;
+  const totalSpent = isAdmin
+    ? 0
+    : ((await supabase.from('user_coins').select('total_spent').eq('user_id', user.id).maybeSingle()).data
+        ?.total_spent ?? 0);
 
   const statTiles = [
     { label: 'Söhbətlər', value: stats.conversations, accent: 'text-primary' },
@@ -84,14 +75,22 @@ export default async function AccountPage() {
     { label: 'Üzv olub', value: memberSince, accent: 'text-go-green' },
   ];
 
-  // Mock data: "Hüquqi Bilik Səviyyəsi" (legal-knowledge mastery %) has no
-  // backing metric anywhere in the schema/lib — there is no per-user
-  // "topics learned" or quiz-mastery ledger (the daily quiz below only
-  // tracks today's single claim, not cumulative mastery). Fixed placeholder
-  // value + label, matching the Stitch mockup's "Expert / 85%" bar, per
-  // explicit user instruction to keep the section rather than drop it.
-  const MOCK_KNOWLEDGE_LEVEL_PERCENT = 85;
-  const MOCK_KNOWLEDGE_LEVEL_LABEL = 'Expert';
+  // "Hüquqi Bilik Səviyyəsi" is a motivational engagement indicator, NOT a
+  // legal-competency claim — it combines two signals, each capped at 50
+  // points so neither alone can max out the bar: quiz participation
+  // (5 pts/claim, up to 10 claims) and chat engagement (coins spent, 1 pt
+  // per 2 coins). This must never be presented as a real qualification.
+  const quizPoints = Math.min((quizClaimsCount ?? 0) * 5, 50);
+  const spentPoints = Math.min(Math.round(totalSpent / 2), 50);
+  const knowledgeLevelPercent = Math.min(100, quizPoints + spentPoints);
+  const knowledgeLevelLabel =
+    knowledgeLevelPercent < 25
+      ? 'Yeni başlayan'
+      : knowledgeLevelPercent < 60
+        ? 'Öyrənən'
+        : knowledgeLevelPercent < 85
+          ? 'Təcrübəli'
+          : 'Ekspert';
 
   return (
     <div className="space-y-8 px-4 pt-8 pb-16 md:px-8">
@@ -140,14 +139,21 @@ export default async function AccountPage() {
           <div className="col-span-full mt-4">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-label-sm text-on-surface-variant">Hüquqi Bilik Səviyyəsi</span>
-              <span className="text-label-sm text-go-green">{MOCK_KNOWLEDGE_LEVEL_LABEL}</span>
+              <span className="text-label-sm text-go-green">{knowledgeLevelLabel}</span>
             </div>
             <div className="h-2 w-full overflow-hidden rounded-full bg-surface-tertiary">
               <div
                 className="h-full rounded-full bg-go-green shadow-[0_0_10px_rgba(34,197,94,0.4)]"
-                style={{ width: `${MOCK_KNOWLEDGE_LEVEL_PERCENT}%` }}
+                style={{ width: `${knowledgeLevelPercent}%` }}
               />
             </div>
+            {!isAdmin && (
+              <div className="mt-3 text-right">
+                <Link href="/leaderboard" className="text-label-sm text-primary hover:underline">
+                  Liderlik lövhəsinə bax →
+                </Link>
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -156,6 +162,7 @@ export default async function AccountPage() {
         <ProfileForm fullName={fullName} avatarUrl={avatarUrl} email={user.email ?? ''} />
         <div className="flex flex-col gap-6">
           <PreferencesCard />
+          <PushNotificationOptIn />
           <SecurityQuickView lastSignInAt={user.last_sign_in_at ?? null} />
         </div>
       </div>
@@ -174,23 +181,20 @@ export default async function AccountPage() {
           <div className="mt-1 text-body-md text-on-surface-variant">
             Sıfırlanmaya qalan vaxt: {formatMsUntilReset(coins.msUntilReset)}
           </div>
-          <Link
-            href="/qiymetler"
-            className={buttonVariants({ variant: 'primary', size: 'sm' }) + ' glow-primary mt-4 gap-1.5'}
-          >
-            <SparkleIcon />
-            Yeni coin paketi al
-          </Link>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link
+              href="/qiymetler"
+              className={buttonVariants({ variant: 'primary', size: 'sm' }) + ' glow-primary gap-1.5'}
+            >
+              <SparkleIcon />
+              Yeni coin paketi al
+            </Link>
+            <Link href="/coin-qazan" className={buttonVariants({ variant: 'outline', size: 'sm' }) + ' gap-1.5'}>
+              <CoinIcon />
+              Coin qazan
+            </Link>
+          </div>
         </div>
-      ) : null}
-
-      {quizQuestionForClient ? (
-        <DailyQuizCard
-          question={quizQuestionForClient.question}
-          options={quizQuestionForClient.options}
-          alreadyClaimed={quizAlreadyClaimed ?? false}
-          reward={quizReward ?? 0}
-        />
       ) : null}
 
       {transferMinAmount != null ? <TransferCoinsForm minAmount={transferMinAmount} /> : null}
@@ -198,8 +202,6 @@ export default async function AccountPage() {
       {transferHistory ? (
         <TransferHistoryList sent={transferHistory.sent} received={transferHistory.received} />
       ) : null}
-
-      <LearnedTopicsSection />
 
       <div id="security" className="scroll-mt-24">
         <SecurityForms />
@@ -227,6 +229,8 @@ export default async function AccountPage() {
       </div>
 
       <AdSlot />
+
+      <Footer />
     </div>
   );
 }

@@ -89,3 +89,73 @@ export async function claimDailyQuizReward(
 
   return { ok: true, balance: data, reward };
 }
+
+// All-time claim count for a motivational "you've done this N times" display
+// — not a security gate, so fail open to 0 on error rather than throwing.
+export async function getQuizClaimsCount(userId: string): Promise<number> {
+  const { count, error } = await createAdminClient()
+    .from('daily_quiz_claims')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', userId);
+
+  if (error) {
+    console.error('[coins] getQuizClaimsCount read failed:', error);
+    return 0;
+  }
+
+  return count ?? 0;
+}
+
+// Consecutive-day streak, computed at read time from claim_date rows (no
+// dedicated streak column). A missing claim for *today* does not break the
+// streak (the user may still claim later today) — only a gap before today
+// does. Fail open to 0 on error, same display-only bias as
+// getQuizClaimsCount above.
+export async function getQuizStreak(userId: string): Promise<number> {
+  const { data, error } = await createAdminClient()
+    .from('daily_quiz_claims')
+    .select('claim_date')
+    .eq('user_id', userId)
+    .order('claim_date', { ascending: false })
+    .limit(400);
+
+  if (error) {
+    console.error('[coins] getQuizStreak read failed:', error);
+    return 0;
+  }
+
+  const claimDates = (data ?? []).map((row) => row.claim_date as string);
+  if (claimDates.length === 0) return 0;
+
+  const todayUtc = new Date().toISOString().slice(0, 10);
+  const oneDayMs = 24 * 60 * 60 * 1000;
+
+  const parseUtcDate = (dateStr: string): number => {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    return Date.UTC(year, month - 1, day);
+  };
+
+  const todayMs = parseUtcDate(todayUtc);
+  const mostRecentMs = parseUtcDate(claimDates[0]);
+  const daysSinceMostRecent = Math.round((todayMs - mostRecentMs) / oneDayMs);
+
+  if (daysSinceMostRecent > 1) return 0;
+
+  let streak = 1;
+  let previousMs = mostRecentMs;
+
+  for (let i = 1; i < claimDates.length; i++) {
+    const currentMs = parseUtcDate(claimDates[i]);
+    const gapDays = Math.round((previousMs - currentMs) / oneDayMs);
+
+    if (gapDays === 0) continue; // defensive: shouldn't happen given unique(user_id, claim_date)
+    if (gapDays === 1) {
+      streak += 1;
+      previousMs = currentMs;
+    } else {
+      break;
+    }
+  }
+
+  return streak;
+}

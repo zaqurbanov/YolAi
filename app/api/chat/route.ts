@@ -5,9 +5,11 @@ import {
   APICallError,
   RetryError,
   type UIMessage,
+  type FileUIPart,
 } from 'ai';
-import { getChatModel, getChatModelFallback, getChatModelId, getChatModelFallbackId, getProviderCallOptions } from '@/lib/llm';
+import { getChatModel, getChatModelFallback, getChatModelId, getChatModelFallbackId, getProviderCallOptions, isVisionAvailable } from '@/lib/llm';
 import { streamTextWithFallback } from '@/lib/llm/streamWithFallback';
+import { identifySignFromImage } from '@/lib/rag/identifySignFromImage';
 import { retrieveRelevantChunks, retrievePerDocumentChunks, retrieveChunksByArticle, type RetrievedChunk } from '@/lib/retrieval/search';
 import { extractArticleReferences, articleLabelPrefixes, isPureArticleReferenceQuery } from '@/lib/retrieval/articleQuery';
 import { buildSystemPrompt, buildContextBlock, buildCitations, filterCitedChunks } from '@/lib/rag/buildPrompt';
@@ -21,8 +23,53 @@ import { checkChatRateLimit } from '@/lib/chat/rateLimit';
 import { checkAndReserveCoins, debitCoins } from '@/lib/chat/coins';
 
 const MESSAGE_WINDOW = 10;
+const IMAGE_PLACEHOLDER_CONTENT = '[Şəkil göndərildi]';
 
 export const maxDuration = 60;
+
+function findImagePart(message: UIMessage | undefined): FileUIPart | null {
+  const part = message?.parts?.find(
+    (p): p is FileUIPart => p.type === 'file' && p.mediaType?.startsWith('image/'),
+  );
+  return part ?? null;
+}
+
+function parseDataUrl(url: string): { buffer: Buffer; mediaType: string } | null {
+  const match = /^data:([^;]+);base64,(.+)$/.exec(url);
+  if (!match) return null;
+  const [, mediaType, base64] = match;
+  return { buffer: Buffer.from(base64, 'base64'), mediaType };
+}
+
+// Writes into the private 'chat-images' bucket (0054) via the service-role
+// client, mirroring the 'documents' bucket upload pattern in
+// app/api/admin/documents/route.ts — the only difference is this path is
+// reachable by any authenticated (coin-gated) user, not just admins, since
+// it's the user's own photo, not an admin-managed document. Returns null
+// (rather than throwing) on failure so a storage hiccup degrades to "answer
+// without a persisted image" instead of failing the whole chat request —
+// the identification/retrieval/answer flow does not depend on this upload.
+async function uploadChatImage(conversationId: string, imagePart: FileUIPart): Promise<string | null> {
+  const parsed = parseDataUrl(imagePart.url);
+  if (!parsed) {
+    console.error('[chat] chat image part was not a data: URL, skipping upload');
+    return null;
+  }
+
+  const ext = parsed.mediaType.split('/')[1]?.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'jpg';
+  const storagePath = `${conversationId}/${crypto.randomUUID()}.${ext}`;
+
+  const { error } = await createAdminClient()
+    .storage.from('chat-images')
+    .upload(storagePath, parsed.buffer, { contentType: parsed.mediaType });
+
+  if (error) {
+    console.error('[chat] failed to upload chat image:', error);
+    return null;
+  }
+
+  return storagePath;
+}
 
 function toClientErrorMessage(error: unknown): string {
   const cause = RetryError.isInstance(error) ? error.lastError : error;
@@ -111,6 +158,23 @@ export async function POST(request: Request) {
 
   const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user');
   const query = lastUserMessage?.parts?.map((p) => ('text' in p ? p.text : '')).join(' ') ?? '';
+  const imagePart = findImagePart(lastUserMessage);
+
+  // isVisionAvailable() is a sync, no-network check — safe to gate here,
+  // before any DB call (user/profile lookup, coin reservation, conversation
+  // creation) or retrieval, so an unsupported-config request costs nothing.
+  if (imagePart && !isVisionAvailable()) {
+    return apiError(422, 'Şəkil analizi hazırda əlçatan deyil. Zəhmət olmasa sualınızı mətn kimi yazın.', {
+      code: 'vision_unavailable',
+    });
+  }
+
+  // The user-facing persisted content for an image message is the typed
+  // caption if any, else a fixed placeholder — never the vision model's
+  // internal identification string (see identifySignFromImage.ts), which is
+  // only ever used as an ephemeral retrieval query below, not as "what the
+  // user said".
+  const userMessageContent = imagePart ? (query.trim() || IMAGE_PLACEHOLDER_CONTENT) : query;
 
   const supabase = await createClient();
   const {
@@ -176,6 +240,14 @@ export async function POST(request: Request) {
     coinBalance = balance;
   }
 
+  // Kicked off only after coin gating has passed (or been bypassed for
+  // admin/anonymous requests) — this is a real vision LLM call and must
+  // respect the same "no LLM call before the coin gate" invariant as the
+  // main chat model below. Run concurrently with the conversation/message
+  // persistence work right below (which doesn't depend on it) and only
+  // awaited once its result is actually needed, ahead of rewriteQuery.
+  const identifyPromise: Promise<string> | null = imagePart ? identifySignFromImage(imagePart) : null;
+
   let conversation: ConversationState | null = null;
   // Reserved synchronously (before streaming starts) so the id is available to
   // `messageMetadata` on every streamed chunk. `messageMetadata` in the installed
@@ -189,10 +261,18 @@ export async function POST(request: Request) {
   if (user) {
     try {
       conversation = await getOrCreateConversation(user.id, conversationId);
+
+      // Not awaited concurrently with identifyPromise above (it needs
+      // conversation.id, which wasn't known until the line above) — but it's
+      // a plain storage write, not an LLM call, so serializing it here adds
+      // negligible latency next to the vision call it runs alongside.
+      const imagePath = imagePart ? await uploadChatImage(conversation.id, imagePart) : null;
+
       await supabase.from('messages').insert({
         conversation_id: conversation.id,
         role: 'user',
-        content: query,
+        content: userMessageContent,
+        image_path: imagePath,
       });
 
       const { data: placeholder, error: placeholderError } = await supabase
@@ -214,7 +294,7 @@ export async function POST(request: Request) {
       // request just to name the chat.
       const conversationUpdate: Record<string, unknown> = { updated_at: new Date().toISOString() };
       if (conversation.title === null) {
-        conversationUpdate.title = truncateTitle(query);
+        conversationUpdate.title = truncateTitle(userMessageContent);
       }
       const { error: touchError } = await supabase
         .from('conversations')
@@ -229,8 +309,25 @@ export async function POST(request: Request) {
     }
   }
 
+  // For an image message, everything downstream that would normally operate
+  // on the raw typed query (rewriteQuery, the raw-query retrieval hedge,
+  // article-number detection, trigram search, rerank's relevance judge)
+  // instead operates on the vision model's short identification string —
+  // the raw query here is just the caption/placeholder, which usually isn't
+  // a meaningful retrieval signal on its own. buildContextBlock/
+  // buildCitations/buildSystemPrompt are untouched — they only ever see
+  // whatever relevantChunks retrieval returns for retrievalSourceText.
+  let retrievalSourceText = query;
+  if (imagePart && identifyPromise) {
+    try {
+      retrievalSourceText = await identifyPromise;
+    } catch (err) {
+      console.error('[chat] identifySignFromImage failed, falling back to raw query text:', err);
+    }
+  }
+
   const rewriteStart = performance.now();
-  const retrievalQuery = await rewriteQuery(query, conversation?.contextSummary);
+  const retrievalQuery = await rewriteQuery(retrievalSourceText, conversation?.contextSummary);
   const rewriteMs = performance.now() - rewriteStart;
 
   // Primary corpus-wide search, plus (unless the UI already scoped this chat
@@ -257,7 +354,7 @@ export async function POST(request: Request) {
   // Skipped when rewriting left the query unchanged (isAlreadySpecific/
   // failure fallback in rewriteQuery.ts), since it would just be a duplicate
   // of the primary call below.
-  const rawQueryDiffersFromRewrite = retrievalQuery !== query;
+  const rawQueryDiffersFromRewrite = retrievalQuery !== retrievalSourceText;
 
   // Article-number fast path (0032) — detected off the RAW query only, never
   // the rewritten one (rewriteQuery.ts can hallucinate/drift, and an
@@ -270,15 +367,15 @@ export async function POST(request: Request) {
   // case to also save that cost on the primary/per-document searches. Never
   // skipped when there's substantial additional free text alongside the
   // article number, since trigram still adds value there.
-  const articleRefs = extractArticleReferences(query);
+  const articleRefs = extractArticleReferences(retrievalSourceText);
   const articlePrefixes = articleLabelPrefixes(articleRefs);
-  const skipTrigram = isPureArticleReferenceQuery(query, articleRefs);
-  const ftsQueryForSearch = skipTrigram ? undefined : query;
+  const skipTrigram = isPureArticleReferenceQuery(retrievalSourceText, articleRefs);
+  const ftsQueryForSearch = skipTrigram ? undefined : retrievalSourceText;
 
   const [primaryResult, rawQueryResult, perDocumentResult, articleResult] = await Promise.all([
     retrieveRelevantChunks({ embedQuery: retrievalQuery, ftsQuery: ftsQueryForSearch, documentId }),
     rawQueryDiffersFromRewrite
-      ? retrieveRelevantChunks({ embedQuery: query, ftsQuery: ftsQueryForSearch, documentId })
+      ? retrieveRelevantChunks({ embedQuery: retrievalSourceText, ftsQuery: ftsQueryForSearch, documentId })
       : null,
     documentId ? null : retrievePerDocumentChunks(retrievalQuery, ftsQueryForSearch),
     articlePrefixes.length > 0 ? retrieveChunksByArticle(retrievalQuery, articlePrefixes) : null,
@@ -311,7 +408,7 @@ export async function POST(request: Request) {
     (perDocumentResult?.dbSearchMs ?? 0) +
     (articleResult?.dbSearchMs ?? 0);
 
-  const { keptIds, rerankMs } = await rerankChunks(query, initialChunks);
+  const { keptIds, rerankMs } = await rerankChunks(retrievalSourceText, initialChunks);
   let relevantChunks: RetrievedChunk[];
   if (keptIds) {
     const chunkById = new Map(initialChunks.map((c) => [c.id, c]));

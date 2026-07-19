@@ -1,3 +1,4 @@
+import { isVisionAvailable } from '@/lib/llm';
 import ChatClient from '../ChatClient';
 
 // key={id} forces a full remount (fresh history fetch, fresh transport ref)
@@ -8,5 +9,5 @@ import ChatClient from '../ChatClient';
 export default async function ChatConversationPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
-  return <ChatClient key={id} conversationId={id} />;
+  return <ChatClient key={id} conversationId={id} visionAvailable={isVisionAvailable()} />;
 }

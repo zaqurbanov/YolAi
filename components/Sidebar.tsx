@@ -13,7 +13,7 @@ import { getSiteLogoUrl } from '@/lib/content/getSiteLogoUrl';
 const NAV_ITEMS = [
   { href: '/', label: 'Ana Səhifə', icon: 'home' as const },
   { href: '/chat', label: 'Söhbət', icon: 'chat' as const },
-  { href: '/qaydalar', label: 'Qaydalar', icon: 'rules' as const },
+  { href: '/oyrenme', label: 'Sürücülük vəsiqəsini al', icon: 'rules' as const },
   { href: '/account', label: 'Ayarlar', icon: 'settings' as const },
 ];
 
@@ -39,7 +39,7 @@ export default async function Sidebar() {
   const navItems = user ? NAV_ITEMS : NAV_ITEMS.filter((item) => item.href !== '/account');
 
   return (
-    <SidebarShell>
+    <SidebarShell isAuthenticated={!!user}>
       <Link href="/" className="flex items-center gap-3 px-5 py-5">
         {/* White chip only for the static /logo.png fallback (an opaque PNG
             with no alpha channel) — an admin-uploaded logo is assumed to

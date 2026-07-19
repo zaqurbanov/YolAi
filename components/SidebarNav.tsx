@@ -31,6 +31,7 @@ export function SidebarNav({ items }: { items: NavItem[] }) {
           <Link
             key={href}
             href={href}
+            data-tour={`nav-${href}`}
             onClick={() => {
               if (isMobile) close();
             }}

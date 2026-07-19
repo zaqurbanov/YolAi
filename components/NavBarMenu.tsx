@@ -6,6 +6,7 @@ import { buttonVariants } from '@heroui/styles';
 import { Popover } from '@heroui/react';
 import { logout } from '@/app/(auth)/actions';
 import { MoreIcon } from '@/components/icons';
+import { useTour } from '@/components/onboarding/TourProvider';
 
 interface NavBarMenuProps {
   hasUser: boolean;
@@ -20,6 +21,7 @@ interface NavBarMenuProps {
 export default function NavBarMenu({ hasUser, isAdmin }: NavBarMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const closeMenu = () => setIsOpen(false);
+  const { start: startTour } = useTour();
 
   const ghostItem = `${buttonVariants({ variant: 'ghost', size: 'sm' })} w-full justify-start`;
   const secondaryItem = `${buttonVariants({ variant: 'secondary', size: 'sm' })} w-full justify-start`;
@@ -54,6 +56,16 @@ export default function NavBarMenu({ hasUser, isAdmin }: NavBarMenuProps) {
                 <Link href="/account" className={ghostItem} onClick={closeMenu}>
                   Hesab
                 </Link>
+                <button
+                  type="button"
+                  className={ghostItem}
+                  onClick={() => {
+                    closeMenu();
+                    startTour();
+                  }}
+                >
+                  Turu yenidən göstər
+                </button>
                 <form action={logout} onSubmit={closeMenu}>
                   <button type="submit" className={secondaryItem}>
                     Çıxış
