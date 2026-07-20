@@ -58,6 +58,37 @@
 --     user_quiz_answers (0051), daily_quiz_claims (0042), ad_watch_claims
 --     (0053).
 
+-- ---------------------------------------------------------------------------
+-- RE-RUN GUARD
+--
+-- The first attempt at this migration aborted partway (`42P01: relation
+-- "user_course_unlocks" does not exist` -- lesson_topics' RLS policy
+-- subqueried a table that was declared further down; that ordering is fixed
+-- below). Depending on whether the SQL editor wrapped the script in a
+-- transaction, that attempt may have left lesson_courses / lesson_topics
+-- already created, which would make a straight re-run fail on "already
+-- exists" instead.
+--
+-- These drops make the file safe to run from either state. They are scoped to
+-- exactly the objects THIS migration creates and nothing else -- note in
+-- particular that quiz_questions itself is never dropped, only the topic_id
+-- column this migration adds to it. All five tables are new here, so there is
+-- no user data to lose. Once this migration has applied cleanly, this block is
+-- a no-op on every subsequent run.
+-- ---------------------------------------------------------------------------
+drop function if exists unlock_lesson_course(uuid, uuid, numeric);
+drop function if exists purchase_lesson_retry(uuid, uuid, numeric);
+drop function if exists record_lesson_attempt(uuid, uuid, int, int, int);
+drop function if exists reorder_lesson_topics(uuid, uuid[]);
+
+alter table quiz_questions drop column if exists topic_id;
+
+drop table if exists lesson_attempts cascade;
+drop table if exists user_topic_progress cascade;
+drop table if exists user_course_unlocks cascade;
+drop table if exists lesson_topics cascade;
+drop table if exists lesson_courses cascade;
+
 -- lesson_courses: one row per document an admin has turned into a course.
 --
 -- document_id is `on delete cascade` -- a course has no meaning without its
@@ -126,6 +157,46 @@ create index lesson_courses_document_id_idx on lesson_courses (document_id);
 -- new indexes and the constraint is checked once at commit.
 -- NOTE: a deferrable unique constraint cannot back an ON CONFLICT clause. No
 -- code path upserts on (course_id, order_index), and none should be added.
+-- user_course_unlocks: the purchase ledger AND the authorization record.
+--
+-- DEFINED BEFORE lesson_topics ON PURPOSE: lesson_topics' RLS policy below
+-- subqueries this table, and Postgres resolves relation names when the policy
+-- is created, not when it is evaluated. Declaring it later made the whole
+-- migration abort with `42P01: relation "user_course_unlocks" does not exist`.
+-- If these blocks are ever reordered again, this dependency has to move with
+-- them.
+--
+-- unique (user_id, course_id) is what makes unlock_lesson_course idempotent
+-- under a double-submit or a race -- the second concurrent call blocks on the
+-- user_coins row lock, then loses the insert and raises 'already_unlocked'
+-- rather than debiting a second time.
+--
+-- price_paid records the price AT PURCHASE TIME, not the current price: it is
+-- an audit trail of what the user was actually charged and must never be read
+-- back as "the current price" (that always resolves from
+-- lesson_courses.unlock_price or app_settings).
+create table user_course_unlocks (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references profiles(id) on delete cascade,
+  course_id uuid not null references lesson_courses(id) on delete cascade,
+  price_paid numeric(10,2) not null check (price_paid >= 0),
+  unlocked_at timestamptz not null default now(),
+  unique (user_id, course_id)
+);
+
+alter table user_course_unlocks enable row level security;
+
+create policy user_course_unlocks_select_own
+  on user_course_unlocks for select
+  to authenticated
+  using (user_id = auth.uid());
+
+-- getCourses() reads all of a user's unlocks in one query per page load;
+-- user_id alone is the whole access pattern. The unique constraint above
+-- separately covers the (user_id, course_id) point lookup used by the
+-- lesson_topics RLS policy.
+create index user_course_unlocks_user_id_idx on user_course_unlocks (user_id);
+
 create table lesson_topics (
   id uuid primary key default gen_random_uuid(),
   course_id uuid not null references lesson_courses(id) on delete cascade,
@@ -184,39 +255,6 @@ alter table quiz_questions
 -- The Phase 2 hot query is "published questions for one topic", which is then
 -- sampled down to lesson_topic_questions_per_attempt in the application.
 create index quiz_questions_topic_status_idx on quiz_questions (topic_id, status);
-
--- user_course_unlocks: the purchase ledger AND the authorization record.
---
--- unique (user_id, course_id) is what makes unlock_lesson_course idempotent
--- under a double-submit or a race -- the second concurrent call blocks on the
--- user_coins row lock, then loses the insert and raises 'already_unlocked'
--- rather than debiting a second time.
---
--- price_paid records the price AT PURCHASE TIME, not the current price: it is
--- an audit trail of what the user was actually charged and must never be read
--- back as "the current price" (that always resolves from
--- lesson_courses.unlock_price or app_settings).
-create table user_course_unlocks (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references profiles(id) on delete cascade,
-  course_id uuid not null references lesson_courses(id) on delete cascade,
-  price_paid numeric(10,2) not null check (price_paid >= 0),
-  unlocked_at timestamptz not null default now(),
-  unique (user_id, course_id)
-);
-
-alter table user_course_unlocks enable row level security;
-
-create policy user_course_unlocks_select_own
-  on user_course_unlocks for select
-  to authenticated
-  using (user_id = auth.uid());
-
--- getCourses() reads all of a user's unlocks in one query per page load;
--- user_id alone is the whole access pattern. The unique constraint above
--- separately covers the (user_id, course_id) point lookup used by the
--- lesson_topics RLS policy.
-create index user_course_unlocks_user_id_idx on user_course_unlocks (user_id);
 
 -- user_topic_progress: the per-(user, topic) rollup. Derivable from
 -- lesson_attempts by aggregation, and stored anyway -- the gate "is the next
