@@ -2,7 +2,7 @@ import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 const ENV_DEFAULT_MAX_PER_WINDOW = Number(process.env.CHAT_RATE_LIMIT_MAX_PER_DAY ?? 20);
-// Exported so app/api/chat/history/route.ts (GET ?type=quota) can replicate the window-expiry
+// Exported so app/api/chat/route.ts (GET ?type=quota) can replicate the window-expiry
 // check when reading current usage without calling the incrementing RPC.
 export const WINDOW_SECONDS = Number(process.env.CHAT_RATE_LIMIT_WINDOW_SECONDS ?? 86400);
 const MIN_SPACING_SECONDS = Number(process.env.CHAT_RATE_LIMIT_MIN_SPACING_SECONDS ?? 4);

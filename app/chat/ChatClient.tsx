@@ -472,7 +472,7 @@ export default function ChatClient({ conversationId: initialConversationId, visi
     function handleConversationChanged(e: Event) {
       const id = (e as CustomEvent<{ id: string }>).detail?.id;
       if (!id || id !== conversationIdRef.current) return;
-      fetch(`/api/chat/history?conversationId=${encodeURIComponent(id)}`)
+      fetch(`/api/chat?type=history&conversationId=${encodeURIComponent(id)}`)
         .then((res) => (res.ok ? res.json() : null))
         .then((data: { title: string | null } | null) => {
           if (data) setConversationTitle(data.title ?? null);
@@ -638,7 +638,7 @@ export default function ChatClient({ conversationId: initialConversationId, visi
     let cancelled = false;
     async function loadCoins() {
       try {
-        const res = await fetch('/api/chat/history?type=quota');
+        const res = await fetch('/api/chat?type=quota');
         if (!res.ok) return;
         const data: { exempt: boolean; balance?: number; price?: number } = await res.json();
         if (cancelled || data.exempt) return;
@@ -684,7 +684,7 @@ export default function ChatClient({ conversationId: initialConversationId, visi
   }, [messages]);
 
   // Backfills messageId onto already-hydrated historical assistant messages once
-  // we learn the session is admin — /api/chat/history isn't itself admin-gated
+  // we learn the session is admin — /api/chat?type=history isn't itself admin-gated
   // (it returns the real row id to everyone), so history hydration can't set
   // messageId unconditionally without leaking the icon to non-admins. This runs
   // regardless of whether admin status resolves before or after history loads.
@@ -723,7 +723,7 @@ export default function ChatClient({ conversationId: initialConversationId, visi
         return;
       }
       try {
-        const res = await fetch(`/api/chat/history?conversationId=${encodeURIComponent(initialConversationId)}`);
+        const res = await fetch(`/api/chat?type=history&conversationId=${encodeURIComponent(initialConversationId)}`);
         if (res.status === 404) {
           // Invalid/foreign id — treat as "start a fresh new chat", not a
           // blank/broken state.
@@ -910,7 +910,7 @@ export default function ChatClient({ conversationId: initialConversationId, visi
     }
     setIsDeletingHistory(true);
     try {
-      const res = await fetch(`/api/chat/history?conversationId=${encodeURIComponent(conversationId)}`, {
+      const res = await fetch(`/api/chat?type=history&conversationId=${encodeURIComponent(conversationId)}`, {
         method: 'DELETE',
       });
       if (!res.ok) {
@@ -936,7 +936,7 @@ export default function ChatClient({ conversationId: initialConversationId, visi
       return null;
     }
     try {
-      const res = await fetch(`/api/chat/history?action=share&conversationId=${encodeURIComponent(conversationId)}`, {
+      const res = await fetch(`/api/chat?type=history&action=share&conversationId=${encodeURIComponent(conversationId)}`, {
         method: 'POST',
       });
       if (!res.ok) {

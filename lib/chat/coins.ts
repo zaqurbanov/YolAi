@@ -129,7 +129,7 @@ export async function debitCoins(userId: string, price: number): Promise<number 
   return typeof data === 'number' ? data : null;
 }
 
-// Read-only balance lookup for GET /api/chat/history?type=quota and the account page —
+// Read-only balance lookup for GET /api/chat?type=quota and the account page —
 // deliberately bypasses check_and_reserve_coins (which inserts/locks/resets)
 // and reads user_coins directly via the service-role client. Reapplies the
 // same "24h since last_reset_at -> raise balance to the floor if below it" rule the SQL

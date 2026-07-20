@@ -1,6 +1,7 @@
+'use client';
+
 import Link from 'next/link';
 import Image from 'next/image';
-import { createClient } from '@/lib/supabase/server';
 import { SidebarToggleButton } from '@/components/SidebarToggleButton';
 import { BackButton } from '@/components/BackButton';
 import CoinBadge from '@/components/CoinBadge';
@@ -8,26 +9,17 @@ import NotificationBell from '@/components/NotificationBell';
 import NavBarMenu from '@/components/NavBarMenu';
 import ThemeToggle from '@/components/ThemeToggle';
 import { CoinIcon } from '@/components/icons';
-import { getUnreadCount, getRecentNotifications } from '@/lib/notifications/notifications';
-import { getSiteLogoUrl } from '@/lib/content/getSiteLogoUrl';
+import { useNavState } from '@/components/useNavState';
 
-export default async function NavBar() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const logoUrl = (await getSiteLogoUrl()) ?? '/logo.png';
-
-  let isAdmin = false;
-  if (user) {
-    const { data: profile, error } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-    if (error) console.error('[NavBar] profiles query failed', error);
-    isAdmin = profile?.role === 'admin';
-  }
-
-  const [unreadCount, recentNotifications] = user
-    ? await Promise.all([getUnreadCount(user.id), getRecentNotifications(user.id)])
-    : [0, []];
+// Client component on purpose. It used to be an async server component
+// calling createClient() -> cookies(), and because it renders in the ROOT
+// layout that forced EVERY page in the app to render dynamically — including
+// pages with no auth needs, which is expensive against the Vercel Hobby
+// serverless-function cap (see CLAUDE.md). Fetching the same data after mount
+// keeps one nav implementation instead of forking a static-only variant.
+export default function NavBar() {
+  const nav = useNavState();
+  const logoUrl = nav?.logoUrl ?? '/logo.png';
 
   return (
     <nav className="border-b px-3 py-3 flex items-center justify-between gap-2 sm:px-6">
@@ -64,25 +56,34 @@ export default async function NavBar() {
         </Link>
       </div>
       <div className="flex shrink-0 items-center gap-1 text-sm sm:gap-2">
-        {user && !isAdmin && (
-          <Link
-            href="/coin-qazan"
-            data-tour="coin-qazan-link"
-            className="glass-card mono-label flex items-center gap-1.5 rounded-full px-3 py-1.5 text-on-surface transition-colors hover:bg-surface-tertiary/60"
-          >
-            <CoinIcon width={14} height={14} />
-            <span className="hidden sm:inline">Coin qazan</span>
-          </Link>
-        )}
-        {user && !isAdmin && <CoinBadge />}
-        {user && (
-          <NotificationBell
-            initialUnreadCount={unreadCount}
-            initialNotifications={recentNotifications}
-          />
+        {/* Nothing auth-dependent renders until nav state is known — a fixed
+            min-width placeholder holds the slot so the icon cluster doesn't
+            shift when it resolves. */}
+        {nav === null ? (
+          <span aria-hidden className="h-8 w-16 rounded-full bg-surface-hover/40 sm:w-40" />
+        ) : (
+          <>
+            {nav.user && !nav.isAdmin && (
+              <Link
+                href="/coin-qazan"
+                data-tour="coin-qazan-link"
+                className="glass-card mono-label flex items-center gap-1.5 rounded-full px-3 py-1.5 text-on-surface transition-colors hover:bg-surface-tertiary/60"
+              >
+                <CoinIcon width={14} height={14} />
+                <span className="hidden sm:inline">Coin qazan</span>
+              </Link>
+            )}
+            {nav.user && !nav.isAdmin && <CoinBadge />}
+            {nav.user && (
+              <NotificationBell
+                initialUnreadCount={nav.unreadCount}
+                initialNotifications={nav.notifications}
+              />
+            )}
+          </>
         )}
         <ThemeToggle />
-        <NavBarMenu hasUser={!!user} isAdmin={isAdmin} />
+        {nav !== null && <NavBarMenu hasUser={!!nav.user} isAdmin={nav.isAdmin} />}
       </div>
     </nav>
   );

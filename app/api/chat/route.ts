@@ -16,12 +16,25 @@ import { buildSystemPrompt, buildContextBlock, buildCitations, filterCitedChunks
 import { shouldUpdateSummary, updateContextSummary } from '@/lib/rag/contextSummary';
 import { rewriteQuery } from '@/lib/rag/rewriteQuery';
 import { rerankChunks } from '@/lib/rag/rerank';
+import { randomBytes } from 'crypto';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { apiError, serverError, unauthorized } from '@/lib/api/errors';
+import { apiError, notFound, serverError, unauthorized } from '@/lib/api/errors';
 import { checkChatRateLimit } from '@/lib/chat/rateLimit';
-import { checkAndReserveCoins, debitCoins } from '@/lib/chat/coins';
+import {
+  checkAndReserveCoins,
+  debitCoins,
+  getCoinBalanceStatus,
+  DEFAULT_DAILY_LIMIT,
+} from '@/lib/chat/coins';
 import { claimPendingReferral } from '@/lib/coins/referrals';
+
+// Conversation history / quota used to live at app/api/chat/history/route.ts.
+// Folded in here behind `?type=history` (`?type=quota` for the balance probe)
+// to stay under the Vercel Hobby serverless-function cap — see CLAUDE.md.
+// The streaming RAG endpoint is the no-`type` POST. Every handler below
+// authenticates FIRST, unconditionally, before looking at `type`.
+type ServerSupabase = Awaited<ReturnType<typeof createClient>>;
 
 const MESSAGE_WINDOW = 10;
 const IMAGE_PLACEHOLDER_CONTENT = '[Şəkil göndərildi]';
@@ -110,6 +123,29 @@ async function getOrCreateConversation(userId: string, conversationId?: string):
 }
 
 export async function POST(request: Request) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  // Hard auth gate, first statement after resolving the caller and before any
+  // branching. Everything below (rate limiting, coin reservation, the coin
+  // debit in onFinish) is scoped by `if (user && !isAdmin)`, so an anonymous
+  // caller previously fell through ALL of it and got unmetered,
+  // unauthenticated access to the LLM — confirmed live: a plain
+  // `curl -X POST /api/chat` with no cookie returned a full streamed
+  // response, billed to this project's provider keys. proxy.ts does not help
+  // here: it only guards page prefixes ('/chat', '/admin', '/account',
+  // '/oyrenme'), and '/api/chat' matches none of them. There is no legitimate
+  // anonymous entry point — the chat UI itself sits behind that same proxy
+  // guard — so this rejects rather than degrades. It also covers the
+  // folded-in `?type=history` operations below.
+  if (!user) return unauthorized();
+
+  if (new URL(request.url).searchParams.get('type') === 'history') {
+    return historyPost(request, supabase, user.id);
+  }
+
   const requestId = crypto.randomUUID();
   let messages: UIMessage[];
   let documentId: string | undefined;
@@ -139,23 +175,6 @@ export async function POST(request: Request) {
   // only ever used as an ephemeral retrieval query below, not as "what the
   // user said".
   const userMessageContent = imagePart ? (query.trim() || IMAGE_PLACEHOLDER_CONTENT) : query;
-
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  // Hard auth gate. Everything below (rate limiting, coin reservation, the
-  // coin debit in onFinish) is scoped by `if (user && !isAdmin)`, so an
-  // anonymous caller previously fell through ALL of it and got unmetered,
-  // unauthenticated access to the LLM — confirmed live: a plain
-  // `curl -X POST /api/chat` with no cookie returned a full streamed
-  // response, billed to this project's provider keys. proxy.ts does not
-  // help here: it only guards page prefixes ('/chat', '/admin', '/account',
-  // '/oyrenme'), and '/api/chat' matches none of them. There is no
-  // legitimate anonymous entry point — the chat UI itself sits behind that
-  // same proxy guard — so this rejects rather than degrades.
-  if (!user) return unauthorized();
 
   const userName =
     user?.user_metadata?.full_name ?? user?.user_metadata?.name ?? (user?.email ? user.email.split('@')[0] : null) ?? null;
@@ -647,4 +666,241 @@ export async function POST(request: Request) {
       },
     }),
   });
+}
+
+export async function GET(request: Request) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return unauthorized();
+
+  const { searchParams } = new URL(request.url);
+  const type = searchParams.get('type');
+
+  // Deliberately NOT behind requireAdmin(): quota and conversation history are
+  // ordinary authenticated-user reads, scoped by RLS to the caller's own rows.
+  if (type === 'quota') {
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+
+    if (error) return serverError(error, 'Profil məlumatı alınmadı');
+
+    if (profile.role === 'admin') {
+      return Response.json({ exempt: true });
+    }
+
+    const { balance, dailyLimit, price, msUntilReset } = await getCoinBalanceStatus(user.id);
+
+    return Response.json({
+      exempt: false,
+      balance,
+      dailyLimit: dailyLimit ?? DEFAULT_DAILY_LIMIT,
+      price,
+      msUntilReset,
+    });
+  }
+
+  if (type !== 'history') return apiError(400, 'type parametri düzgün deyil');
+
+  const conversationId = searchParams.get('conversationId');
+
+  if (!conversationId) {
+    // Untitled conversations are always empty (title is only ever set once
+    // the first message lands — see the auto-title logic in POST above) and
+    // are meant to be transient: a "+ Yeni söhbət" click that never got a
+    // first message shouldn't clutter the sidebar as a ghost "Untitled"
+    // entry. Excluding them here is the read-side half of that; the
+    // write-side half (actually deleting them) happens below when their own
+    // conversationId is fetched and found empty.
+    const { data: conversations, error } = await supabase
+      .from('conversations')
+      .select('id, title, created_at, updated_at')
+      .eq('user_id', user.id)
+      .not('title', 'is', null)
+      .order('updated_at', { ascending: false });
+
+    if (error) return serverError(error, 'Söhbətlər siyahısını yükləmək uğursuz oldu');
+
+    return Response.json({ conversations: conversations ?? [] });
+  }
+
+  // RLS (conversations_select_own) is the real enforcement layer here; the
+  // .eq('user_id', ...) below is defense-in-depth, not a substitute for it.
+  const { data: conversation, error: conversationError } = await supabase
+    .from('conversations')
+    .select('id, title')
+    .eq('id', conversationId)
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  if (conversationError) return serverError(conversationError, 'Söhbəti yükləmək uğursuz oldu');
+  if (!conversation) return notFound('Söhbət tapılmadı');
+
+  const { data: messages, error } = await supabase
+    .from('messages')
+    .select('id, role, content, citations, created_at')
+    .eq('conversation_id', conversationId)
+    .order('created_at', { ascending: true });
+
+  if (error) return serverError(error, 'Söhbət tarixçəsini yükləmək uğursuz oldu');
+
+  // Unnamed conversations are always meant to be temporary — a
+  // "+ Yeni söhbət" click that's never actually used (no message ever sent,
+  // so title was never auto-set) shouldn't survive a page refresh as an
+  // empty, permanent row. Deleting here (rather than only hiding it from the
+  // list above) means visiting its URL again — the exact "create then
+  // refresh" scenario — cleans it up and reports 404, which ChatClient.tsx's
+  // history-load effect already treats as "start a fresh new chat"
+  // (router.replace('/chat')), so no separate client-side handling is needed.
+  if ((messages ?? []).length === 0) {
+    await supabase.from('conversations').delete().eq('id', conversationId).eq('user_id', user.id);
+    return notFound('Söhbət tapılmadı');
+  }
+
+  return Response.json({ messages, title: conversation.title });
+}
+
+// Called only from POST above, after its unconditional auth gate.
+async function historyPost(request: Request, supabase: ServerSupabase, userId: string) {
+  const { searchParams } = new URL(request.url);
+
+  if (searchParams.get('action') === 'share') {
+    const conversationId = searchParams.get('conversationId');
+    if (!conversationId) {
+      return apiError(400, 'conversationId parametri tələb olunur', { code: 'missing_conversation_id' });
+    }
+
+    const { data: existing, error: fetchError } = await supabase
+      .from('conversations')
+      .select('share_token')
+      .eq('id', conversationId)
+      .maybeSingle();
+
+    if (fetchError) return serverError(fetchError, 'Söhbəti paylaşmaq uğursuz oldu');
+
+    let token = existing?.share_token ?? null;
+
+    if (!token) {
+      token = randomBytes(24).toString('base64url');
+
+      // RLS conversations_update_own (0004) scopes this to auth.uid() = user_id,
+      // so this can only ever touch the caller's own conversation.
+      const { error: updateError } = await supabase
+        .from('conversations')
+        .update({ share_token: token })
+        .eq('id', conversationId)
+        .eq('user_id', userId);
+
+      if (updateError) return serverError(updateError, 'Söhbəti paylaşmaq uğursuz oldu');
+    }
+
+    return Response.json({ url: `/share/${token}` });
+  }
+
+  // Opportunistic cleanup: an untitled conversation is by definition empty
+  // (title is only ever set alongside the first message) and meant to be
+  // temporary. A user who repeatedly clicks "+ Yeni söhbət" without sending
+  // anything would otherwise leave orphaned empty rows behind indefinitely
+  // (the refresh-time cleanup in GET above only fires if that exact draft's
+  // URL is revisited) — clearing them here, right before starting a fresh
+  // draft, keeps at most one abandoned empty conversation alive at a time
+  // instead of accumulating. Not `error`-checked since a failed cleanup
+  // shouldn't block creating the new conversation.
+  await supabase.from('conversations').delete().eq('user_id', userId).is('title', null);
+
+  const { data: created, error } = await supabase
+    .from('conversations')
+    .insert({ user_id: userId, title: null })
+    .select('id')
+    .single();
+
+  if (error) return serverError(error, 'Yeni söhbət yaratmaq uğursuz oldu');
+
+  return Response.json({ id: created.id }, { status: 201 });
+}
+
+export async function PATCH(request: Request) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return unauthorized();
+
+  if (new URL(request.url).searchParams.get('type') !== 'history') {
+    return apiError(400, 'type parametri düzgün deyil');
+  }
+
+  const body = await request.json().catch(() => null);
+  const conversationId = body?.conversationId;
+  const title = body?.title;
+
+  if (typeof conversationId !== 'string' || conversationId.trim().length === 0) {
+    return apiError(400, 'conversationId tələb olunur');
+  }
+  if (typeof title !== 'string' || title.trim().length === 0) {
+    return apiError(400, 'title boş ola bilməz');
+  }
+  if (title.length > 200) {
+    return apiError(400, 'title 200 simvoldan uzun ola bilməz');
+  }
+
+  const trimmedTitle = title.trim();
+
+  // RLS conversations_update_own (0004) is the real enforcement layer here
+  // (same policy the share_token flow already relies on); the
+  // .eq('user_id', ...) below is defense-in-depth, not a substitute for it.
+  const { error, count } = await supabase
+    .from('conversations')
+    .update({ title: trimmedTitle }, { count: 'exact' })
+    .eq('id', conversationId)
+    .eq('user_id', user.id);
+
+  if (error) return serverError(error, 'Söhbətin adını dəyişmək uğursuz oldu');
+  if (!count) {
+    return apiError(403, 'Söhbətin adını dəyişmək mümkün olmadı', { code: 'forbidden' });
+  }
+
+  return Response.json({ title: trimmedTitle });
+}
+
+export async function DELETE(request: Request) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return unauthorized();
+
+  const { searchParams } = new URL(request.url);
+
+  if (searchParams.get('type') !== 'history') {
+    return apiError(400, 'type parametri düzgün deyil');
+  }
+
+  const conversationId = searchParams.get('conversationId');
+
+  if (!conversationId) {
+    return apiError(400, 'conversationId tələb olunur');
+  }
+
+  // RLS (conversations_delete_own, 0005) is the real enforcement layer here;
+  // the .eq('user_id', ...) below is defense-in-depth, not a substitute for it.
+  const { error, count } = await supabase
+    .from('conversations')
+    .delete({ count: 'exact' })
+    .eq('id', conversationId)
+    .eq('user_id', user.id);
+
+  if (error) return serverError(error, 'Söhbəti silmək uğursuz oldu');
+  if (!count) {
+    return apiError(403, 'Söhbəti silmək mümkün olmadı', { code: 'forbidden' });
+  }
+
+  return Response.json({ deleted: true });
 }

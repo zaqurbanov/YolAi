@@ -1,15 +1,10 @@
 import { redirect } from 'next/navigation';
-import type { Metadata } from 'next';
 import { requireAdmin } from '@/lib/auth/requireAdmin';
 import { listQuestions } from '@/lib/admin/quizQuestions';
 import QuizPdfUploadForm from './QuizPdfUploadForm';
 import QuestionEditor from './QuestionEditor';
 
-export const metadata: Metadata = {
-  title: 'Test Sualları',
-};
-
-export default async function AdminQuizPage() {
+export default async function QuizSection() {
   const auth = await requireAdmin();
   if (!auth.ok) redirect(auth.status === 401 ? '/login' : '/chat');
 

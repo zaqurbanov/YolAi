@@ -1,5 +1,4 @@
 import { redirect } from 'next/navigation';
-import type { Metadata } from 'next';
 import Link from 'next/link';
 import { requireAdmin } from '@/lib/auth/requireAdmin';
 import { getAdminUsers } from '@/lib/admin/getUsers';
@@ -15,11 +14,7 @@ import SendPushReminderControl from './SendPushReminderControl';
 import EmbeddingModelControl from './EmbeddingModelControl';
 import LessonEconomyControl from './LessonEconomyControl';
 
-export const metadata: Metadata = {
-  title: 'İstifadəçilər',
-};
-
-export default async function AdminUsersPage() {
+export default async function UsersSection() {
   const auth = await requireAdmin();
   if (!auth.ok) redirect(auth.status === 401 ? '/login' : '/chat');
 

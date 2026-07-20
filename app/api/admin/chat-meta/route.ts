@@ -3,8 +3,14 @@ import { requireAdmin } from '@/lib/auth/requireAdmin';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getAdminUserConversations } from '@/lib/admin/getUserDetail';
-import { apiError, notFound, serverError } from '@/lib/api/errors';
+import { apiError, notFound, serverError, logApiError } from '@/lib/api/errors';
 import { getChatModelId } from '@/lib/llm';
+import { ingestDocument, reprocessDocument } from '@/lib/ingestion/ingestDocument';
+import { deleteDocuments } from '@/lib/documents/deleteDocuments';
+import { isStaleProcessing } from '@/lib/ingestion/staleness';
+import { generateQuestionsFromPdf } from '@/lib/quiz/generateQuestionsFromPdf';
+import { createDraftQuestions } from '@/lib/admin/quizQuestions';
+import { getUnreadCount, getRecentNotifications } from '@/lib/notifications/notifications';
 import { GLOBAL_DEFAULT_SETTING_KEY, ENV_DEFAULT_MAX_PER_WINDOW } from '@/lib/chat/rateLimit';
 import {
   COIN_PRICE_SETTING_KEY,
@@ -29,14 +35,20 @@ import {
   DEFAULT_AD_WATCH_DAILY_MAX,
 } from '@/lib/coins/adWatch';
 
+// Inherited from the folded-in documents/quiz-questions routes: PDF ingestion
+// and LLM question extraction over a full PDF are both slow. This applies to
+// the whole file, so the cheap settings branches share it — harmless, since
+// maxDuration is a ceiling, not a reservation.
+export const maxDuration = 300;
+
 const HOME_BACKGROUND_SETTING_KEY = 'home_background_image_url';
 const SITE_LOGO_SETTING_KEY = 'site_logo_url';
 const PUBLIC_ASSETS_BUCKET = 'public-assets';
 
-// Storage keys must be ASCII-safe (same constraint as
-// app/api/admin/documents/route.ts's slugifyFilename, duplicated here rather
-// than imported since that one isn't exported and this route shouldn't
-// depend on the internals of an unrelated route file).
+// Storage keys must be ASCII-safe; Azerbaijani/Cyrillic/accented filenames
+// (e.g. "778-IQ - Avtomobil yolları haqqında.pdf") make Supabase Storage
+// reject the key with "Invalid key". The original name is preserved
+// separately in documents.title, so it's safe to slug it here.
 function slugifyAssetFilename(name: string): string {
   const dotIndex = name.lastIndexOf('.');
   const base = dotIndex > 0 ? name.slice(0, dotIndex) : name;
@@ -62,6 +74,10 @@ const MAX_ALLOWED = 100000;
 // 0.5/message) — bounds chosen to reject fat-fingered values while still
 // allowing sub-1 prices, unlike MAX_ALLOWED above which is integer-only.
 const MAX_ALLOWED_PRICE = 10000;
+
+// Chunk-listing pagination for `?type=documents&id=...&chunks=1`.
+const DEFAULT_CHUNK_PAGE_SIZE = 25;
+const MAX_CHUNK_PAGE_SIZE = 100;
 
 const DEFAULT_USER_CONVERSATIONS_LIMIT = 10;
 const MAX_USER_CONVERSATIONS_LIMIT = 50;
@@ -217,11 +233,149 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ url });
   }
 
+  // Everything NavBar/Sidebar used to read server-side, in one public,
+  // no-admin-gate branch. Those two are client components now (so the ROOT
+  // layout no longer calls cookies() and auth-free pages can render static —
+  // see components/useNavState.ts); this exists instead of a new
+  // app/api/nav-state/route.ts because the Vercel Hobby function budget in
+  // CLAUDE.md rules out new route files. Rendering-only data: the real admin
+  // gate is still requireAdmin() on the admin routes/pages themselves.
+  if (type === 'nav-state') {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    const admin = createAdminClient();
+    const { data: logoRow } = await admin
+      .from('app_settings')
+      .select('value')
+      .eq('key', SITE_LOGO_SETTING_KEY)
+      .maybeSingle();
+    const logoUrl = typeof logoRow?.value === 'string' ? logoRow.value : null;
+
+    if (!user) {
+      return NextResponse.json({ user: null, isAdmin: false, logoUrl, unreadCount: 0, notifications: [] });
+    }
+
+    const [{ data: profile }, unreadCount, notifications] = await Promise.all([
+      supabase.from('profiles').select('role').eq('id', user.id).single(),
+      getUnreadCount(user.id),
+      getRecentNotifications(user.id),
+    ]);
+
+    return NextResponse.json({
+      user: { id: user.id, email: user.email ?? null },
+      isAdmin: profile?.role === 'admin',
+      logoUrl,
+      unreadCount,
+      notifications,
+    });
+  }
+
   const auth = await requireAdmin();
   if (!auth.ok) return apiError(auth.status, auth.message);
 
   if (type === 'model') {
     return NextResponse.json({ modelId: getChatModelId() });
+  }
+
+  // Folded in from app/api/admin/documents/route.ts (Vercel Hobby function
+  // budget, see CLAUDE.md). Service-role client, legitimate only because
+  // requireAdmin() above has already gated this handler.
+  if (type === 'documents') {
+    const id = searchParams.get('id');
+    const supabase = createAdminClient();
+
+    if (id) {
+      if (searchParams.get('chunks') === '1') {
+        const { data: document, error: fetchError } = await supabase
+          .from('documents')
+          .select('id')
+          .eq('id', id)
+          .single();
+        if (fetchError || !document) {
+          return notFound('Sənəd tapılmadı');
+        }
+
+        const page = Math.max(1, Number(searchParams.get('page')) || 1);
+        const pageSize = Math.min(
+          MAX_CHUNK_PAGE_SIZE,
+          Math.max(1, Number(searchParams.get('pageSize')) || DEFAULT_CHUNK_PAGE_SIZE)
+        );
+        const from = (page - 1) * pageSize;
+        const to = from + pageSize - 1;
+
+        const {
+          data: chunks,
+          error,
+          count,
+        } = await supabase
+          .from('chunks')
+          .select('id, content, page_number, article_label, chunk_index', { count: 'exact' })
+          .eq('document_id', id)
+          .order('chunk_index', { ascending: true })
+          .range(from, to);
+
+        if (error) return serverError(error, 'Chunk-ları yükləmək uğursuz oldu');
+
+        return NextResponse.json({ chunks, total: count ?? 0, page, pageSize });
+      }
+
+      const { data: document, error: fetchError } = await supabase
+        .from('documents')
+        .select('id, title, status, page_count, error_message, created_at, updated_at')
+        .eq('id', id)
+        .single();
+      if (fetchError || !document) {
+        return notFound('Sənəd tapılmadı');
+      }
+      const documentWithStale = { ...document, stale: isStaleProcessing(document.status, document.updated_at) };
+
+      // Pull content length + article_label per chunk (not the embedding column,
+      // which is large and unused here) to derive split-strategy stats in-process
+      // rather than adding a bespoke SQL aggregate for a one-off admin view.
+      const { data: chunkRows, error: chunksError } = await supabase
+        .from('chunks')
+        .select('content, article_label')
+        .eq('document_id', id);
+      if (chunksError) return serverError(chunksError, 'Chunk statistikasını yükləmək uğursuz oldu');
+
+      const total = chunkRows.length;
+      let minLength = 0;
+      let maxLength = 0;
+      let avgLength = 0;
+      let markerBased = 0;
+      let fallback = 0;
+
+      if (total > 0) {
+        const lengths = chunkRows.map((c) => c.content?.length ?? 0);
+        minLength = Math.min(...lengths);
+        maxLength = Math.max(...lengths);
+        avgLength = Math.round(lengths.reduce((sum, len) => sum + len, 0) / total);
+        for (const c of chunkRows) {
+          if (c.article_label !== null) markerBased += 1;
+          else fallback += 1;
+        }
+      }
+
+      return NextResponse.json({
+        document: documentWithStale,
+        chunkStats: { total, minLength, maxLength, avgLength, markerBased, fallback },
+      });
+    }
+
+    const { data, error } = await supabase
+      .from('documents')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) return serverError(error, 'Sənədləri yükləmək uğursuz oldu');
+    const documents = data.map((doc) => ({
+      ...doc,
+      stale: isStaleProcessing(doc.status, doc.updated_at),
+    }));
+    return NextResponse.json({ documents });
   }
 
   if (type === 'user') {
@@ -425,6 +579,107 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ url: publicUrl });
   }
 
+  // Folded in from app/api/admin/documents/route.ts. Two POST shapes share
+  // this branch, exactly as before: `?type=documents&id=...` reindexes an
+  // existing document, `?type=documents` with no id is the multipart upload.
+  if (type === 'documents') {
+    const id = searchParams.get('id');
+
+    if (id) {
+      // Unlike ingest-on-upload, this is fully awaited before responding (not a
+      // detached background job), so a failure here should be surfaced to the
+      // caller rather than returning a false ok:true.
+      try {
+        await reprocessDocument(id);
+      } catch (err) {
+        return serverError(err, 'Sənədi yenidən emal etmək uğursuz oldu');
+      }
+
+      return NextResponse.json({ ok: true });
+    }
+
+    const formData = await request.formData();
+    const file = formData.get('file');
+    const title = formData.get('title');
+
+    if (!(file instanceof File) || typeof title !== 'string' || !title.trim()) {
+      return apiError(400, 'file və title tələb olunur');
+    }
+    if (file.type !== 'application/pdf') {
+      return apiError(400, 'Yalnız PDF fayllar qəbul olunur');
+    }
+
+    const supabase = createAdminClient();
+    const storagePath = `${crypto.randomUUID()}-${slugifyAssetFilename(file.name)}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('documents')
+      .upload(storagePath, file, { contentType: 'application/pdf' });
+    if (uploadError) return serverError(uploadError, 'Faylı yükləmək uğursuz oldu');
+
+    const { data: document, error: insertError } = await supabase
+      .from('documents')
+      .insert({ title: title.trim(), storage_path: storagePath, uploaded_by: auth.userId })
+      .select()
+      .single();
+    if (insertError) return serverError(insertError, 'Sənəd yaratmaq uğursuz oldu');
+
+    // The document row and upload already succeeded; ingestion progress/failure
+    // is tracked via documents.status and surfaced through GET.
+    try {
+      await ingestDocument(document.id);
+    } catch (err) {
+      logApiError(`ingest document=${document.id}`, err);
+    }
+
+    return NextResponse.json({ document });
+  }
+
+  // Folded in from app/api/admin/quiz-questions/route.ts. `category` is
+  // accepted but currently unused: the LLM picks a category per question
+  // itself (lib/quiz/generateQuestionsFromPdf.ts), this field is reserved for
+  // a future "bias toward this category" hint.
+  if (type === 'quiz-questions') {
+    const formData = await request.formData();
+    const file = formData.get('file');
+
+    if (!(file instanceof File)) {
+      return apiError(400, 'file tələb olunur');
+    }
+    if (file.type !== 'application/pdf') {
+      return apiError(400, 'Yalnız PDF fayllar qəbul olunur');
+    }
+
+    let generated;
+    try {
+      const buffer = await file.arrayBuffer();
+      generated = await generateQuestionsFromPdf(buffer);
+    } catch (err) {
+      logApiError(`generate quiz questions from pdf file=${file.name}`, err);
+      return serverError(err, 'Sənəddən suallar hazırlamaq uğursuz oldu');
+    }
+
+    if (generated.length === 0) {
+      return NextResponse.json({ questions: [] });
+    }
+
+    const result = await createDraftQuestions(
+      generated.map((q) => ({
+        question: q.question,
+        options: q.options,
+        correctIndex: q.correctIndex,
+        category: q.category,
+        explanation: q.explanation,
+        sourceTitle: file.name,
+        createdBy: auth.userId,
+      }))
+    );
+
+    if (!result.ok) return apiError(500, result.error);
+
+    return NextResponse.json({ questions: result.questions });
+  }
+
   if (type !== 'busy-phrases') {
     return apiError(400, 'type parametri düzgün deyil');
   }
@@ -511,6 +766,30 @@ export async function PATCH(request: NextRequest) {
     if (error) return serverError(error, 'Status cümləsini yeniləmək uğursuz oldu');
 
     return NextResponse.json({ phrase: data });
+  }
+
+  // Folded in from app/api/admin/documents/route.ts — rename a document.
+  if (type === 'documents') {
+    const id = searchParams.get('id');
+    if (!id) return apiError(400, 'id tələb olunur');
+
+    const body = await request.json().catch(() => null);
+    const title = body?.title;
+
+    if (typeof title !== 'string' || !title.trim()) {
+      return apiError(400, 'title tələb olunur');
+    }
+
+    const { data: document, error } = await createAdminClient()
+      .from('documents')
+      .update({ title: title.trim() })
+      .eq('id', id)
+      .select('id, title')
+      .single();
+
+    if (error || !document) return notFound('Sənəd tapılmadı');
+
+    return NextResponse.json({ document });
   }
 
   if (type === 'coin-price') {
@@ -834,6 +1113,46 @@ export async function DELETE(request: NextRequest) {
     const { error } = await createAdminClient().from('app_settings').delete().eq('key', SITE_LOGO_SETTING_KEY);
     if (error) return serverError(error, 'Ayarı sıfırlamaq uğursuz oldu');
     return NextResponse.json({ url: null });
+  }
+
+  // Folded in from app/api/admin/documents/route.ts — `?id=` deletes one,
+  // a JSON body `{ ids: [...] }` deletes many.
+  if (type === 'documents') {
+    const documentId = searchParams.get('id');
+    const supabase = createAdminClient();
+
+    if (documentId) {
+      const { data: document, error: fetchError } = await supabase
+        .from('documents')
+        .select('storage_path')
+        .eq('id', documentId)
+        .single();
+      if (fetchError || !document) {
+        return notFound('Sənəd tapılmadı');
+      }
+
+      try {
+        await deleteDocuments(supabase, [documentId]);
+      } catch (error) {
+        return serverError(error, 'Sənədi silmək uğursuz oldu');
+      }
+
+      return NextResponse.json({ ok: true });
+    }
+
+    const body = await request.json().catch(() => null);
+    const ids = body?.ids;
+
+    if (!Array.isArray(ids) || ids.length === 0 || !ids.every((value) => typeof value === 'string')) {
+      return apiError(400, 'ids tələb olunur');
+    }
+
+    try {
+      const { deletedCount } = await deleteDocuments(supabase, ids);
+      return NextResponse.json({ ok: true, deleted: deletedCount });
+    } catch (error) {
+      return serverError(error, 'Sənədləri silmək uğursuz oldu');
+    }
   }
 
   if (type !== 'busy-phrases') {

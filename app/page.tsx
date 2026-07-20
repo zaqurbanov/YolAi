@@ -9,6 +9,14 @@ import { RULE_CATEGORIES } from '@/lib/content/ruleCategories';
 import { getHomeBackgroundImageUrl } from '@/lib/content/homeBackground';
 import { getRegisteredDriverCount, getRecentDriverInitials } from '@/lib/content/getRegisteredDriverCount';
 
+// Statically rendered with hourly ISR rather than per-request: the three
+// server reads below (background image, registered-driver count, recent
+// initials) all go through the service-role client, which never touches
+// cookies, so nothing here forces dynamic rendering. They do read live data,
+// hence a revalidate window instead of a build-time snapshot frozen forever —
+// a registered-driver count does not need to be real-time.
+export const revalidate = 3600;
+
 const AVATAR_TONES = ['bg-primary/40', 'bg-regulatory-blue/40', 'bg-go-green/40'];
 
 // Home page preview: the 6 most commonly-asked categories out of the full 8

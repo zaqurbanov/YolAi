@@ -1,16 +1,11 @@
 import { redirect } from 'next/navigation';
-import type { Metadata } from 'next';
 import { Chip } from '@heroui/react';
 import { requireAdmin } from '@/lib/auth/requireAdmin';
 import { getAllQuestions } from '@/lib/admin/questions';
 import { formatAzDateTime } from '@/lib/format/date';
 import AnswerQuestionForm from './AnswerQuestionForm';
 
-export const metadata: Metadata = {
-  title: 'Suallar',
-};
-
-export default async function AdminQuestionsPage() {
+export default async function QuestionsSection() {
   const auth = await requireAdmin();
   if (!auth.ok) redirect(auth.status === 401 ? '/login' : '/chat');
 

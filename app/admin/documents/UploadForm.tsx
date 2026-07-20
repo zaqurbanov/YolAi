@@ -201,7 +201,7 @@ export default function UploadForm() {
   const [confirmBusy, setConfirmBusy] = useState(false);
 
   const loadDocuments = useCallback(async () => {
-    const res = await fetch('/api/admin/documents');
+    const res = await fetch('/api/admin/chat-meta?type=documents');
     if (res.ok) {
       const { documents } = await res.json();
       setDocuments(documents);
@@ -225,7 +225,7 @@ export default function UploadForm() {
     formData.append('title', title.trim());
 
     try {
-      const res = await fetch('/api/admin/documents', { method: 'POST', body: formData });
+      const res = await fetch('/api/admin/chat-meta?type=documents', { method: 'POST', body: formData });
       const data = await res.json().catch(() => null);
 
       if (!res.ok) {
@@ -244,7 +244,7 @@ export default function UploadForm() {
 
   async function handleReprocess(id: string) {
     setReprocessingId(id);
-    const res = await fetch(`/api/admin/documents?id=${id}`, { method: 'POST' });
+    const res = await fetch(`/api/admin/chat-meta?type=documents&id=${id}`, { method: 'POST' });
 
     if (!res.ok) {
       const data = await res.json().catch(() => null);
@@ -274,7 +274,7 @@ export default function UploadForm() {
 
     if (confirmTarget.kind === 'single') {
       setDeletingId(confirmTarget.id);
-      const res = await fetch(`/api/admin/documents?id=${confirmTarget.id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/admin/chat-meta?type=documents&id=${confirmTarget.id}`, { method: 'DELETE' });
 
       if (!res.ok) {
         const data = await res.json().catch(() => null);
@@ -285,7 +285,7 @@ export default function UploadForm() {
       }
       setDeletingId(null);
     } else {
-      const res = await fetch('/api/admin/documents', {
+      const res = await fetch('/api/admin/chat-meta?type=documents', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids: confirmTarget.ids }),

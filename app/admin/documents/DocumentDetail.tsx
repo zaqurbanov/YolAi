@@ -82,7 +82,7 @@ export default function DocumentDetail({ id }: { id: string }) {
 
   const loadMeta = useCallback(async () => {
     setLoadingMeta(true);
-    const res = await fetch(`/api/admin/documents?id=${id}`);
+    const res = await fetch(`/api/admin/chat-meta?type=documents&id=${id}`);
     if (res.status === 404) {
       setNotFound(true);
       setLoadingMeta(false);
@@ -100,7 +100,7 @@ export default function DocumentDetail({ id }: { id: string }) {
     async (targetPage: number) => {
       setLoadingChunks(true);
       const res = await fetch(
-        `/api/admin/documents?id=${id}&chunks=1&page=${targetPage}&pageSize=${PAGE_SIZE}`
+        `/api/admin/chat-meta?type=documents&id=${id}&chunks=1&page=${targetPage}&pageSize=${PAGE_SIZE}`
       );
       if (res.ok) {
         const data = await res.json();
@@ -121,7 +121,7 @@ export default function DocumentDetail({ id }: { id: string }) {
 
   async function handleReprocess() {
     setReprocessing(true);
-    const res = await fetch(`/api/admin/documents?id=${id}`, { method: 'POST' });
+    const res = await fetch(`/api/admin/chat-meta?type=documents&id=${id}`, { method: 'POST' });
 
     if (!res.ok) {
       const data = await res.json().catch(() => null);
@@ -148,7 +148,7 @@ export default function DocumentDetail({ id }: { id: string }) {
     }
 
     setSavingTitle(true);
-    const res = await fetch(`/api/admin/documents?id=${id}`, {
+    const res = await fetch(`/api/admin/chat-meta?type=documents&id=${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: nextTitle }),

@@ -1,14 +1,15 @@
+'use client';
+
 import Link from 'next/link';
 import Image from 'next/image';
 import { buttonVariants } from '@heroui/styles';
-import { createClient } from '@/lib/supabase/server';
 import { logout } from '@/app/(auth)/actions';
 import { SidebarNav } from '@/components/SidebarNav';
 import { SidebarShell } from '@/components/SidebarShell';
 import { ChatConversationList } from '@/components/ChatConversationList';
 import { PlusIcon } from '@/components/icons';
 import InstallAppButton from '@/components/InstallAppButton';
-import { getSiteLogoUrl } from '@/lib/content/getSiteLogoUrl';
+import { useNavState, invalidateNavState } from '@/components/useNavState';
 
 const NAV_ITEMS = [
   { href: '/', label: 'Ana Səhifə', icon: 'home' as const },
@@ -17,26 +18,19 @@ const NAV_ITEMS = [
   { href: '/account', label: 'Ayarlar', icon: 'settings' as const },
 ];
 
-export default async function Sidebar() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+const PUBLIC_NAV_ITEMS = NAV_ITEMS.filter((item) => item.href !== '/account');
 
-  let isAdmin = false;
-  if (user) {
-    const { data: profile, error } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-    if (error) console.error('[Sidebar] profiles query failed', error);
-    isAdmin = profile?.role === 'admin';
-  }
-
-  const logoUrl = (await getSiteLogoUrl()) ?? '/logo.png';
+// Client component for the same reason as NavBar.tsx — it rendered in the
+// root layout and its createClient() call forced every page dynamic.
+export default function Sidebar() {
+  const nav = useNavState();
+  const logoUrl = nav?.logoUrl ?? '/logo.png';
 
   // "Ayarlar" links to /account, which requires auth (redirects to /login
   // otherwise) — hide it for logged-out visitors instead of sending them into
-  // a redirect. The separate "Hesabım" link (same destination) was removed
-  // as a duplicate — "Ayarlar" above is the only nav entry for /account now.
-  const navItems = user ? NAV_ITEMS : NAV_ITEMS.filter((item) => item.href !== '/account');
+  // a redirect. While auth state is still unknown, show the public set: it's
+  // the subset every visitor can use, so nothing appears and then vanishes.
+  const navItems = nav?.user ? NAV_ITEMS : PUBLIC_NAV_ITEMS;
 
   return (
     <SidebarShell>
@@ -66,10 +60,10 @@ export default async function Sidebar() {
 
       <SidebarNav items={navItems} />
 
-      {user && <ChatConversationList />}
+      {nav?.user && <ChatConversationList />}
 
       <div className="mt-4 flex flex-col gap-1 px-3">
-        {isAdmin && (
+        {nav?.isAdmin && (
           <Link
             href="/admin"
             className="rounded-lg px-3 py-2 text-sm font-medium text-muted hover:bg-surface-hover hover:text-foreground"
@@ -77,9 +71,12 @@ export default async function Sidebar() {
             Admin
           </Link>
         )}
-        {user ? (
-          <>
-            <form action={logout}>
+        {/* Auth actions stay blank until nav state resolves — showing "Daxil
+            ol"/"Qeydiyyat" to someone who is already signed in is the one
+            wrong state that must not appear, even briefly. */}
+        {nav !== null &&
+          (nav.user ? (
+            <form action={logout} onSubmit={() => invalidateNavState()}>
               <button
                 type="submit"
                 className="w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-muted hover:bg-surface-hover hover:text-foreground"
@@ -87,23 +84,22 @@ export default async function Sidebar() {
                 Çıxış
               </button>
             </form>
-          </>
-        ) : (
-          <>
-            <Link
-              href="/login"
-              className="rounded-lg px-3 py-2 text-sm font-medium text-muted hover:bg-surface-hover hover:text-foreground"
-            >
-              Daxil ol
-            </Link>
-            <Link
-              href="/signup"
-              className="rounded-lg px-3 py-2 text-sm font-medium text-muted hover:bg-surface-hover hover:text-foreground"
-            >
-              Qeydiyyat
-            </Link>
-          </>
-        )}
+          ) : (
+            <>
+              <Link
+                href="/login"
+                className="rounded-lg px-3 py-2 text-sm font-medium text-muted hover:bg-surface-hover hover:text-foreground"
+              >
+                Daxil ol
+              </Link>
+              <Link
+                href="/signup"
+                className="rounded-lg px-3 py-2 text-sm font-medium text-muted hover:bg-surface-hover hover:text-foreground"
+              >
+                Qeydiyyat
+              </Link>
+            </>
+          ))}
       </div>
 
       <div className="mt-auto flex flex-col gap-2 p-4">

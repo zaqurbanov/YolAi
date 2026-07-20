@@ -1,12 +1,7 @@
 import { redirect } from 'next/navigation';
-import type { Metadata } from 'next';
 import { requireAdmin } from '@/lib/auth/requireAdmin';
 import { createClient } from '@/lib/supabase/server';
 import { formatAzDateTime } from '@/lib/format/date';
-
-export const metadata: Metadata = {
-  title: 'Loglar',
-};
 
 interface LogRow {
   id: string;
@@ -50,7 +45,7 @@ function truncate(text: string | null, max: number): string {
   return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
-export default async function AdminLogsPage() {
+export default async function LogsSection() {
   const auth = await requireAdmin();
   if (!auth.ok) redirect(auth.status === 401 ? '/login' : '/chat');
 

@@ -1,12 +1,7 @@
 import { redirect } from 'next/navigation';
-import type { Metadata } from 'next';
 import { requireAdmin } from '@/lib/auth/requireAdmin';
 import { getAdminStats } from '@/lib/admin/getStats';
 import { ChatIcon, DocumentIcon, IntersectionIcon, SparkleIcon, UserIcon } from '@/components/icons';
-
-export const metadata: Metadata = {
-  title: 'Statistika',
-};
 
 // Literal Tailwind class names per accent (not template-string interpolation) so
 // Tailwind v4's content scanner can see every class — same pattern as
@@ -37,7 +32,7 @@ const STATUS_ACCENTS = {
   failed: { bar: 'bg-caution-orange', text: 'text-caution-orange' },
 } as const;
 
-export default async function AdminStatsPage() {
+export default async function StatsSection() {
   const auth = await requireAdmin();
   if (!auth.ok) redirect(auth.status === 401 ? '/login' : '/chat');
 

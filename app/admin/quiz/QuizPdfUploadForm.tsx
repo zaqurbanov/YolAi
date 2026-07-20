@@ -33,7 +33,7 @@ export default function QuizPdfUploadForm() {
     if (category) formData.append('category', category);
 
     try {
-      const res = await fetch('/api/admin/quiz-questions', { method: 'POST', body: formData });
+      const res = await fetch('/api/admin/chat-meta?type=quiz-questions', { method: 'POST', body: formData });
       const data = await res.json().catch(() => null);
 
       if (!res.ok) {

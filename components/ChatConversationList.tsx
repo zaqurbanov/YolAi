@@ -24,7 +24,7 @@ const UNTITLED_LABEL = 'Adsız söhbət';
 // in app/chat/ChatClient.tsx.
 async function fetchConversationList(): Promise<Conversation[] | null> {
   try {
-    const res = await fetch('/api/chat/history');
+    const res = await fetch('/api/chat?type=history');
     if (!res.ok) return null;
     const data: { conversations: Conversation[] } = await res.json();
     return Array.isArray(data.conversations) ? data.conversations : [];
@@ -91,7 +91,7 @@ export function ChatConversationList() {
   async function handleCreate() {
     setIsCreating(true);
     try {
-      const res = await fetch('/api/chat/history', { method: 'POST' });
+      const res = await fetch('/api/chat?type=history', { method: 'POST' });
       if (!res.ok) {
         toast.danger('Yeni söhbət yaratmaq uğursuz oldu');
         return;
@@ -120,7 +120,7 @@ export function ChatConversationList() {
     }
     setIsSavingRename(true);
     try {
-      const res = await fetch('/api/chat/history', {
+      const res = await fetch('/api/chat?type=history', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ conversationId: id, title: trimmed }),
@@ -144,7 +144,7 @@ export function ChatConversationList() {
     const id = pendingDeleteId;
     setIsDeleting(true);
     try {
-      const res = await fetch(`/api/chat/history?conversationId=${encodeURIComponent(id)}`, { method: 'DELETE' });
+      const res = await fetch(`/api/chat?type=history&conversationId=${encodeURIComponent(id)}`, { method: 'DELETE' });
       if (!res.ok) {
         toast.danger('Söhbəti silmək uğursuz oldu');
         return;
