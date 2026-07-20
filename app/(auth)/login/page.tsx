@@ -10,6 +10,10 @@ import { Spinner } from '@/components/Spinner';
 
 const initialState: AuthFormState = {};
 
+// Sign-IN keeps the password form so the accounts that predate the
+// Google-only signup change don't lose access. Sign-UP is Google-only —
+// see app/(auth)/actions.ts. Google is listed first because it is the only
+// path available to a new user.
 function LoginForm() {
   const [state, formAction, pending] = useActionState(login, initialState);
   const searchParams = useSearchParams();
@@ -53,17 +57,11 @@ function LoginForm() {
               </Alert>
             )}
 
-            <Button
-              type="submit"
-              variant="primary"
-              fullWidth
-              isPending={pending}
-              className="glow-primary"
-            >
+            <Button type="submit" variant="outline" fullWidth isPending={pending}>
               {({ isPending }) => (
                 <>
                   {isPending ? <Spinner size="sm" tone="current" /> : null}
-                  Daxil ol
+                  Şifrə ilə daxil ol
                 </>
               )}
             </Button>

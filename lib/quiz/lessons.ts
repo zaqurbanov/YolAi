@@ -24,7 +24,14 @@ export async function getLessons(userId: string): Promise<LessonProgress[]> {
   const [{ data: questions, error: questionsError }, { data: answers, error: answersError }] =
     await Promise.all([
       supabase.from('quiz_questions').select('id, category').eq('status', 'published'),
-      supabase.from('user_quiz_answers').select('question_id').eq('user_id', userId),
+      // is_correct filter is applied server-side: since 0059 section C.2 this
+      // table also holds recorded-but-WRONG answers, and only a correct one
+      // counts as a completed question.
+      supabase
+        .from('user_quiz_answers')
+        .select('question_id')
+        .eq('user_id', userId)
+        .eq('is_correct', true),
     ]);
 
   if (questionsError) {
@@ -61,7 +68,20 @@ export interface LessonQuestion {
   question: string;
   options: string[];
   explanation: string | null;
+  /** Answered, and the answer was right — the reward was paid. */
   answeredCorrectly: boolean;
+  /**
+   * Answered, and the answer was WRONG. The question is spent: every
+   * question allows exactly one attempt ever (unique(user_id, question_id),
+   * now written on wrong answers too — 0059 section C.2), so the UI must
+   * lock this question rather than offering a retry that the server will
+   * reject with 'already_answered'.
+   *
+   * Mutually exclusive with answeredCorrectly. Both false means unanswered
+   * and answerable; `answeredCorrectly || answeredIncorrectly` is the
+   * "locked" predicate.
+   */
+  answeredIncorrectly: boolean;
 }
 
 // Deliberately omits correct_index — the frontend must never receive it
@@ -79,7 +99,7 @@ export async function getLessonQuestions(category: string, userId: string): Prom
         .eq('status', 'published')
         .eq('category', category)
         .order('created_at', { ascending: true }),
-      supabase.from('user_quiz_answers').select('question_id').eq('user_id', userId),
+      supabase.from('user_quiz_answers').select('question_id, is_correct').eq('user_id', userId),
     ]);
 
   if (questionsError) {
@@ -90,13 +110,21 @@ export async function getLessonQuestions(category: string, userId: string): Prom
     console.error('[quiz/lessons] getLessonQuestions answers read failed:', answersError);
   }
 
-  const answeredIds = new Set((answers ?? []).map((a) => a.question_id));
+  // Both sets, not one — the UI has to tell "done, rewarded" apart from
+  // "spent on a wrong answer, locked" (see LessonQuestion above).
+  const correctIds = new Set<string>();
+  const incorrectIds = new Set<string>();
+  for (const a of answers ?? []) {
+    if (a.is_correct) correctIds.add(a.question_id);
+    else incorrectIds.add(a.question_id);
+  }
 
   return (questions ?? []).map((q) => ({
     id: q.id,
     question: q.question,
     options: q.options as string[],
     explanation: q.explanation,
-    answeredCorrectly: answeredIds.has(q.id),
+    answeredCorrectly: correctIds.has(q.id),
+    answeredIncorrectly: incorrectIds.has(q.id),
   }));
 }

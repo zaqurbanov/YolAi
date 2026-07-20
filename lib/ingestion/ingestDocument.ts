@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { parsePdf } from './parsePdf';
 import { chunkPages } from './chunkText';
 import { embedBatch } from '@/lib/embeddings/embed';
+import { embedBatchGemini } from '@/lib/embeddings/gemini';
 
 // Supabase's PostgrestError/StorageError are plain objects with a `message`
 // field, not `instanceof Error` — a bare `err instanceof Error` check (as
@@ -42,9 +43,29 @@ export async function ingestDocument(documentId: string) {
     const chunks = chunkPages(pages);
 
     const BATCH_SIZE = 16;
+    // Every chunk is embedded with BOTH providers so that switching
+    // active_embedding_model is an instant flip rather than a corpus-wide
+    // re-embed, and so no document is ever missing the inactive provider's
+    // vectors (which would silently break retrieval for that document the
+    // moment an admin toggles). The local model is the source of truth: if
+    // Gemini fails, the document still ingests with `embedding` populated and
+    // `embedding_gemini` null.
+    let geminiFailedBatches = 0;
     for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
       const batch = chunks.slice(i, i + BATCH_SIZE);
-      const embeddings = await embedBatch(batch.map((c) => c.content));
+      const contents = batch.map((c) => c.content);
+      const embeddings = await embedBatch(contents);
+
+      let geminiEmbeddings: number[][] | null = null;
+      try {
+        geminiEmbeddings = await embedBatchGemini(contents);
+      } catch (err) {
+        geminiFailedBatches += 1;
+        console.error(
+          `[ingest] gemini embedding failed for document ${documentId} batch starting at chunk ${i} — continuing with local embeddings only; run scripts/backfill-gemini-embeddings.mjs to repair:`,
+          err,
+        );
+      }
 
       const rows = batch.map((chunk, j) => ({
         document_id: documentId,
@@ -53,15 +74,31 @@ export async function ingestDocument(documentId: string) {
         article_label: chunk.articleLabel,
         chunk_index: chunk.chunkIndex,
         embedding: embeddings[j],
+        embedding_gemini: geminiEmbeddings?.[j] ?? null,
       }));
 
       const { error: insertError } = await supabase.from('chunks').insert(rows);
       if (insertError) throw insertError;
     }
 
+    // Written to the document row, not just logged — a silent degradation
+    // here is what would later make the admin toggle refuse to switch (or,
+    // without the coverage guard, break retrieval outright). Status stays
+    // 'ready' because the document IS fully usable on the active local model;
+    // error_message carries the warning so it's visible in the admin UI.
+    const geminiWarning =
+      geminiFailedBatches > 0
+        ? `Gemini embedding-lərinin ${geminiFailedBatches} paketi alınmadı — sənəd yerli model ilə tam işlək vəziyyətdədir, lakin Gemini-yə keçmək üçün backfill skripti işə salınmalıdır.`
+        : null;
+    if (geminiWarning) {
+      console.error(
+        `[ingest] document ${documentId} ingested with INCOMPLETE gemini embeddings (${geminiFailedBatches} batch(es) failed)`,
+      );
+    }
+
     await supabase
       .from('documents')
-      .update({ status: 'ready', page_count: pages.length, error_message: null })
+      .update({ status: 'ready', page_count: pages.length, error_message: geminiWarning })
       .eq('id', documentId);
   } catch (err) {
     const message = extractErrorMessage(err);

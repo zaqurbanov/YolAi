@@ -13,10 +13,10 @@ const fsp = require("node:fs/promises");
 const path = require("node:path");
 const { Readable } = require("node:stream");
 
-const MODEL_ID = "Xenova/paraphrase-multilingual-MiniLM-L12-v2";
+const MODEL_ID = "Xenova/multilingual-e5-small";
 // Pinned commit sha for MODEL_ID on huggingface.co (not "main") — keeps the
 // vendored weights reproducible across machines and over time.
-const REVISION = "2c4055b12046f11709e9df2c122e59ffbdc2f900";
+const REVISION = "761b726dd34fb83930e26aab4e9ac3899aa1fa78";
 
 // Must match exactly what lib/embeddings/embed.ts requests via `pipeline(...,
 // { dtype: 'q8' })` — @huggingface/transformers maps dtype "q8" to the
@@ -26,13 +26,13 @@ const FILES = ["config.json", "tokenizer.json", "tokenizer_config.json", "onnx/m
 
 const MODEL_DIR = path.join(__dirname, "..", "models", MODEL_ID);
 
-// The real onnx/model_quantized.onnx is ~118MB. A plain "size > 0" existence
-// check is too weak: a truncated/corrupted partial download (e.g. a network
-// error that still wrote a few KB before failing) would pass that check and
-// get silently skipped forever on every subsequent run, poisoning the
-// vendored model without ever re-attempting the download.
+// The real onnx/model_quantized.onnx is ~112.8MB. A plain "size > 0"
+// existence check is too weak: a truncated/corrupted partial download (e.g.
+// a network error that still wrote a few KB before failing) would pass that
+// check and get silently skipped forever on every subsequent run, poisoning
+// the vendored model without ever re-attempting the download.
 const MIN_VALID_SIZE_BYTES = {
-  "onnx/model_quantized.onnx": 50_000_000,
+  "onnx/model_quantized.onnx": 80_000_000,
 };
 
 function isValidExistingFile(destPath, relPath) {

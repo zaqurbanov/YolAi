@@ -1,6 +1,51 @@
 import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { embedText } from '@/lib/embeddings/embed';
+import { embedTextGemini } from '@/lib/embeddings/gemini';
+import { getActiveEmbeddingModel, type EmbeddingModel } from '@/lib/embeddings/activeModel';
+
+/**
+ * A query vector tagged with the model that produced it. The tag is not
+ * decoration: different embedding models occupy incompatible vector spaces,
+ * so a vector is only meaningful against the matching set of RPCs/column
+ * (`embedding` vs `embedding_gemini`). Carrying the model alongside the
+ * vector makes it impossible to pass a pre-computed embedding to the wrong
+ * RPC, and means a caller and the retrieval functions can't disagree if the
+ * admin flips the toggle mid-request.
+ */
+export interface QueryEmbedding {
+  model: EmbeddingModel;
+  vector: number[];
+}
+
+/**
+ * The single place that turns query text into a vector using whichever
+ * provider is currently active. Exported so app/api/chat/route.ts — which
+ * embeds its distinct query texts once up front and passes them down — does
+ * not have to duplicate the provider branch.
+ */
+export async function embedQueryWithActiveModel(text: string): Promise<QueryEmbedding> {
+  const model = await getActiveEmbeddingModel();
+  const vector = model === 'gemini' ? await embedTextGemini(text) : await embedText(text);
+  return { model, vector };
+}
+
+async function resolveQueryEmbedding(
+  text: string,
+  precomputed: QueryEmbedding | undefined,
+): Promise<{ embedding: QueryEmbedding; embedMs: number }> {
+  if (precomputed) return { embedding: precomputed, embedMs: 0 };
+  const startedAt = performance.now();
+  const embedding = await embedQueryWithActiveModel(text);
+  return { embedding, embedMs: performance.now() - startedAt };
+}
+
+// The gemini RPCs (0058) are exact mirrors of the live local ones, differing
+// only in which column they read and the vector dimension — so the call sites
+// below differ only by name, never by argument shape.
+function rpcName(base: string, model: EmbeddingModel): string {
+  return model === 'gemini' ? `${base}_gemini` : base;
+}
 
 export interface RetrievedChunk {
   id: string;
@@ -38,6 +83,16 @@ export interface RetrieveRelevantChunksParams {
   ftsQuery?: string;
   documentId?: string;
   matchCount?: number;
+  /**
+   * Pre-computed embedding for `embedQuery`, to avoid re-embedding identical
+   * text across the several retrieval calls route.ts fires per request (the
+   * rewritten query is passed to the primary, per-document and article
+   * searches — embedding it once per call meant computing the exact same
+   * vector up to 3 times). When provided, `embedQuery` is ignored for
+   * embedding purposes and `embedMs` is reported as 0 (the cost is attributed
+   * to whoever computed it).
+   */
+  precomputedEmbedding?: QueryEmbedding;
 }
 
 // Was: a chunk-count threshold (SMALL_DOCUMENT_CHUNK_THRESHOLD = 100)
@@ -91,16 +146,15 @@ export interface RetrievePerDocumentChunksResult {
 export async function retrievePerDocumentChunks(
   embedQuery: string,
   ftsQuery?: string,
+  precomputedEmbedding?: QueryEmbedding,
 ): Promise<RetrievePerDocumentChunksResult> {
-  const embedStart = performance.now();
-  const embedding = await embedText(embedQuery);
-  const embedMs = performance.now() - embedStart;
+  const { embedding, embedMs } = await resolveQueryEmbedding(embedQuery, precomputedEmbedding);
 
   const supabase = createAdminClient();
 
   const dbSearchStart = performance.now();
-  const { data, error } = await supabase.rpc('match_chunks_per_document', {
-    query_embedding: embedding,
+  const { data, error } = await supabase.rpc(rpcName('match_chunks_per_document', embedding.model), {
+    query_embedding: embedding.vector,
     query_text: ftsQuery ?? null,
     per_document_limit: PER_DOCUMENT_CANDIDATE_LIMIT,
   });
@@ -124,16 +178,15 @@ export async function retrievePerDocumentChunks(
 export async function retrieveChunksByArticle(
   embedQuery: string,
   articleLabelPrefixesParam: string[],
+  precomputedEmbedding?: QueryEmbedding,
 ): Promise<RetrievePerDocumentChunksResult> {
-  const embedStart = performance.now();
-  const embedding = await embedText(embedQuery);
-  const embedMs = performance.now() - embedStart;
+  const { embedding, embedMs } = await resolveQueryEmbedding(embedQuery, precomputedEmbedding);
 
   const supabase = createAdminClient();
 
   const dbSearchStart = performance.now();
-  const { data, error } = await supabase.rpc('match_chunks_by_article', {
-    query_embedding: embedding,
+  const { data, error } = await supabase.rpc(rpcName('match_chunks_by_article', embedding.model), {
+    query_embedding: embedding.vector,
     article_label_prefixes: articleLabelPrefixesParam,
   });
   const dbSearchMs = performance.now() - dbSearchStart;
@@ -147,16 +200,15 @@ export async function retrieveRelevantChunks({
   ftsQuery,
   documentId,
   matchCount = 60,
+  precomputedEmbedding,
 }: RetrieveRelevantChunksParams): Promise<RetrieveRelevantChunksResult> {
-  const embedStart = performance.now();
-  const embedding = await embedText(embedQuery);
-  const embedMs = performance.now() - embedStart;
+  const { embedding, embedMs } = await resolveQueryEmbedding(embedQuery, precomputedEmbedding);
 
   const supabase = createAdminClient();
 
   const dbSearchStart = performance.now();
-  const { data, error } = await supabase.rpc('match_chunks', {
-    query_embedding: embedding,
+  const { data, error } = await supabase.rpc(rpcName('match_chunks', embedding.model), {
+    query_embedding: embedding.vector,
     match_count: matchCount,
     filter_document_id: documentId ?? null,
     query_text: ftsQuery ?? null,

@@ -14,7 +14,27 @@ const TRANSFER_DAILY_CAP_KEY = 'coin_transfer_daily_cap';
 const DEFAULT_TRANSFER_MIN_AMOUNT = 1;
 const DEFAULT_TRANSFER_DAILY_CAP = 20;
 
-export { TRANSFER_MIN_AMOUNT_KEY, TRANSFER_DAILY_CAP_KEY, DEFAULT_TRANSFER_MIN_AMOUNT, DEFAULT_TRANSFER_DAILY_CAP };
+// 0059_security_hardening.sql section D.3. Transfers are the concentration
+// step of the referral/quiz farming loop — many throwaway accounts funnelling
+// coins into one real account. The pre-existing daily cap only counted
+// sender_id, so the receiving side was completely unbounded, and there was no
+// account-age requirement at all on the sender.
+const TRANSFER_MIN_ACCOUNT_AGE_DAYS_KEY = 'coin_transfer_min_account_age_days';
+const TRANSFER_DAILY_RECEIVE_CAP_KEY = 'coin_transfer_daily_receive_cap';
+
+const DEFAULT_TRANSFER_MIN_ACCOUNT_AGE_DAYS = 7;
+const DEFAULT_TRANSFER_DAILY_RECEIVE_CAP = 20;
+
+export {
+  TRANSFER_MIN_AMOUNT_KEY,
+  TRANSFER_DAILY_CAP_KEY,
+  DEFAULT_TRANSFER_MIN_AMOUNT,
+  DEFAULT_TRANSFER_DAILY_CAP,
+  TRANSFER_MIN_ACCOUNT_AGE_DAYS_KEY,
+  TRANSFER_DAILY_RECEIVE_CAP_KEY,
+  DEFAULT_TRANSFER_MIN_ACCOUNT_AGE_DAYS,
+  DEFAULT_TRANSFER_DAILY_RECEIVE_CAP,
+};
 
 async function readNumericSetting(key: string, fallback: number): Promise<number> {
   const { data, error } = await createAdminClient()
@@ -39,6 +59,18 @@ export async function getTransferMinAmount(): Promise<number> {
 
 export async function getTransferDailyCap(): Promise<number> {
   return readNumericSetting(TRANSFER_DAILY_CAP_KEY, DEFAULT_TRANSFER_DAILY_CAP);
+}
+
+export async function getTransferMinAccountAgeDays(): Promise<number> {
+  const value = await readNumericSetting(
+    TRANSFER_MIN_ACCOUNT_AGE_DAYS_KEY,
+    DEFAULT_TRANSFER_MIN_ACCOUNT_AGE_DAYS
+  );
+  return Math.round(value);
+}
+
+export async function getTransferDailyReceiveCap(): Promise<number> {
+  return readNumericSetting(TRANSFER_DAILY_RECEIVE_CAP_KEY, DEFAULT_TRANSFER_DAILY_RECEIVE_CAP);
 }
 
 // Looks up a recipient by email (profiles.email, populated from
@@ -69,7 +101,17 @@ export async function lookupRecipientByEmail(
 
 type TransferResult =
   | { ok: true; senderBalance: number; recipientBalance: number }
-  | { ok: false; error: 'self_transfer' | 'insufficient_balance' | 'daily_cap_exceeded' | 'invalid_amount' | 'error' };
+  | {
+      ok: false;
+      error:
+        | 'self_transfer'
+        | 'insufficient_balance'
+        | 'daily_cap_exceeded'
+        | 'recipient_daily_cap_exceeded'
+        | 'account_too_new'
+        | 'invalid_amount'
+        | 'error';
+    };
 
 interface TransferCoinsRpcResult {
   sender_balance: number;
@@ -88,7 +130,11 @@ export async function transferCoins(
   recipientId: string,
   amount: number
 ): Promise<TransferResult> {
-  const dailyTransferCap = await getTransferDailyCap();
+  const [dailyTransferCap, minAccountAgeDays, dailyReceiveCap] = await Promise.all([
+    getTransferDailyCap(),
+    getTransferMinAccountAgeDays(),
+    getTransferDailyReceiveCap(),
+  ]);
 
   const { data, error } = await createAdminClient()
     .rpc('transfer_coins', {
@@ -97,6 +143,8 @@ export async function transferCoins(
       p_amount: amount,
       p_default_daily_limit: DEFAULT_DAILY_LIMIT,
       p_daily_transfer_cap: dailyTransferCap,
+      p_min_account_age_days: minAccountAgeDays,
+      p_daily_receive_cap: dailyReceiveCap,
     })
     .single<TransferCoinsRpcResult>();
 
@@ -112,6 +160,8 @@ export async function transferCoins(
     if (message.includes('sender_equals_recipient')) return { ok: false, error: 'self_transfer' };
     if (message.includes('insufficient_transferable_balance')) return { ok: false, error: 'insufficient_balance' };
     if (message.includes('daily_transfer_cap_exceeded')) return { ok: false, error: 'daily_cap_exceeded' };
+    if (message.includes('daily_receive_cap_exceeded')) return { ok: false, error: 'recipient_daily_cap_exceeded' };
+    if (message.includes('sender_account_too_new')) return { ok: false, error: 'account_too_new' };
     if (message.includes('invalid_amount')) return { ok: false, error: 'invalid_amount' };
     return { ok: false, error: 'error' };
   }

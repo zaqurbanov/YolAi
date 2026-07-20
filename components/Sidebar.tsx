@@ -39,7 +39,7 @@ export default async function Sidebar() {
   const navItems = user ? NAV_ITEMS : NAV_ITEMS.filter((item) => item.href !== '/account');
 
   return (
-    <SidebarShell isAuthenticated={!!user}>
+    <SidebarShell>
       <Link href="/" className="flex items-center gap-3 px-5 py-5">
         {/* White chip only for the static /logo.png fallback (an opaque PNG
             with no alpha channel) — an admin-uploaded logo is assumed to

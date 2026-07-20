@@ -39,7 +39,6 @@ interface HistoryMessage {
   content: string;
   citations: Citation[] | null;
   created_at: string;
-  imageUrl: string | null;
 }
 
 type CoinInfo = { balance: number; price: number };
@@ -660,12 +659,24 @@ export default function ChatClient({ conversationId: initialConversationId, visi
   // components/CoinBadge.tsx) in sync with the freshest server-reported
   // balance once a reply finishes streaming — absent coins (admin, or rare
   // fail-open case) leaves the last known value untouched.
+  //
+  // `messageMetadata` in app/api/chat/route.ts runs on EVERY streamed chunk
+  // (see its own comment) and returns a brand-new `coins` object each call —
+  // so `messages` changes dozens of times per second while a reply streams.
+  // Without the value-equality guard below, this effect used to call
+  // setCoins + dispatch a window CustomEvent on every single chunk, and the
+  // CustomEvent synchronously triggers CoinBadge.tsx's own setState — a tight
+  // render/effect cascade that could trip React's "Maximum update depth
+  // exceeded" guard on a real (non-admin, non-exempt) account. Only sync when
+  // the balance actually changed value, not merely object reference.
+  const lastSyncedBalanceRef = useRef<number | null>(null);
   useEffect(() => {
     const lastCoins = [...messages]
       .reverse()
       .find((m) => m.role === 'assistant' && (m.metadata as ChatMessageMetadata | undefined)?.coins)
       ?.metadata?.coins;
-    if (lastCoins) {
+    if (lastCoins && lastCoins.balance !== lastSyncedBalanceRef.current) {
+      lastSyncedBalanceRef.current = lastCoins.balance;
       // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing from a prop-driven external source (message stream), not derivable during render.
       setCoins(lastCoins);
       window.dispatchEvent(new CustomEvent('coin-balance-update', { detail: { balance: lastCoins.balance } }));
@@ -726,11 +737,10 @@ export default function ChatClient({ conversationId: initialConversationId, visi
         if (!Array.isArray(data.messages) || data.messages.length === 0) return;
 
         const hydrated: ChatUIMessage[] = data.messages.map((m) => {
-          const parts: ChatUIMessage['parts'] = [];
-          if (m.imageUrl) {
-            parts.push({ type: 'file', mediaType: 'image/jpeg', url: m.imageUrl });
-          }
-          parts.push({ type: 'text', text: m.content });
+          // User-uploaded chat images are never persisted (processed
+          // in-memory for the vision call only) — history hydration only
+          // ever reconstructs the text content, never an image part.
+          const parts: ChatUIMessage['parts'] = [{ type: 'text', text: m.content }];
           return {
             id: m.id,
             role: m.role,

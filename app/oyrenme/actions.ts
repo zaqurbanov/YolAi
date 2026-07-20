@@ -35,13 +35,24 @@ export async function submitLessonAnswerAction(
     if ('error' in result) {
       return { status: 'error', message: 'Xəta baş verdi. Bir az sonra yenidən cəhd edin' };
     }
+    if (result.alreadyAnswered) {
+      return {
+        status: 'already_answered',
+        message: 'Bu suala artıq cavab vermisiniz',
+        explanation: result.explanation,
+      };
+    }
+    // Every question now allows exactly one attempt, so revalidate here too —
+    // a wrong answer changes the question's locked state on the lesson page
+    // just as much as a correct one does.
+    revalidatePath('/oyrenme');
     return { status: 'incorrect', message: 'Səhv cavab', explanation: result.explanation };
   }
 
   if (result.alreadyAnswered) {
     return {
       status: 'already_answered',
-      message: 'Bu sualı artıq düzgün cavablandırmısınız',
+      message: 'Bu suala artıq cavab vermisiniz',
       explanation: result.explanation,
     };
   }

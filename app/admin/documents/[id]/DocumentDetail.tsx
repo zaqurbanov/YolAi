@@ -42,7 +42,7 @@ const STATUS_COLOR: Record<DocumentMeta['status'], 'default' | 'success' | 'dang
 };
 
 const PAGE_SIZE = 25;
-const EMBEDDING_MODEL = 'Xenova/paraphrase-multilingual-MiniLM-L12-v2';
+const EMBEDDING_MODEL = 'Xenova/multilingual-e5-small';
 
 function ContentPreview({ content }: { content: string }) {
   const [expanded, setExpanded] = useState(false);

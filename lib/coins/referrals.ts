@@ -10,7 +10,20 @@ import { createAdminClient } from '@/lib/supabase/admin';
 const REFERRAL_BONUS_KEY = 'referral_bonus_amount';
 const DEFAULT_REFERRAL_BONUS_AMOUNT = 5;
 
-export { REFERRAL_BONUS_KEY, DEFAULT_REFERRAL_BONUS_AMOUNT };
+// Max PAID referrals one referrer may collect in a rolling 30-day window
+// (0059_security_hardening.sql, section D.1). Before this, referrer_id was
+// entirely unconstrained — one account could refer unlimited accounts at +5
+// each, which under this project's "email confirmation is disabled, accounts
+// are free and unlimited" reality was an uncapped coin printer.
+const REFERRAL_MAX_PER_30D_KEY = 'referral_max_per_30d';
+const DEFAULT_REFERRAL_MAX_PER_30D = 10;
+
+export {
+  REFERRAL_BONUS_KEY,
+  DEFAULT_REFERRAL_BONUS_AMOUNT,
+  REFERRAL_MAX_PER_30D_KEY,
+  DEFAULT_REFERRAL_MAX_PER_30D,
+};
 
 // Mirrors getQuizRewardAmount's/getTransferMinAmount's shape.
 export async function getReferralBonusAmount(): Promise<number> {
@@ -25,6 +38,23 @@ export async function getReferralBonusAmount(): Promise<number> {
   const value = typeof data.value === 'number' ? data.value : Number(data.value);
   if (!Number.isFinite(value) || value <= 0) return DEFAULT_REFERRAL_BONUS_AMOUNT;
   return value;
+}
+
+// Same shape as getReferralBonusAmount, but must additionally be a positive
+// integer (it bounds a row count, not a coin amount) — mirrors
+// getAdWatchDailyMax.
+export async function getReferralMaxPer30d(): Promise<number> {
+  const { data, error } = await createAdminClient()
+    .from('app_settings')
+    .select('value')
+    .eq('key', REFERRAL_MAX_PER_30D_KEY)
+    .maybeSingle();
+
+  if (error || !data) return DEFAULT_REFERRAL_MAX_PER_30D;
+
+  const value = typeof data.value === 'number' ? data.value : Number(data.value);
+  if (!Number.isFinite(value) || value <= 0) return DEFAULT_REFERRAL_MAX_PER_30D;
+  return Math.round(value);
 }
 
 const CODE_ALPHABET = '0123456789ABCDEFGHJKLMNPQRSTUVWXYZ'; // no O/I, avoids ambiguity
@@ -120,44 +150,43 @@ export async function lookupReferrerByCode(code: string): Promise<{ id: string }
   return { id: data.id };
 }
 
-interface GrantReferralBonusRpcResult {
+interface ClaimPendingReferralRpcResult {
   bonus_claimed: boolean;
   referrer_balance: number | null;
   referred_balance: number | null;
 }
 
-type GrantReferralBonusResult =
+type ReferralResult =
   | { ok: true; credited: boolean }
   | { ok: false; error: string };
 
-// Fail-closed wrapper around grant_referral_bonus, mirroring
-// transferCoins'/claimDailyQuizReward's error-mapping style: never throws,
-// logs the raw Postgres error server-side, returns a short internal error
-// code. Self-referral is short-circuited here WITHOUT calling the RPC —
-// per the task spec, an invalid code or self-referral must fail
-// silently/log-only and never block signup, so the caller (the signup
-// action) is expected to swallow both the { ok: true, credited: false }
-// and { ok: false, ... } cases without surfacing anything to the user.
-export async function grantReferralBonus(
+// SIGNUP-TIME half. Records the relationship only — mints NOTHING.
+//
+// The bonus used to be granted here, at signup, before the referred account
+// had done anything at all: with free unlimited accounts that meant coins for
+// merely running the signup form. The relationship is now stored pending
+// (referrals.bonus_claimed = false, which 0049's schema already supported)
+// and paid later by claimPendingReferral below.
+//
+// Self-referral is still short-circuited without an RPC call. Behaviour
+// contract is unchanged for the caller: an invalid code, a self-referral, a
+// lookup failure or an RPC error must all fail silently/log-only and never
+// block signup.
+export async function recordPendingReferral(
   referrerId: string,
   referredId: string
-): Promise<GrantReferralBonusResult> {
+): Promise<ReferralResult> {
   if (referrerId === referredId) {
     return { ok: true, credited: false };
   }
 
-  const bonusAmount = await getReferralBonusAmount();
-
-  const { data, error } = await createAdminClient()
-    .rpc('grant_referral_bonus', {
-      p_referrer_id: referrerId,
-      p_referred_id: referredId,
-      p_bonus_amount: bonusAmount,
-    })
-    .single<GrantReferralBonusRpcResult>();
+  const { data, error } = await createAdminClient().rpc('record_pending_referral', {
+    p_referrer_id: referrerId,
+    p_referred_id: referredId,
+  });
 
   if (error) {
-    console.error('[coins] grant_referral_bonus RPC failed:', {
+    console.error('[coins] record_pending_referral RPC failed:', {
       message: error.message,
       code: error.code,
       details: error.details,
@@ -166,6 +195,46 @@ export async function grantReferralBonus(
 
     const message = error.message ?? '';
     if (message.includes('self_referral')) return { ok: true, credited: false };
+    return { ok: false, error: 'error' };
+  }
+
+  // `credited` here means "relationship recorded", never "coins paid" — no
+  // coins are minted on this path at all.
+  return { ok: true, credited: data === true };
+}
+
+// USAGE-TIME half, called from the chat route's post-stream success path.
+// Pays out the pending referral (if any) once the referred account has
+// demonstrated real usage by completing its first chat message.
+//
+// The referrer is looked up from the pending row inside the RPC and is never
+// supplied by a caller, so this takes only the referred user's id — there is
+// no parameter an attacker could point at an account of their choosing.
+//
+// Best-effort by design: a no-op (no pending referral, or the referrer is
+// over their 30-day cap) is { ok: true, credited: false }, not an error, and
+// the caller discards the result entirely.
+export async function claimPendingReferral(referredId: string): Promise<ReferralResult> {
+  const [bonusAmount, maxPer30d] = await Promise.all([
+    getReferralBonusAmount(),
+    getReferralMaxPer30d(),
+  ]);
+
+  const { data, error } = await createAdminClient()
+    .rpc('claim_pending_referral', {
+      p_referred_id: referredId,
+      p_bonus_amount: bonusAmount,
+      p_max_per_30d: maxPer30d,
+    })
+    .single<ClaimPendingReferralRpcResult>();
+
+  if (error) {
+    console.error('[coins] claim_pending_referral RPC failed:', {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+    });
     return { ok: false, error: 'error' };
   }
 

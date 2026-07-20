@@ -2,6 +2,8 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { claimPushNotificationReward } from '@/lib/coins/pushNotifications';
+import { isAllowedPushEndpoint } from '@/lib/push/endpointValidation';
+import { sendPushToSubscription } from '@/lib/push/webpush';
 
 // Mirrors the browser's PushSubscriptionJSON shape (subscription.toJSON())
 // so the frontend can pass what pushManager.subscribe() already returns
@@ -33,6 +35,13 @@ export async function subscribeToPush(subscription: PushSubscriptionPayload): Pr
     return { error: 'Yanlış abunəlik məlumatı' };
   }
 
+  // Reject anything that isn't a real push-service URL outright — a
+  // fabricated endpoint can't receive notifications, so there is nothing to
+  // save and nothing to reward.
+  if (!isAllowedPushEndpoint(subscription.endpoint)) {
+    return { error: 'Yanlış abunəlik məlumatı' };
+  }
+
   // upsert on (user_id, endpoint) so re-subscribing (e.g. after browser
   // key rotation) refreshes keys/created_at instead of erroring on the
   // unique constraint or leaving stale duplicate rows.
@@ -49,6 +58,33 @@ export async function subscribeToPush(subscription: PushSubscriptionPayload): Pr
     );
 
   if (error) return { error: error.message };
+
+  // PROOF OF DELIVERY BEFORE PAYMENT. The allowlist above rules out an
+  // obviously-fake host, but only an accepted push from the real service
+  // proves this specific endpoint+keys triple actually works. Nothing below
+  // can undo the upsert above: subscribing must succeed end-to-end (the user
+  // still gets reminders) even when the reward is declined — we just don't
+  // pay for an endpoint we couldn't verify.
+  //
+  // sendPushToSubscription THROWS if the VAPID env vars are missing, which
+  // is a server misconfiguration, not a user error — catching it here keeps
+  // a missing key from breaking subscribing entirely. Fail-closed on the
+  // coin side (no reward), fail-open on the subscription side.
+  let verified = false;
+  try {
+    const sendResult = await sendPushToSubscription(
+      { endpoint: subscription.endpoint, keys: subscription.keys },
+      { title: 'YOL', body: 'Bildirişlər aktivləşdirildi' }
+    );
+    verified = sendResult.ok;
+    if (!sendResult.ok) {
+      console.error('[push] verification push rejected, reward declined:', sendResult);
+    }
+  } catch (err) {
+    console.error('[push] verification push could not be sent (VAPID misconfigured?):', err);
+  }
+
+  if (!verified) return { success: true };
 
   // One-time-ever reward, regardless of how many times this user has
   // enabled/disabled/re-enabled push before — grant_push_notification_reward's

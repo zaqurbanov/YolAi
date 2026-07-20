@@ -29,7 +29,7 @@ export async function getLessonQuestionRewardAmount(): Promise<number> {
 export type SubmitLessonAnswerResult =
   | { correct: true; alreadyAnswered: false; reward: number; balance: number; explanation: string | null }
   | { correct: true; alreadyAnswered: true; explanation: string | null }
-  | { correct: false; explanation: string | null }
+  | { correct: false; alreadyAnswered: boolean; explanation: string | null }
   | { correct: false; error: 'not_found' | 'error' };
 
 interface QuizQuestionAnswerRow {
@@ -37,9 +37,17 @@ interface QuizQuestionAnswerRow {
   explanation: string | null;
 }
 
-// If the answer is wrong, returns immediately without any DB write at all
-// (no RPC call) — no cost to guessing wrong, no reward either, matching
-// claimDailyQuizReward's exact stance.
+// WAS: returned immediately on a wrong answer with no DB write, which made
+// every question brute-forceable in at most 4 POSTs. NOW: the answer is
+// recorded regardless of correctness and coins are credited only when
+// correct, so unique(user_id, question_id) caps each question at ONE attempt
+// ever (0059_security_hardening.sql, section C.2). Wrong answers still cost
+// no coins.
+//
+// This is also what contains the separate "arbitrary questionId, no check
+// the user opened the lesson" exposure in app/oyrenme/actions.ts: the bank
+// is still addressable, but probing a question permanently burns it for the
+// probing account.
 export async function submitLessonAnswer(
   userId: string,
   questionId: string,
@@ -59,22 +67,24 @@ export async function submitLessonAnswer(
     return { correct: false, error: 'not_found' };
   }
 
-  if (selectedIndex !== question.correct_index) {
-    return { correct: false, explanation: question.explanation };
-  }
-
+  const isCorrect = selectedIndex === question.correct_index;
   const reward = await getLessonQuestionRewardAmount();
 
   const { data, error } = await admin.rpc('award_quiz_question_reward', {
     p_user_id: userId,
     p_question_id: questionId,
     p_reward: reward,
+    p_is_correct: isCorrect,
   });
 
   if (error) {
     const message = error.message ?? '';
     if (message.includes('already_answered')) {
-      return { correct: true, alreadyAnswered: true, explanation: question.explanation };
+      // The question is locked either way; only the wording differs, which
+      // is the caller's concern.
+      return isCorrect
+        ? { correct: true, alreadyAnswered: true, explanation: question.explanation }
+        : { correct: false, alreadyAnswered: true, explanation: question.explanation };
     }
     console.error('[coins/lessonQuiz] award_quiz_question_reward RPC failed:', {
       message: error.message,
@@ -86,6 +96,11 @@ export async function submitLessonAnswer(
   }
 
   if (typeof data !== 'number') return { correct: false, error: 'error' };
+
+  // Only reported after the attempt is durably recorded above.
+  if (!isCorrect) {
+    return { correct: false, alreadyAnswered: false, explanation: question.explanation };
+  }
 
   return {
     correct: true,

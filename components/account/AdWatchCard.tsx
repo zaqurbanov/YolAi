@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition } from 'react';
 import { Modal, Button, toast } from '@heroui/react';
 import { SparkleIcon } from '@/components/icons';
 import { Spinner } from '@/components/Spinner';
-import { claimAdWatchRewardAction } from '@/app/coin-qazan/actions';
+import { claimAdWatchRewardAction, startAdViewAction } from '@/app/coin-qazan/actions';
 
 interface AdWatchCardProps {
   adsEnabled: boolean;
@@ -20,6 +20,14 @@ export default function AdWatchCard({ adsEnabled, reward, dailyMax, claimsToday 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(COUNTDOWN_SECONDS);
   const [isPending, startTransition] = useTransition();
+  // Server-issued single-use token for THIS ad view. The reward is only
+  // payable against a token the server minted, so the countdown below is
+  // presentation only — the real elapsed-time check compares the token's
+  // server-recorded issued_at against the server clock at claim time (see
+  // issueAdViewToken / claimAdWatchReward). A client that skips the wait
+  // gets 'too_early' rather than a coin.
+  const [nonce, setNonce] = useState<string | null>(null);
+  const [isStarting, setIsStarting] = useState(false);
 
   const isCapped = claimsUsed >= dailyMax;
 
@@ -33,22 +41,56 @@ export default function AdWatchCard({ adsEnabled, reward, dailyMax, claimsToday 
     return () => window.clearInterval(interval);
   }, [isModalOpen]);
 
+  // Mint the token first, then open the modal — the countdown must not start
+  // before the server has recorded issued_at, otherwise an honest user who
+  // watches the full ad could still be told they claimed too early.
+  async function handleStart() {
+    setIsStarting(true);
+    try {
+      const result = await startAdViewAction();
+      if (result.status !== 'success' || !result.nonce) {
+        toast.danger(result.message ?? 'Xəta baş verdi. Bir az sonra yenidən cəhd edin');
+        return;
+      }
+      setNonce(result.nonce);
+      setIsModalOpen(true);
+    } finally {
+      setIsStarting(false);
+    }
+  }
+
+  function handleModalOpenChange(open: boolean) {
+    setIsModalOpen(open);
+    // Drop the token on close so a stale one is never replayed on the next
+    // view — the server would reject it anyway (single-use), but holding it
+    // client-side serves no purpose.
+    if (!open) setNonce(null);
+  }
+
   function handleClaim() {
+    if (!nonce) return;
     startTransition(async () => {
-      const result = await claimAdWatchRewardAction();
+      const result = await claimAdWatchRewardAction(nonce);
       if (result.status === 'success') {
         toast.success(result.message);
         if (result.balance != null) {
           window.dispatchEvent(new CustomEvent('coin-balance-update', { detail: { balance: result.balance } }));
         }
-        setIsModalOpen(false);
+        handleModalOpenChange(false);
         setClaimsUsed((c) => c + 1);
       } else if (result.status === 'daily_limit_reached') {
         toast.danger(result.message);
-        setIsModalOpen(false);
+        handleModalOpenChange(false);
         setClaimsUsed(dailyMax);
+      } else if (result.status === 'too_early') {
+        // Server clock says the ad wasn't watched long enough — keep the
+        // modal open so an honest user can simply wait a moment and retry.
+        toast.danger(result.message);
       } else {
-        toast.danger('Xəta baş verdi. Bir az sonra yenidən cəhd edin');
+        // invalid_token (expired/consumed/unknown) or a generic error: the
+        // token is spent either way, so close and let them start over.
+        toast.danger(result.message || 'Xəta baş verdi. Bir az sonra yenidən cəhd edin');
+        handleModalOpenChange(false);
       }
     });
   }
@@ -87,12 +129,17 @@ export default function AdWatchCard({ adsEnabled, reward, dailyMax, claimsToday 
           Bugünkü limitə çatmısınız, sabah yenidən cəhd edin
         </Button>
       ) : (
-        <Button variant="primary" onPress={() => setIsModalOpen(true)}>
-          Reklama bax
+        <Button variant="primary" onPress={handleStart} isPending={isStarting}>
+          {({ isPending: pending }) => (
+            <>
+              {pending ? <Spinner size="sm" tone="current" /> : null}
+              Reklama bax
+            </>
+          )}
         </Button>
       )}
 
-      <Modal.Backdrop isOpen={isModalOpen} onOpenChange={setIsModalOpen}>
+      <Modal.Backdrop isOpen={isModalOpen} onOpenChange={handleModalOpenChange}>
         <Modal.Container>
           <Modal.Dialog className="sm:max-w-[380px]">
             <Modal.CloseTrigger />

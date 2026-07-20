@@ -133,6 +133,10 @@ export async function transferCoins(
         return { error: 'Köçürmək üçün kifayət qədər coininiz yoxdur (gündəlik pulsuz limitiniz köçürülə bilməz)' };
       case 'daily_cap_exceeded':
         return { error: 'Gündəlik köçürmə limitini aşdınız' };
+      case 'recipient_daily_cap_exceeded':
+        return { error: 'Alıcı bu gün qəbul edə biləcəyi maksimum coin limitinə çatıb' };
+      case 'account_too_new':
+        return { error: 'Coin köçürmək üçün hesabınız ən azı 7 günlük olmalıdır' };
       case 'invalid_amount':
         return { error: 'Düzgün miqdar daxil edin' };
       default:

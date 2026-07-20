@@ -10,7 +10,7 @@ import {
 import { getChatModel, getChatModelFallback, getChatModelId, getChatModelFallbackId, getProviderCallOptions, isVisionAvailable } from '@/lib/llm';
 import { streamTextWithFallback } from '@/lib/llm/streamWithFallback';
 import { identifySignFromImage } from '@/lib/rag/identifySignFromImage';
-import { retrieveRelevantChunks, retrievePerDocumentChunks, retrieveChunksByArticle, type RetrievedChunk } from '@/lib/retrieval/search';
+import { retrieveRelevantChunks, retrievePerDocumentChunks, retrieveChunksByArticle, embedQueryWithActiveModel, type RetrievedChunk } from '@/lib/retrieval/search';
 import { extractArticleReferences, articleLabelPrefixes, isPureArticleReferenceQuery } from '@/lib/retrieval/articleQuery';
 import { buildSystemPrompt, buildContextBlock, buildCitations, filterCitedChunks } from '@/lib/rag/buildPrompt';
 import { shouldUpdateSummary, updateContextSummary } from '@/lib/rag/contextSummary';
@@ -18,9 +18,10 @@ import { rewriteQuery } from '@/lib/rag/rewriteQuery';
 import { rerankChunks } from '@/lib/rag/rerank';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { apiError, serverError } from '@/lib/api/errors';
+import { apiError, serverError, unauthorized } from '@/lib/api/errors';
 import { checkChatRateLimit } from '@/lib/chat/rateLimit';
 import { checkAndReserveCoins, debitCoins } from '@/lib/chat/coins';
+import { claimPendingReferral } from '@/lib/coins/referrals';
 
 const MESSAGE_WINDOW = 10;
 const IMAGE_PLACEHOLDER_CONTENT = '[Şəkil göndərildi]';
@@ -32,43 +33,6 @@ function findImagePart(message: UIMessage | undefined): FileUIPart | null {
     (p): p is FileUIPart => p.type === 'file' && p.mediaType?.startsWith('image/'),
   );
   return part ?? null;
-}
-
-function parseDataUrl(url: string): { buffer: Buffer; mediaType: string } | null {
-  const match = /^data:([^;]+);base64,(.+)$/.exec(url);
-  if (!match) return null;
-  const [, mediaType, base64] = match;
-  return { buffer: Buffer.from(base64, 'base64'), mediaType };
-}
-
-// Writes into the private 'chat-images' bucket (0054) via the service-role
-// client, mirroring the 'documents' bucket upload pattern in
-// app/api/admin/documents/route.ts — the only difference is this path is
-// reachable by any authenticated (coin-gated) user, not just admins, since
-// it's the user's own photo, not an admin-managed document. Returns null
-// (rather than throwing) on failure so a storage hiccup degrades to "answer
-// without a persisted image" instead of failing the whole chat request —
-// the identification/retrieval/answer flow does not depend on this upload.
-async function uploadChatImage(conversationId: string, imagePart: FileUIPart): Promise<string | null> {
-  const parsed = parseDataUrl(imagePart.url);
-  if (!parsed) {
-    console.error('[chat] chat image part was not a data: URL, skipping upload');
-    return null;
-  }
-
-  const ext = parsed.mediaType.split('/')[1]?.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'jpg';
-  const storagePath = `${conversationId}/${crypto.randomUUID()}.${ext}`;
-
-  const { error } = await createAdminClient()
-    .storage.from('chat-images')
-    .upload(storagePath, parsed.buffer, { contentType: parsed.mediaType });
-
-  if (error) {
-    console.error('[chat] failed to upload chat image:', error);
-    return null;
-  }
-
-  return storagePath;
 }
 
 function toClientErrorMessage(error: unknown): string {
@@ -181,6 +145,18 @@ export async function POST(request: Request) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  // Hard auth gate. Everything below (rate limiting, coin reservation, the
+  // coin debit in onFinish) is scoped by `if (user && !isAdmin)`, so an
+  // anonymous caller previously fell through ALL of it and got unmetered,
+  // unauthenticated access to the LLM — confirmed live: a plain
+  // `curl -X POST /api/chat` with no cookie returned a full streamed
+  // response, billed to this project's provider keys. proxy.ts does not
+  // help here: it only guards page prefixes ('/chat', '/admin', '/account',
+  // '/oyrenme'), and '/api/chat' matches none of them. There is no
+  // legitimate anonymous entry point — the chat UI itself sits behind that
+  // same proxy guard — so this rejects rather than degrades.
+  if (!user) return unauthorized();
+
   const userName =
     user?.user_metadata?.full_name ?? user?.user_metadata?.name ?? (user?.email ? user.email.split('@')[0] : null) ?? null;
 
@@ -262,18 +238,13 @@ export async function POST(request: Request) {
     try {
       conversation = await getOrCreateConversation(user.id, conversationId);
 
-      // Not awaited concurrently with identifyPromise above (it needs
-      // conversation.id, which wasn't known until the line above) — but it's
-      // a plain storage write, not an LLM call, so serializing it here adds
-      // negligible latency next to the vision call it runs alongside.
-      const imagePath = imagePart ? await uploadChatImage(conversation.id, imagePart) : null;
-
-      await supabase.from('messages').insert({
+      const { error: userMessageError } = await supabase.from('messages').insert({
         conversation_id: conversation.id,
         role: 'user',
         content: userMessageContent,
-        image_path: imagePath,
       });
+
+      if (userMessageError) throw userMessageError;
 
       const { data: placeholder, error: placeholderError } = await supabase
         .from('messages')
@@ -372,13 +343,40 @@ export async function POST(request: Request) {
   const skipTrigram = isPureArticleReferenceQuery(retrievalSourceText, articleRefs);
   const ftsQueryForSearch = skipTrigram ? undefined : retrievalSourceText;
 
+  // Only TWO distinct texts are ever embedded per request (the rewritten
+  // query and — when it differs — the raw user query), but four retrieval
+  // calls below consume them: the rewritten query feeds the primary,
+  // per-document AND article searches. Embedding inside each call meant
+  // computing the identical vector up to 3 times per request, pure wasted
+  // work (and, were embedding ever moved behind a paid API, 3 billed calls
+  // instead of 1). Embed each distinct text once here and pass the vectors
+  // down via `precomputedEmbedding`.
+  const embedStart = performance.now();
+  const [retrievalQueryEmbedding, rawQueryEmbedding] = await Promise.all([
+    embedQueryWithActiveModel(retrievalQuery),
+    rawQueryDiffersFromRewrite ? embedQueryWithActiveModel(retrievalSourceText) : Promise.resolve(null),
+  ]);
+  const queryEmbedMs = performance.now() - embedStart;
+
   const [primaryResult, rawQueryResult, perDocumentResult, articleResult] = await Promise.all([
-    retrieveRelevantChunks({ embedQuery: retrievalQuery, ftsQuery: ftsQueryForSearch, documentId }),
-    rawQueryDiffersFromRewrite
-      ? retrieveRelevantChunks({ embedQuery: retrievalSourceText, ftsQuery: ftsQueryForSearch, documentId })
+    retrieveRelevantChunks({
+      embedQuery: retrievalQuery,
+      ftsQuery: ftsQueryForSearch,
+      documentId,
+      precomputedEmbedding: retrievalQueryEmbedding,
+    }),
+    rawQueryDiffersFromRewrite && rawQueryEmbedding
+      ? retrieveRelevantChunks({
+          embedQuery: retrievalSourceText,
+          ftsQuery: ftsQueryForSearch,
+          documentId,
+          precomputedEmbedding: rawQueryEmbedding,
+        })
       : null,
-    documentId ? null : retrievePerDocumentChunks(retrievalQuery, ftsQueryForSearch),
-    articlePrefixes.length > 0 ? retrieveChunksByArticle(retrievalQuery, articlePrefixes) : null,
+    documentId ? null : retrievePerDocumentChunks(retrievalQuery, ftsQueryForSearch, retrievalQueryEmbedding),
+    articlePrefixes.length > 0
+      ? retrieveChunksByArticle(retrievalQuery, articlePrefixes, retrievalQueryEmbedding)
+      : null,
   ]);
 
   const seenChunkIds = new Set(primaryResult.chunks.map((c) => c.id));
@@ -400,8 +398,10 @@ export async function POST(request: Request) {
   // article-number match always sorts first here.
   const initialChunks = mergedChunks.sort((a, b) => b.combined_score - a.combined_score);
 
-  const embedMs =
-    primaryResult.embedMs + (rawQueryResult?.embedMs ?? 0) + (perDocumentResult?.embedMs ?? 0) + (articleResult?.embedMs ?? 0);
+  // Embedding now happens once per distinct text above (see queryEmbedMs), so
+  // the per-call embedMs values are all 0 — summing them would under-report
+  // the real cost in chat_request_timing. Report the actual measured time.
+  const embedMs = queryEmbedMs;
   const dbSearchMs =
     primaryResult.dbSearchMs +
     (rawQueryResult?.dbSearchMs ?? 0) +
@@ -595,6 +595,18 @@ export async function POST(request: Request) {
         if (part.type === 'finish' && user && !isAdmin && coinPrice !== null && coinBalance !== null) {
           const newBalance = await debitCoins(user.id, coinPrice);
           if (newBalance !== null) coinBalance = newBalance;
+        }
+        // A completed chat message is the "real usage" signal that a pending
+        // referral is paid on (0059 section D.2) — the bonus is no longer
+        // granted at signup. Deliberately NOT awaited and never surfaced:
+        // this must not delay the finish part, must not affect the balance
+        // reported in messageMetadata below, and must never fail a chat
+        // response. A no-op for the overwhelming majority of messages (the
+        // RPC finds no pending row and returns immediately).
+        if (part.type === 'finish' && user) {
+          void claimPendingReferral(user.id).catch((err) => {
+            console.error('[chat] pending referral credit failed:', err);
+          });
         }
         controller.enqueue(part);
       },

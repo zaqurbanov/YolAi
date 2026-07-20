@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { env, pipeline, type FeatureExtractionPipeline } from '@huggingface/transformers';
 
-const MODEL_ID = 'Xenova/paraphrase-multilingual-MiniLM-L12-v2';
+const MODEL_ID = 'Xenova/multilingual-e5-small';
 
 // Serverless runtimes (Vercel) ship a read-only filesystem except /tmp — the
 // library's default cache dir lives under node_modules and fails to mkdir there.
@@ -40,9 +40,10 @@ if (existsSync(VENDORED_MODEL_FILE)) {
 // itself changed). In production route-handler processes the module is only
 // evaluated once per process regardless, so this is a no-op there — this is
 // a dev-environment correctness fix, not a claim that the measured ~3.2s
-// embed latency (see chat_request_timing logs) was caused by cache misses;
-// that cost is the inherent first-use q8 MiniLM CPU inference/model-load
-// time and is expected to only pay once per warm process either way.
+// embed latency (see chat_request_timing logs, measured under the prior
+// MiniLM model) was caused by cache misses; that cost is the inherent
+// first-use q8 CPU inference/model-load time and is expected to only pay
+// once per warm process either way.
 const globalForEmbeddings = globalThis as typeof globalThis & {
   __yolExtractorPromise?: Promise<FeatureExtractionPipeline>;
 };
@@ -50,11 +51,10 @@ const globalForEmbeddings = globalThis as typeof globalThis & {
 function getExtractor() {
   if (!globalForEmbeddings.__yolExtractorPromise) {
     // Serverless (Vercel) cold starts re-download the model on every fresh
-    // container — quantized (q8) ONNX weights are ~4x smaller than the
-    // default fp32 weights (~120MB vs ~470MB), cutting both download and
-    // load time substantially. Retrieval quality loss from int8 quantization
-    // is negligible for this use case (semantic similarity search, not
-    // generation).
+    // container — quantized (q8) ONNX weights are substantially smaller than
+    // the default fp32 weights, cutting both download and load time.
+    // Retrieval quality loss from int8 quantization is negligible for this
+    // use case (semantic similarity search, not generation).
     const startedAt = Date.now();
     console.log('[embeddings] pipeline() load starting');
     globalForEmbeddings.__yolExtractorPromise = (
@@ -69,9 +69,13 @@ function getExtractor() {
   return globalForEmbeddings.__yolExtractorPromise;
 }
 
+// E5 models are trained with task-instruction prefixes distinguishing
+// queries from passages — omitting them measurably degrades retrieval
+// quality. This prefixing is internal to embed.ts; callers (search.ts,
+// ingestDocument.ts) pass raw text and are unaware of it.
 export async function embedText(text: string): Promise<number[]> {
   const extractor = await getExtractor();
-  const output = await extractor(text, { pooling: 'mean', normalize: true });
+  const output = await extractor(`query: ${text}`, { pooling: 'mean', normalize: true });
   return Array.from(output.data as Float32Array);
 }
 
@@ -79,7 +83,7 @@ export async function embedBatch(texts: string[]): Promise<number[][]> {
   const extractor = await getExtractor();
   const embeddings: number[][] = [];
   for (const text of texts) {
-    const output = await extractor(text, { pooling: 'mean', normalize: true });
+    const output = await extractor(`passage: ${text}`, { pooling: 'mean', normalize: true });
     embeddings.push(Array.from(output.data as Float32Array));
   }
   return embeddings;

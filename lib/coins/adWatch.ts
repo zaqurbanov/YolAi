@@ -1,4 +1,5 @@
 import 'server-only';
+import { randomBytes } from 'crypto';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 // Repeatable coin reward for watching an ad (reklam izləyib coin qazanmaq),
@@ -69,16 +70,114 @@ export async function getAdWatchClaimsToday(userId: string): Promise<number> {
   return count ?? 0;
 }
 
+// Proof-of-watch (0059_security_hardening.sql, section A). The claim path
+// used to take no arguments at all, so five direct POSTs to the server
+// action were five coins in under a second — the countdown existed only in
+// the client component. These constants are the SERVER's copy of the ad
+// duration; components/account/AdWatchCard.tsx's COUNTDOWN_SECONDS is now
+// only a UI affordance and is never trusted or transmitted.
+const AD_VIEW_DURATION_SECONDS = 5;
+// Subtracted from the required elapsed time so a user whose round trip is
+// marginally faster than the countdown isn't rejected. Small enough that it
+// can't meaningfully shorten the watch.
+const AD_VIEW_SKEW_MARGIN_SECONDS = 1;
+const AD_VIEW_MIN_ELAPSED_SECONDS = AD_VIEW_DURATION_SECONDS - AD_VIEW_SKEW_MARGIN_SECONDS;
+// A token is only valid for a short window after issuance. Bounds how long a
+// stockpiled batch of nonces stays spendable, and gives the sweep below a
+// definition of "stale".
+const AD_VIEW_TOKEN_MAX_AGE_SECONDS = 10 * 60;
+
+export { AD_VIEW_DURATION_SECONDS };
+
+// Issued when an ad view STARTS. 32 random bytes, hex — unguessable, so a
+// claim can only present a nonce the server actually handed this user.
+export async function issueAdViewToken(userId: string): Promise<string | null> {
+  const admin = createAdminClient();
+  const nonce = randomBytes(32).toString('hex');
+
+  const { error } = await admin.from('ad_view_tokens').insert({ user_id: userId, nonce });
+
+  if (error) {
+    console.error('[coins] issueAdViewToken insert failed:', error);
+    return null;
+  }
+
+  // Opportunistic staleness sweep, scoped to this one user (indexed by
+  // (user_id, issued_at)) so it stays cheap — no cron/edge function needed
+  // for a table this small. Best-effort: expiry is already enforced in the
+  // RPC's WHERE clause, so a failed sweep leaves dead rows, never valid ones.
+  const staleCutoff = new Date(Date.now() - AD_VIEW_TOKEN_MAX_AGE_SECONDS * 1000).toISOString();
+  const { error: sweepError } = await admin
+    .from('ad_view_tokens')
+    .delete()
+    .eq('user_id', userId)
+    .lt('issued_at', staleCutoff);
+
+  if (sweepError) console.error('[coins] issueAdViewToken stale sweep failed:', sweepError);
+
+  return nonce;
+}
+
+export type AdViewTokenFailure = 'not_found' | 'consumed' | 'expired' | 'too_early' | 'error';
+
+// Delegates every check to consume_ad_view_token, which does the validity
+// test and the consume in ONE conditional UPDATE — read-then-write here
+// would be replayable under concurrency. Fail-closed: an unrecognised
+// return value or any RPC error means the token is not consumed and no
+// reward follows.
+async function consumeAdViewToken(
+  userId: string,
+  nonce: string
+): Promise<{ ok: true } | { ok: false; error: AdViewTokenFailure }> {
+  const { data, error } = await createAdminClient().rpc('consume_ad_view_token', {
+    p_user_id: userId,
+    p_nonce: nonce,
+    p_min_elapsed_seconds: AD_VIEW_MIN_ELAPSED_SECONDS,
+    p_max_age_seconds: AD_VIEW_TOKEN_MAX_AGE_SECONDS,
+  });
+
+  if (error) {
+    console.error('[coins] consume_ad_view_token RPC failed:', {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+    });
+    return { ok: false, error: 'error' };
+  }
+
+  if (data === 'ok') return { ok: true };
+  if (data === 'not_found' || data === 'consumed' || data === 'expired' || data === 'too_early') {
+    return { ok: false, error: data };
+  }
+  return { ok: false, error: 'error' };
+}
+
 type ClaimResult =
   | { ok: true; balance: number; reward: number }
-  | { ok: false; error: 'daily_limit_reached' | 'error' };
+  | { ok: false; error: 'daily_limit_reached' | 'invalid_token' | 'too_early' | 'error' };
 
 // Repeatable, unlike claimPushNotificationReward/claimDailyQuizReward — a
 // caller may call this multiple times in the same day, and each call that
 // isn't blocked by the daily cap credits coins again. The RPC's row-locked
 // count against ad_watch_claims is the real guard, this function just
 // translates its outcome.
-export async function claimAdWatchReward(userId: string): Promise<ClaimResult> {
+export async function claimAdWatchReward(userId: string, nonce: string): Promise<ClaimResult> {
+  // Token first, before any settings reads or the credit RPC — a claim that
+  // can't prove it watched must never reach the daily-cap machinery at all.
+  if (typeof nonce !== 'string' || !nonce) {
+    return { ok: false, error: 'invalid_token' };
+  }
+
+  const consumed = await consumeAdViewToken(userId, nonce);
+  if (!consumed.ok) {
+    if (consumed.error === 'too_early') return { ok: false, error: 'too_early' };
+    if (consumed.error === 'error') return { ok: false, error: 'error' };
+    // not_found (never issued, or issued to a DIFFERENT user), consumed
+    // (replay), expired — all indistinguishable to the caller on purpose.
+    return { ok: false, error: 'invalid_token' };
+  }
+
   const [reward, dailyMax] = await Promise.all([getAdWatchRewardAmount(), getAdWatchDailyMax()]);
 
   const { data, error } = await createAdminClient().rpc('claim_ad_watch_reward', {

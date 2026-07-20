@@ -285,6 +285,80 @@ function splitTopLevelDottedClauses(text: string): TextPiece[] | null {
   return pieces.map((p) => ({ ...p, label: labelsByStart.get(p.start) && `Bənd ${labelsByStart.get(p.start)}` }));
 }
 
+// Sign/code catalog documents (e.g. a "Yol nişanları" reference PDF: a table
+// of Kod | Təsvir | Lövhə rows — code, text description, and a sign image
+// that never extracts as text) have NO Maddə/Fəsil/Bölmə headers and no
+// trailing-period dotted clauses ("3.2." — TOP_LEVEL_DOTTED_MARKER above), so
+// they'd otherwise fall all the way through to splitWithOverlap's 3200-char
+// window — confirmed live against a real 26-page, 198-entry catalog PDF: the
+// whole cleaned document was only ~17.6K chars, meaning ~5-6 giant chunks for
+// 198 distinct signs, each chunk burying dozens of unrelated entries together
+// and diluting retrieval for any single sign. Each row is short and already a
+// complete, self-contained unit ("1.1 Şlaqbaumlu dəmir yol keçidi") — the
+// natural fix is one chunk per entry, not size-window bucketing.
+//
+// Deliberately NOT line-anchored (unlike SUBCLAUSE_MARKER's line-initial
+// requirement): confirmed live that unpdf's page-boundary text sometimes
+// glues a leftover boilerplate fragment onto the first real line of a page
+// (e.g. "NİSANLARİĞ1.4.2 Dəmir yol keçidinə yaxınlaşma" — "NİSANLARİĞ" is a
+// stray remnant of a repeated header line stripBoilerplate couldn't fully
+// normalize away since its trailing content differs per page). A line-anchored
+// marker would silently miss every such entry (~1 per page). Matching
+// anywhere in the text — the same "page-boundary corruption" rationale
+// SUBCLAUSE_MARKER/splitDottedSubclauses already use elsewhere in this file —
+// sidesteps this. False-positive risk (matching a stray number mid-sentence)
+// is guarded by requiring the code to be followed by whitespace then an
+// uppercase Azerbaijani letter (real descriptions are always capitalized;
+// this also incidentally excludes date-like sequences such as "15.06.2023",
+// which are never followed by a capital letter).
+const CODE_CATALOG_MARKER = /(?<!\d)(\d+(?:\.\d+){1,3})\s+(?=[A-ZÇƏĞİÖŞÜ])/g;
+const MIN_CODE_CATALOG_ENTRIES = 5;
+
+function splitCodeCatalogEntries(text: string): TextPiece[] | null {
+  const markers: { start: number; label: string }[] = [];
+  for (const m of text.matchAll(CODE_CATALOG_MARKER)) {
+    markers.push({ start: m.index ?? 0, label: m[1] });
+  }
+  if (markers.length < MIN_CODE_CATALOG_ENTRIES) return null;
+
+  const labelsByStart = new Map<number, string>();
+  for (const m of markers) labelsByStart.set(m.start, m.label);
+
+  const markerStarts = markers.map((m) => m.start);
+  // Keep any preamble (e.g. a leading category heading like "XƏBƏRDARLIQ
+  // NİŞANLARI") attached to the first real entry rather than dropping it —
+  // same rationale as every other strategy's preamble handling in this file.
+  if (markerStarts[0] > 0) {
+    labelsByStart.set(0, markers[0].label);
+    markerStarts[0] = 0;
+  }
+
+  // Intentionally NOT using buildPiecesFromMarkers here — its short-piece
+  // merging exists to stop tiny fragments from diluting retrieval, but here
+  // each entry (~20-60 chars) is already the complete unit; merging several
+  // back together would just reproduce the oversized-chunk problem this
+  // strategy exists to fix. One chunk per matched entry; an (unexpectedly)
+  // oversized piece still falls back to the overlap splitter defensively.
+  const pieces: TextPiece[] = [];
+  for (let i = 0; i < markerStarts.length; i++) {
+    const segStart = markerStarts[i];
+    const segEnd = i + 1 < markerStarts.length ? markerStarts[i + 1] : text.length;
+    const raw = text.slice(segStart, segEnd);
+    const localTrimStart = raw.length - raw.trimStart().length;
+    const piece = raw.trim();
+    if (!piece) continue;
+    const start = segStart + localTrimStart;
+    if (piece.length > MAX_CHARS) {
+      for (const sub of splitWithOverlap(piece)) {
+        pieces.push({ piece: sub.piece, start: start + sub.start });
+      }
+    } else {
+      pieces.push({ piece, start, label: labelsByStart.get(segStart) && `Kod ${labelsByStart.get(segStart)}` });
+    }
+  }
+  return pieces;
+}
+
 function splitPlainEnumeratedList(text: string): TextPiece[] | null {
   const markerStarts: number[] = [];
   for (const m of text.matchAll(SUBCLAUSE_MARKER)) {
@@ -421,7 +495,7 @@ export function chunkPages(pages: PageText[]): Chunk[] {
       (articleNumber ? splitDottedSubclauses(trimmed, articleNumber) : null) ??
       splitPlainEnumeratedList(trimmed) ??
       (segment.label === null && documentHasNoStructuralMarkers
-        ? splitTopLevelDottedClauses(trimmed)
+        ? (splitCodeCatalogEntries(trimmed) ?? splitTopLevelDottedClauses(trimmed))
         : null) ??
       splitWithOverlap(trimmed);
     for (const piece of pieces) {

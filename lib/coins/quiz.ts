@@ -27,6 +27,9 @@ export async function getQuizRewardAmount(): Promise<number> {
   return value;
 }
 
+// Deliberately unfiltered by reward: since section C.1 a wrong answer also
+// writes a row, and "already attempted today" is exactly the lock we want —
+// the user gets one attempt per day, not one CORRECT attempt per day.
 export async function hasClaimedToday(userId: string): Promise<boolean> {
   const todayUtc = new Date().toISOString().slice(0, 10);
 
@@ -52,23 +55,28 @@ type ClaimResult =
   | { ok: true; balance: number; reward: number }
   | { ok: false; error: 'already_claimed' | 'incorrect' | 'error' };
 
-// If the answer is wrong, returns immediately without touching the DB at
-// all (no RPC call) — no cost to guessing wrong, no reward either, per the
-// roadmap's accepted soft-abuse note for Phase 1.
+// WAS: returned immediately on a wrong answer without touching the DB at
+// all. That made the quiz trivially brute-forceable — 4 options, no record
+// of a wrong guess, so POSTing indices 0..3 guaranteed the reward by the 4th
+// attempt (0059_security_hardening.sql, section C.1).
+//
+// NOW: the attempt is recorded FIRST, regardless of correctness (reward 0
+// when wrong), and only then is the reward conditionally credited — both
+// inside claim_daily_quiz_reward's single transaction. Wrong answers still
+// cost no coins; they just consume the one attempt per day that
+// unique(user_id, claim_date) allows.
 export async function claimDailyQuizReward(
   userId: string,
   selectedIndex: number,
   correctIndex: number
 ): Promise<ClaimResult> {
-  if (selectedIndex !== correctIndex) {
-    return { ok: false, error: 'incorrect' };
-  }
-
+  const isCorrect = selectedIndex === correctIndex;
   const reward = await getQuizRewardAmount();
 
   const { data, error } = await createAdminClient().rpc('claim_daily_quiz_reward', {
     p_user_id: userId,
     p_reward: reward,
+    p_is_correct: isCorrect,
   });
 
   if (error) {
@@ -87,16 +95,23 @@ export async function claimDailyQuizReward(
 
   if (typeof data !== 'number') return { ok: false, error: 'error' };
 
+  // Reported only after the attempt is durably recorded, so a wrong answer
+  // can't be retried by simply ignoring this result.
+  if (!isCorrect) return { ok: false, error: 'incorrect' };
+
   return { ok: true, balance: data, reward };
 }
 
 // All-time claim count for a motivational "you've done this N times" display
 // — not a security gate, so fail open to 0 on error rather than throwing.
+// Filtered to reward > 0: since section C.1, daily_quiz_claims also holds
+// recorded-but-wrong attempts (reward 0), which are not achievements.
 export async function getQuizClaimsCount(userId: string): Promise<number> {
   const { count, error } = await createAdminClient()
     .from('daily_quiz_claims')
     .select('*', { count: 'exact', head: true })
-    .eq('user_id', userId);
+    .eq('user_id', userId)
+    .gt('reward', 0);
 
   if (error) {
     console.error('[coins] getQuizClaimsCount read failed:', error);
@@ -106,7 +121,9 @@ export async function getQuizClaimsCount(userId: string): Promise<number> {
   return count ?? 0;
 }
 
-// Consecutive-day streak, computed at read time from claim_date rows (no
+// Consecutive-day streak over CORRECT answers only (reward > 0) — a wrong
+// attempt records a row but is not a streak day. Computed at read time from
+// claim_date rows (no
 // dedicated streak column). A missing claim for *today* does not break the
 // streak (the user may still claim later today) — only a gap before today
 // does. Fail open to 0 on error, same display-only bias as
@@ -116,6 +133,7 @@ export async function getQuizStreak(userId: string): Promise<number> {
     .from('daily_quiz_claims')
     .select('claim_date')
     .eq('user_id', userId)
+    .gt('reward', 0)
     .order('claim_date', { ascending: false })
     .limit(400);
 

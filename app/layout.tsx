@@ -6,6 +6,7 @@ import NavBar from "@/components/NavBar";
 import Sidebar from "@/components/Sidebar";
 import { SidebarProvider } from "@/components/SidebarContext";
 import { PullToRefresh } from "@/components/PullToRefresh";
+import ServiceWorkerRegistrar from "@/components/ServiceWorkerRegistrar";
 import { TourProvider } from "@/components/onboarding/TourProvider";
 
 const montserrat = Montserrat({
@@ -78,6 +79,7 @@ export default function RootLayout({
           </SidebarProvider>
         </TourProvider>
         <Toast.Provider placement="top end" />
+        <ServiceWorkerRegistrar />
       </body>
     </html>
   );

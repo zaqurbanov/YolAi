@@ -1,19 +1,18 @@
 'use client';
 
-import { Suspense, useActionState } from 'react';
+import { Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { TextField, Label, Input, Description, Button, Alert, Separator } from '@heroui/react';
-import { signup, type AuthFormState } from '../actions';
+import { Alert } from '@heroui/react';
 import { GoogleSignInButton } from '@/components/GoogleSignInButton';
-import { Spinner } from '@/components/Spinner';
 
-const initialState: AuthFormState = {};
-
+// Google-only by design — the email/password form was removed along with its
+// server action (see app/(auth)/actions.ts for the full rationale). Removing
+// the form alone would not have been enough: the action behind it stayed
+// callable as a plain POST endpoint.
 function SignupForm() {
-  const [state, formAction, pending] = useActionState(signup, initialState);
   const searchParams = useSearchParams();
-  const error = state?.error ?? searchParams.get('error');
+  const error = searchParams.get('error');
   const ref = searchParams.get('ref');
 
   return (
@@ -27,50 +26,20 @@ function SignupForm() {
         </div>
 
         <div className="glass-panel rounded-2xl p-6 sm:p-8">
-          <GoogleSignInButton />
+          {error && (
+            <Alert status="danger" className="mb-5">
+              <Alert.Indicator />
+              <Alert.Content>
+                <Alert.Description>{error}</Alert.Description>
+              </Alert.Content>
+            </Alert>
+          )}
 
-          <div className="my-6 flex items-center gap-3">
-            <Separator className="flex-1" />
-            <span className="mono-label uppercase text-on-surface-variant">və ya</span>
-            <Separator className="flex-1" />
-          </div>
+          <GoogleSignInButton referralCode={ref} />
 
-          <form action={formAction} className="flex flex-col gap-5">
-            <input type="hidden" name="ref" value={ref ?? ''} />
-            <TextField name="email" isRequired>
-              <Label>Email</Label>
-              <Input type="email" placeholder="ad@nümunə.com" />
-            </TextField>
-            <TextField name="password" isRequired>
-              <Label>Şifrə</Label>
-              <Input type="password" minLength={8} placeholder="••••••••" />
-              <Description>Ən azı 8 simvol</Description>
-            </TextField>
-
-            {error && (
-              <Alert status="danger">
-                <Alert.Indicator />
-                <Alert.Content>
-                  <Alert.Description>{error}</Alert.Description>
-                </Alert.Content>
-              </Alert>
-            )}
-
-            <Button
-              type="submit"
-              variant="primary"
-              fullWidth
-              isPending={pending}
-              className="glow-primary"
-            >
-              {({ isPending }) => (
-                <>
-                  {isPending ? <Spinner size="sm" tone="current" /> : null}
-                  Qeydiyyatdan keç
-                </>
-              )}
-            </Button>
-          </form>
+          <p className="mt-5 text-center text-xs text-on-surface-variant">
+            Hesabınız Google ilə yaradılır — ayrıca şifrə tələb olunmur.
+          </p>
         </div>
 
         <p className="mt-6 text-center text-sm text-on-surface-variant">

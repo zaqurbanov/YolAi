@@ -28,8 +28,8 @@ const nextConfig: NextConfig = {
   // of just what's reachable from the actual runtime entry point
   // (`dist/transformers.node.cjs`, a self-contained esbuild bundle per the package's
   // own `main`/`exports` fields). That pulled ~471MB of unused `src/**` model
-  // architecture source (every arch the library supports, not just the one MiniLM
-  // model this app uses) into the deployed Lambda bundle — confirmed via
+  // architecture source (every arch the library supports, not just the one
+  // embedding model this app uses) into the deployed Lambda bundle — confirmed via
   // `.next/server/app/api/chat/route.js.nft.json`. Exclude it explicitly, plus other
   // runtime-irrelevant pieces: the browser/WASM dist build and onnxruntime-web (this
   // app is Node-only server-side, using onnxruntime-node's native binding).

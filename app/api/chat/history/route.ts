@@ -1,16 +1,8 @@
 import crypto from 'crypto';
 import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { createAdminClient } from '@/lib/supabase/admin';
 import { apiError, notFound, serverError, unauthorized } from '@/lib/api/errors';
 import { getCoinBalanceStatus, DEFAULT_DAILY_LIMIT } from '@/lib/chat/coins';
-
-// 'chat-images' (0054) is a private bucket with no anon/authenticated SELECT
-// policy, same posture as 'documents' — object reads must go through a
-// signed URL minted by the service-role client, never the RLS-scoped client
-// used everywhere else in this file. 1 hour comfortably outlives a single
-// history page view without needing refresh-on-scroll handling.
-const IMAGE_SIGNED_URL_TTL_SECONDS = 3600;
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -82,7 +74,7 @@ export async function GET(request: NextRequest) {
 
   const { data: messages, error } = await supabase
     .from('messages')
-    .select('id, role, content, citations, created_at, image_path')
+    .select('id, role, content, citations, created_at')
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: true });
 
@@ -102,39 +94,7 @@ export async function GET(request: NextRequest) {
     return notFound('Söhbət tapılmadı');
   }
 
-  // image_path rows need a signed URL to be viewable at all ('chat-images' is
-  // private, no public/anon SELECT policy — see 0054) — minted via the
-  // service-role client since the RLS-scoped `supabase` client above has no
-  // grant on this bucket. Only messages with a non-null image_path pay this
-  // extra round trip; the (expected common case of) no-image messages are
-  // returned as-is with imageUrl omitted.
-  const imagePaths = (messages ?? [])
-    .map((m) => m.image_path)
-    .filter((p): p is string => typeof p === 'string' && p.length > 0);
-
-  let signedUrlByPath = new Map<string, string>();
-  if (imagePaths.length > 0) {
-    const { data: signedUrls, error: signError } = await createAdminClient()
-      .storage.from('chat-images')
-      .createSignedUrls(imagePaths, IMAGE_SIGNED_URL_TTL_SECONDS);
-
-    if (signError) {
-      console.error('[chat/history] failed to sign chat image URLs:', signError);
-    } else {
-      signedUrlByPath = new Map(
-        (signedUrls ?? [])
-          .filter((s) => !s.error && s.signedUrl)
-          .map((s) => [s.path ?? '', s.signedUrl as string]),
-      );
-    }
-  }
-
-  const messagesWithImages = (messages ?? []).map((m) => ({
-    ...m,
-    imageUrl: m.image_path ? (signedUrlByPath.get(m.image_path) ?? null) : null,
-  }));
-
-  return Response.json({ messages: messagesWithImages, title: conversation.title });
+  return Response.json({ messages, title: conversation.title });
 }
 
 export async function POST(request: NextRequest) {
