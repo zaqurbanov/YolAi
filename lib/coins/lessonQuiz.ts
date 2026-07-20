@@ -1,40 +1,58 @@
 import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
 
-// Per-lesson-question coin-earning mechanic (distinct from the Phase 1
-// daily quiz in lib/coins/quiz.ts): same "wrong answers never touch the DB,
-// no cost to guessing" posture, and the correct index is always looked up
-// server-side, never trusted from the client.
+// Per-lesson-question answering path (distinct from the Phase 1 daily quiz in
+// lib/coins/quiz.ts): the correct index is always looked up server-side, never
+// trusted from the client.
+//
+// THIS PATH NO LONGER PAYS COINS. The per-question +1 reward is gone, and so
+// is the per-category completion bonus that briefly replaced it (that whole
+// model was superseded by the course/topic structure in
+// 0060_lesson_courses.sql; Phase 3 defines how coins are earned).
+// It still RECORDS every attempt via award_quiz_question_reward with
+// p_reward = 0 — that unconditional insert plus unique(user_id, question_id)
+// is the one-attempt anti-brute-force guard from 0059 section C.2 and must not
+// be weakened. Passing 0 rather than changing the RPC keeps the guard intact;
+// user_quiz_answers has no reward column and user_coins.balance has no
+// positivity constraint, so `balance + 0` is a valid no-op.
 
-const LESSON_QUESTION_REWARD_KEY = 'lesson_question_reward';
-const DEFAULT_LESSON_QUESTION_REWARD = 1;
-
-export { LESSON_QUESTION_REWARD_KEY, DEFAULT_LESSON_QUESTION_REWARD };
-
-// Mirrors getQuizRewardAmount's shape (lib/coins/quiz.ts).
-export async function getLessonQuestionRewardAmount(): Promise<number> {
-  const { data, error } = await createAdminClient()
-    .from('app_settings')
-    .select('value')
-    .eq('key', LESSON_QUESTION_REWARD_KEY)
-    .maybeSingle();
-
-  if (error || !data) return DEFAULT_LESSON_QUESTION_REWARD;
-
-  const value = typeof data.value === 'number' ? data.value : Number(data.value);
-  if (!Number.isFinite(value) || value <= 0) return DEFAULT_LESSON_QUESTION_REWARD;
-  return value;
-}
+const NO_PER_QUESTION_REWARD = 0;
 
 export type SubmitLessonAnswerResult =
-  | { correct: true; alreadyAnswered: false; reward: number; balance: number; explanation: string | null }
+  | {
+      correct: true;
+      alreadyAnswered: false;
+      balance: number;
+      explanation: string | null;
+    }
   | { correct: true; alreadyAnswered: true; explanation: string | null }
   | { correct: false; alreadyAnswered: boolean; explanation: string | null }
   | { correct: false; error: 'not_found' | 'error' };
 
 interface QuizQuestionAnswerRow {
+  category: string;
   correct_index: number;
   explanation: string | null;
+}
+
+// The question's OWN category, read server-side from the question row. Callers
+// use this to authorize against the unlock ledger — a client-supplied category
+// would let a user answer a locked category's questions by claiming a free
+// one. Returns null when the question doesn't exist or isn't published.
+export async function getQuestionCategory(questionId: string): Promise<string | null> {
+  const { data, error } = await createAdminClient()
+    .from('quiz_questions')
+    .select('category')
+    .eq('id', questionId)
+    .eq('status', 'published')
+    .maybeSingle();
+
+  if (error) {
+    console.error('[coins/lessonQuiz] getQuestionCategory failed:', error);
+    return null;
+  }
+
+  return data?.category ?? null;
 }
 
 // WAS: returned immediately on a wrong answer with no DB write, which made
@@ -57,7 +75,7 @@ export async function submitLessonAnswer(
 
   const { data: question, error: fetchError } = await admin
     .from('quiz_questions')
-    .select('correct_index, explanation')
+    .select('category, correct_index, explanation')
     .eq('id', questionId)
     .eq('status', 'published')
     .single<QuizQuestionAnswerRow>();
@@ -68,12 +86,11 @@ export async function submitLessonAnswer(
   }
 
   const isCorrect = selectedIndex === question.correct_index;
-  const reward = await getLessonQuestionRewardAmount();
 
   const { data, error } = await admin.rpc('award_quiz_question_reward', {
     p_user_id: userId,
     p_question_id: questionId,
-    p_reward: reward,
+    p_reward: NO_PER_QUESTION_REWARD,
     p_is_correct: isCorrect,
   });
 
@@ -105,7 +122,6 @@ export async function submitLessonAnswer(
   return {
     correct: true,
     alreadyAnswered: false,
-    reward,
     balance: data,
     explanation: question.explanation,
   };

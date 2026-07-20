@@ -7,6 +7,7 @@ import { Tabs } from '@heroui/react';
 const TABS = [
   { id: 'documents', href: '/admin/documents', label: 'Sənədlər' },
   { id: 'users', href: '/admin/users', label: 'İstifadəçilər' },
+  { id: 'kurslar', href: '/admin/kurslar', label: 'Kurslar' },
   { id: 'questions', href: '/admin/questions', label: 'Suallar' },
   { id: 'quiz', href: '/admin/quiz', label: 'Test Sualları' },
   { id: 'stats', href: '/admin/stats', label: 'Statistika' },

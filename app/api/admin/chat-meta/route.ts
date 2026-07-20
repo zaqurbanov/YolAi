@@ -12,6 +12,22 @@ import {
   DAILY_COIN_GRANT_SETTING_KEY,
   DEFAULT_DAILY_LIMIT,
 } from '@/lib/chat/coins';
+import {
+  COURSE_UNLOCK_PRICE_KEY,
+  DEFAULT_COURSE_UNLOCK_PRICE,
+  PASS_THRESHOLD_KEY,
+  DEFAULT_PASS_THRESHOLD,
+  QUESTIONS_PER_ATTEMPT_KEY,
+  DEFAULT_QUESTIONS_PER_ATTEMPT,
+  RETRY_COST_KEY,
+  DEFAULT_RETRY_COST,
+} from '@/lib/coins/lessonUnlock';
+import {
+  AD_WATCH_REWARD_KEY,
+  DEFAULT_AD_WATCH_REWARD,
+  AD_WATCH_DAILY_MAX_KEY,
+  DEFAULT_AD_WATCH_DAILY_MAX,
+} from '@/lib/coins/adWatch';
 
 const HOME_BACKGROUND_SETTING_KEY = 'home_background_image_url';
 const SITE_LOGO_SETTING_KEY = 'site_logo_url';
@@ -57,6 +73,87 @@ const ASSIGNABLE_ROLES = new Set(['admin', 'user']);
 // (e.g. 0.5 grant) — bounds chosen only to reject fat-fingered input.
 const MAX_ALLOWED_DAILY_COIN_LIMIT = 100000;
 const MAX_ALLOWED_COIN_GRANT = 100000;
+
+// The lesson/ad economy tunables, exposed through one `?type=lesson-economy`
+// branch rather than one type discriminator each — the Vercel Hobby
+// serverless-function budget (see CLAUDE.md) rules out new route files, and
+// these are always edited together on one admin screen.
+//
+// Retargeted to the COURSE model (0060_lesson_courses.sql). The old
+// category-era keys (lesson_category_unlock_price, lesson_completion_bonus,
+// lesson_free_category_count) are no longer read anywhere; a stale row for one
+// of them in a deployed environment is inert.
+//
+// `param` is the request/response key the frontend uses; `key` is the
+// app_settings row. Bounds are enforced HERE, server-side — the admin UI's
+// input constraints are a convenience, not a validation.
+const LESSON_ECONOMY_FIELDS = [
+  {
+    // The GLOBAL default course price. A lesson_courses.unlock_price override
+    // wins over this per course, and is edited on the course itself.
+    param: 'courseUnlockPrice',
+    key: COURSE_UNLOCK_PRICE_KEY,
+    defaultValue: DEFAULT_COURSE_UNLOCK_PRICE,
+    integerOnly: false,
+    min: 0.01,
+    max: MAX_ALLOWED_PRICE,
+  },
+  {
+    // Correct answers required to pass a topic test. Nothing here stops it
+    // being set above questionsPerAttempt (the two are separate writes);
+    // getTopicTestConfig() clamps at READ time so a bad combination can't
+    // make every topic unpassable.
+    param: 'topicPassThreshold',
+    key: PASS_THRESHOLD_KEY,
+    defaultValue: DEFAULT_PASS_THRESHOLD,
+    integerOnly: true,
+    min: 1,
+    max: 100,
+  },
+  {
+    // Questions drawn per attempt from the topic's 15-20 question pool.
+    param: 'topicQuestionsPerAttempt',
+    key: QUESTIONS_PER_ATTEMPT_KEY,
+    defaultValue: DEFAULT_QUESTIONS_PER_ATTEMPT,
+    integerOnly: true,
+    min: 1,
+    max: 100,
+  },
+  {
+    param: 'lessonRetryCost',
+    key: RETRY_COST_KEY,
+    defaultValue: DEFAULT_RETRY_COST,
+    integerOnly: false,
+    min: 0.01,
+    max: MAX_ALLOWED_PRICE,
+  },
+  {
+    param: 'adWatchReward',
+    key: AD_WATCH_REWARD_KEY,
+    defaultValue: DEFAULT_AD_WATCH_REWARD,
+    integerOnly: false,
+    min: 0.01,
+    max: MAX_ALLOWED_PRICE,
+  },
+  {
+    param: 'adWatchDailyMax',
+    key: AD_WATCH_DAILY_MAX_KEY,
+    defaultValue: DEFAULT_AD_WATCH_DAILY_MAX,
+    integerOnly: true,
+    min: 1,
+    max: 1000,
+  },
+] as const;
+
+type LessonEconomyField = (typeof LESSON_ECONOMY_FIELDS)[number];
+
+const LESSON_ECONOMY_KEYS = LESSON_ECONOMY_FIELDS.map((f) => f.key);
+
+function isValidLessonEconomyValue(field: LessonEconomyField, value: number): boolean {
+  if (!Number.isFinite(value)) return false;
+  if (field.integerOnly && !Number.isInteger(value)) return false;
+  return value >= field.min && value <= field.max;
+}
 
 const BUSY_PHRASE_STAGES = ['analyzing', 'rewriting', 'searching', 'finalizing', 'streaming'] as const;
 type BusyPhraseStage = (typeof BUSY_PHRASE_STAGES)[number];
@@ -223,6 +320,37 @@ export async function GET(request: NextRequest) {
       dailyCoinGrant: isTableConfigured ? tableValue : DEFAULT_DAILY_LIMIT,
       source: isTableConfigured ? 'table' : 'default',
     });
+  }
+
+  if (type === 'lesson-economy') {
+    const { data, error } = await createAdminClient()
+      .from('app_settings')
+      .select('key, value')
+      .in('key', LESSON_ECONOMY_KEYS);
+
+    if (error) return serverError(error, 'Ayarları oxumaq uğursuz oldu');
+
+    const byKey = new Map((data ?? []).map((row) => [row.key, row.value]));
+
+    // One object per tunable so the frontend can show "default" vs
+    // "admin-configured" per card, same `source` convention as coin-price /
+    // daily-coin-grant above.
+    const settings = Object.fromEntries(
+      LESSON_ECONOMY_FIELDS.map((field) => {
+        const raw = byKey.get(field.key);
+        const value = raw === undefined || raw === null ? null : Number(raw);
+        const isConfigured = value !== null && isValidLessonEconomyValue(field, value);
+        return [
+          field.param,
+          {
+            value: isConfigured ? value : field.defaultValue,
+            source: isConfigured ? 'table' : 'default',
+          },
+        ];
+      })
+    );
+
+    return NextResponse.json({ settings });
   }
 
   return apiError(400, 'type parametri düzgün deyil');
@@ -444,6 +572,77 @@ export async function PATCH(request: NextRequest) {
     if (error) return serverError(error, 'Ayarı yeniləmək uğursuz oldu');
 
     return NextResponse.json({ dailyCoinGrant, source: 'table' });
+  }
+
+  if (type === 'lesson-economy') {
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== 'object') return apiError(400, 'Gövdə düzgün deyil');
+
+    // Partial update: only the params actually present are touched. null
+    // explicitly RESETS a tunable to its TS-side default by deleting the row,
+    // same convention as coin-price / daily-coin-grant above.
+    const present = LESSON_ECONOMY_FIELDS.filter((f) => body[f.param] !== undefined);
+
+    if (present.length === 0) {
+      return apiError(400, `Yeniləmək üçün heç olmasa bir sahə tələb olunur: ${LESSON_ECONOMY_FIELDS.map((f) => f.param).join(', ')}`);
+    }
+
+    // Validate everything BEFORE writing anything, so a bad value in one field
+    // can't leave a half-applied config — same all-or-nothing posture as the
+    // 'user' branch below.
+    for (const field of present) {
+      const value = body[field.param];
+      if (value === null) continue;
+      if (typeof value !== 'number' || !isValidLessonEconomyValue(field, value)) {
+        return apiError(
+          400,
+          `${field.param} null və ya ${field.min}-${field.max} arasında ${field.integerOnly ? 'tam ' : ''}ədəd olmalıdır`
+        );
+      }
+    }
+
+    const admin = createAdminClient();
+
+    for (const field of present) {
+      const value = body[field.param];
+
+      if (value === null) {
+        const { error } = await admin.from('app_settings').delete().eq('key', field.key);
+        if (error) return serverError(error, 'Ayarı sıfırlamaq uğursuz oldu');
+        continue;
+      }
+
+      const { error } = await admin
+        .from('app_settings')
+        .upsert({ key: field.key, value, updated_at: new Date().toISOString() });
+      if (error) return serverError(error, 'Ayarı yeniləmək uğursuz oldu');
+    }
+
+    const { data, error } = await admin
+      .from('app_settings')
+      .select('key, value')
+      .in('key', LESSON_ECONOMY_KEYS);
+
+    if (error) return serverError(error, 'Ayarları oxumaq uğursuz oldu');
+
+    const byKey = new Map((data ?? []).map((row) => [row.key, row.value]));
+
+    const settings = Object.fromEntries(
+      LESSON_ECONOMY_FIELDS.map((field) => {
+        const raw = byKey.get(field.key);
+        const numeric = raw === undefined || raw === null ? null : Number(raw);
+        const isConfigured = numeric !== null && isValidLessonEconomyValue(field, numeric);
+        return [
+          field.param,
+          {
+            value: isConfigured ? numeric : field.defaultValue,
+            source: isConfigured ? 'table' : 'default',
+          },
+        ];
+      })
+    );
+
+    return NextResponse.json({ settings });
   }
 
   if (type === 'user') {

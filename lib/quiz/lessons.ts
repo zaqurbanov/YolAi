@@ -1,130 +1,241 @@
 import 'server-only';
 import { createClient } from '@/lib/supabase/server';
-import { RULE_CATEGORIES } from '@/lib/content/ruleCategories';
+import { isMissingRelationError } from '@/lib/supabase/missingRelation';
+import { getDefaultCourseUnlockPrice } from '@/lib/coins/lessonUnlock';
 
-// User-facing reads only — plain RLS-respecting client (createClient), never
-// the service-role admin client, since this only ever reads: published
-// quiz_questions (public-select RLS policy) and the caller's own
-// user_quiz_answers rows (self-select RLS policy). No admin gate needed.
+// User-facing reads for the restructured lessons feature (/oyrenme).
+//
+// Plain RLS-respecting client (createClient), never the service-role admin
+// client: everything read here is either a published lesson_courses row
+// (public-to-authenticated select policy) or the caller's own
+// user_course_unlocks/user_topic_progress rows (self-select policies). No
+// admin gate is needed, and using the user-scoped client means RLS is a real
+// second line of defence rather than something bypassed by habit.
+//
+// GRACEFUL DEGRADATION IS LOAD-BEARING HERE. 0060_lesson_courses.sql is
+// applied by hand by the owner, so between this code deploying and that SQL
+// running, lesson_courses/lesson_topics/user_course_unlocks DO NOT EXIST. The
+// previous iteration of this file crashed /oyrenme with a 500 for exactly that
+// reason (it queried user_unlocked_categories from a migration that was never
+// applied). Every read below therefore treats "relation missing" as an EMPTY
+// RESULT, not an error — the page renders an empty state and starts working on
+// its own once the migration lands. See lib/supabase/missingRelation.ts.
+//
+// Phase 1 only needs the course list to render. The learn -> test flow
+// (topic content, question sampling, attempt submission) is Phase 2 and is
+// intentionally not implemented here yet.
 
-export interface LessonProgress {
-  category: string;
-  total: number;
-  completed: number;
+export interface CourseSummary {
+  id: string;
+  title: string;
+  description: string | null;
+  orderIndex: number;
+  /** Free courses never cost coins, regardless of unlock_price. */
+  isFree: boolean;
+  /**
+   * The access predicate the UI should gate on: free, or purchased by this
+   * user. DISPLAY ONLY — the authoritative check is canAccessCourse() run
+   * server-side wherever content is actually served. A server action is a
+   * plain POST endpoint and a UI-level lock is not a lock.
+   */
+  isUnlocked: boolean;
+  /** Effective price: the course's own override, else the global setting. */
+  price: number;
+  /** Published topics in this course. 0 means there is nothing to sell yet. */
+  totalTopics: number;
+  /** Published topics this user has passed. */
+  passedTopics: number;
   progressPct: number;
 }
 
-// Two queries total regardless of category count (not one query per
-// category) — retrieval-adjacent reads like this are still on a
-// user-facing page load path, so avoid an N+1 pattern here even though
-// today's data volume wouldn't make it painful yet.
-export async function getLessons(userId: string): Promise<LessonProgress[]> {
+interface CourseRow {
+  id: string;
+  title: string;
+  description: string | null;
+  order_index: number;
+  is_free: boolean;
+  unlock_price: number | null;
+}
+
+interface TopicIdRow {
+  id: string;
+  course_id: string;
+}
+
+// Four fixed queries plus one settings read, regardless of how many courses or
+// topics exist — never one query per course. This is a user-facing page load
+// path; today's volume (27 documents) wouldn't make an N+1 painful yet, but the
+// topic count grows with every generated topic and the shape should not have to
+// be revisited then.
+export async function getCourses(userId: string): Promise<CourseSummary[]> {
   const supabase = await createClient();
 
-  const [{ data: questions, error: questionsError }, { data: answers, error: answersError }] =
-    await Promise.all([
-      supabase.from('quiz_questions').select('id, category').eq('status', 'published'),
-      // is_correct filter is applied server-side: since 0059 section C.2 this
-      // table also holds recorded-but-WRONG answers, and only a correct one
-      // counts as a completed question.
-      supabase
-        .from('user_quiz_answers')
-        .select('question_id')
-        .eq('user_id', userId)
-        .eq('is_correct', true),
-    ]);
+  const { data: courses, error: coursesError } = await supabase
+    .from('lesson_courses')
+    .select('id, title, description, order_index, is_free, unlock_price')
+    .eq('status', 'published')
+    .order('order_index', { ascending: true })
+    .returns<CourseRow[]>();
 
-  if (questionsError) {
-    console.error('[quiz/lessons] getLessons questions read failed:', questionsError);
-  }
-  if (answersError) {
-    console.error('[quiz/lessons] getLessons answers read failed:', answersError);
+  if (coursesError) {
+    // The pre-migration state. Not an error worth logging on every page load.
+    if (isMissingRelationError(coursesError)) return [];
+    console.error('[quiz/lessons] getCourses courses read failed:', coursesError);
+    return [];
   }
 
-  const questionCategoryById = new Map<string, string>();
-  const totalByCategory = new Map<string, number>();
-  for (const q of questions ?? []) {
-    questionCategoryById.set(q.id, q.category);
-    totalByCategory.set(q.category, (totalByCategory.get(q.category) ?? 0) + 1);
+  if (!courses || courses.length === 0) return [];
+
+  const courseIds = courses.map((c) => c.id);
+
+  const [
+    { data: topics, error: topicsError },
+    { data: unlocks, error: unlocksError },
+    { data: progress, error: progressError },
+    defaultPrice,
+  ] = await Promise.all([
+    supabase
+      .from('lesson_topics')
+      .select('id, course_id')
+      .eq('status', 'published')
+      .in('course_id', courseIds)
+      .returns<TopicIdRow[]>(),
+    supabase.from('user_course_unlocks').select('course_id').eq('user_id', userId),
+    supabase.from('user_topic_progress').select('topic_id').eq('user_id', userId).eq('passed', true),
+    getDefaultCourseUnlockPrice(),
+  ]);
+
+  // Each of the three below degrades to "no rows" independently: a partially
+  // applied migration should still render the list, just with zeroed counts.
+  if (topicsError && !isMissingRelationError(topicsError)) {
+    console.error('[quiz/lessons] getCourses topics read failed:', topicsError);
+  }
+  // Display-path read: a failure renders paid courses as LOCKED, which is the
+  // safe direction (the real gate is canAccessCourse, server-side).
+  if (unlocksError && !isMissingRelationError(unlocksError)) {
+    console.error('[quiz/lessons] getCourses unlocks read failed:', unlocksError);
+  }
+  if (progressError && !isMissingRelationError(progressError)) {
+    console.error('[quiz/lessons] getCourses progress read failed:', progressError);
   }
 
-  const completedByCategory = new Map<string, number>();
-  for (const a of answers ?? []) {
-    const category = questionCategoryById.get(a.question_id);
-    if (!category) continue; // answered question no longer published — don't count it
-    completedByCategory.set(category, (completedByCategory.get(category) ?? 0) + 1);
+  const unlockedCourseIds = new Set((unlocks ?? []).map((u) => u.course_id as string));
+  const passedTopicIds = new Set((progress ?? []).map((p) => p.topic_id as string));
+
+  const totalByCourse = new Map<string, number>();
+  const passedByCourse = new Map<string, number>();
+  for (const topic of topics ?? []) {
+    totalByCourse.set(topic.course_id, (totalByCourse.get(topic.course_id) ?? 0) + 1);
+    if (passedTopicIds.has(topic.id)) {
+      passedByCourse.set(topic.course_id, (passedByCourse.get(topic.course_id) ?? 0) + 1);
+    }
   }
 
-  return RULE_CATEGORIES.map(({ title }) => {
-    const total = totalByCategory.get(title) ?? 0;
-    const completed = completedByCategory.get(title) ?? 0;
-    const progressPct = total > 0 ? Math.round((completed / total) * 100) : 0;
-    return { category: title, total, completed, progressPct };
+  return courses.map((course) => {
+    const totalTopics = totalByCourse.get(course.id) ?? 0;
+    const passedTopics = passedByCourse.get(course.id) ?? 0;
+    return {
+      id: course.id,
+      title: course.title,
+      description: course.description,
+      orderIndex: course.order_index,
+      isFree: course.is_free,
+      isUnlocked: course.is_free || unlockedCourseIds.has(course.id),
+      // 0 is a legitimate per-course override, so check for null explicitly
+      // rather than relying on falsiness.
+      price: course.unlock_price !== null ? Number(course.unlock_price) : defaultPrice,
+      totalTopics,
+      passedTopics,
+      progressPct: totalTopics > 0 ? Math.round((passedTopics / totalTopics) * 100) : 0,
+    };
   });
 }
 
-export interface LessonQuestion {
+export interface TopicSummary {
   id: string;
-  question: string;
-  options: string[];
-  explanation: string | null;
-  /** Answered, and the answer was right — the reward was paid. */
-  answeredCorrectly: boolean;
+  courseId: string;
+  title: string;
+  orderIndex: number;
+  passed: boolean;
+  bestScore: number;
+  attempts: number;
   /**
-   * Answered, and the answer was WRONG. The question is spent: every
-   * question allows exactly one attempt ever (unique(user_id, question_id),
-   * now written on wrong answers too — 0059 section C.2), so the UI must
-   * lock this question rather than offering a retry that the server will
-   * reject with 'already_answered'.
+   * Topic 1 of a course is always unlocked; every later topic requires the
+   * PREVIOUS topic in the same course to be passed. Progress is per-course,
+   * so a user blocked here can still advance in another course.
    *
-   * Mutually exclusive with answeredCorrectly. Both false means unanswered
-   * and answerable; `answeredCorrectly || answeredIncorrectly` is the
-   * "locked" predicate.
+   * DISPLAY ONLY, same caveat as CourseSummary.isUnlocked — Phase 2 must
+   * re-check this server-side before serving topic content or accepting an
+   * attempt.
    */
-  answeredIncorrectly: boolean;
+  isUnlocked: boolean;
 }
 
-// Deliberately omits correct_index — the frontend must never receive it
-// (same "never trust/expose the client-side answer" stance as
-// claimDailyQuizReward), grading happens server-side in
-// lib/coins/lessonQuiz.ts.
-export async function getLessonQuestions(category: string, userId: string): Promise<LessonQuestion[]> {
+// Ordered topic list for one course. Does NOT return `content` — the reading
+// material is fetched separately, only after a server-side access check, so a
+// course-overview render can never leak the paid body text.
+//
+// Callers must have already established that this user can access the course
+// (canAccessCourse). RLS on lesson_topics enforces the same rule independently,
+// so a caller that forgets gets an empty list rather than a leak — but do not
+// rely on that as the gate.
+export async function getCourseTopics(courseId: string, userId: string): Promise<TopicSummary[]> {
   const supabase = await createClient();
 
-  const [{ data: questions, error: questionsError }, { data: answers, error: answersError }] =
+  const [{ data: topics, error: topicsError }, { data: progress, error: progressError }] =
     await Promise.all([
       supabase
-        .from('quiz_questions')
-        .select('id, question, options, explanation')
+        .from('lesson_topics')
+        .select('id, course_id, title, order_index')
+        .eq('course_id', courseId)
         .eq('status', 'published')
-        .eq('category', category)
-        .order('created_at', { ascending: true }),
-      supabase.from('user_quiz_answers').select('question_id, is_correct').eq('user_id', userId),
+        .order('order_index', { ascending: true }),
+      supabase
+        .from('user_topic_progress')
+        .select('topic_id, passed, best_score, attempts')
+        .eq('user_id', userId),
     ]);
 
-  if (questionsError) {
-    console.error('[quiz/lessons] getLessonQuestions questions read failed:', questionsError);
+  if (topicsError) {
+    if (isMissingRelationError(topicsError)) return [];
+    console.error('[quiz/lessons] getCourseTopics topics read failed:', topicsError);
     return [];
   }
-  if (answersError) {
-    console.error('[quiz/lessons] getLessonQuestions answers read failed:', answersError);
+
+  if (progressError && !isMissingRelationError(progressError)) {
+    console.error('[quiz/lessons] getCourseTopics progress read failed:', progressError);
   }
 
-  // Both sets, not one — the UI has to tell "done, rewarded" apart from
-  // "spent on a wrong answer, locked" (see LessonQuestion above).
-  const correctIds = new Set<string>();
-  const incorrectIds = new Set<string>();
-  for (const a of answers ?? []) {
-    if (a.is_correct) correctIds.add(a.question_id);
-    else incorrectIds.add(a.question_id);
-  }
+  const progressByTopic = new Map(
+    (progress ?? []).map((p) => [
+      p.topic_id as string,
+      {
+        passed: Boolean(p.passed),
+        bestScore: Number(p.best_score ?? 0),
+        attempts: Number(p.attempts ?? 0),
+      },
+    ])
+  );
 
-  return (questions ?? []).map((q) => ({
-    id: q.id,
-    question: q.question,
-    options: q.options as string[],
-    explanation: q.explanation,
-    answeredCorrectly: correctIds.has(q.id),
-    answeredIncorrectly: incorrectIds.has(q.id),
-  }));
+  // Sequential unlock walks the list in order_index order, carrying "was the
+  // previous one passed" forward. Computed from the ALREADY-FILTERED published
+  // list, so an unpublished topic in the middle of a course does not
+  // permanently block the ones after it.
+  let previousPassed = true;
+  return (topics ?? []).map((topic) => {
+    const p = progressByTopic.get(topic.id as string);
+    const passed = p?.passed ?? false;
+    const isUnlocked = previousPassed;
+    previousPassed = passed;
+    return {
+      id: topic.id as string,
+      courseId: topic.course_id as string,
+      title: topic.title as string,
+      orderIndex: topic.order_index as number,
+      passed,
+      bestScore: p?.bestScore ?? 0,
+      attempts: p?.attempts ?? 0,
+      isUnlocked,
+    };
+  });
 }

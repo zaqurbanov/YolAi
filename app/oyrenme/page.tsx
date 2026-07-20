@@ -4,9 +4,8 @@ import Link from 'next/link';
 import { buttonVariants } from '@heroui/styles';
 import { createClient } from '@/lib/supabase/server';
 import Footer from '@/components/Footer';
-import { RULE_CATEGORIES, categoryToSlug } from '@/lib/content/ruleCategories';
-import { getLessons } from '@/lib/quiz/lessons';
-import { ACCENT_STYLES } from '@/components/CategoryCard';
+import { getCourses } from '@/lib/quiz/lessons';
+import CourseGrid from './CourseGrid';
 
 export const metadata: Metadata = {
   title: 'Sürücülük vəsiqəsini al',
@@ -20,12 +19,16 @@ export default async function OyrenmePage() {
 
   if (!user) redirect('/login');
 
-  const lessons = await getLessons(user.id);
-  const lessonByCategory = new Map(lessons.map((l) => [l.category, l]));
+  // getCourses() returns [] (never throws) when the lessons migration has not
+  // been applied yet — the empty state below is the live path today, not a
+  // theoretical edge case.
+  const courses = await getCourses(user.id);
 
-  const totalCompleted = lessons.reduce((sum, l) => sum + l.completed, 0);
-  const totalQuestions = lessons.reduce((sum, l) => sum + l.total, 0);
-  const overallPct = totalQuestions > 0 ? Math.round((totalCompleted / totalQuestions) * 100) : 0;
+  // Overall progress is counted in TOPICS across all published courses, which
+  // is the unit a user actually advances through now.
+  const totalTopics = courses.reduce((sum, c) => sum + c.totalTopics, 0);
+  const passedTopics = courses.reduce((sum, c) => sum + c.passedTopics, 0);
+  const overallPct = totalTopics > 0 ? Math.round((passedTopics / totalTopics) * 100) : 0;
 
   return (
     <div id="top" className="flex flex-1 flex-col">
@@ -39,15 +42,15 @@ export default async function OyrenmePage() {
           <h1 className="text-display-lg text-balance">Sürücülük Vəsiqəsini Al</h1>
           <p className="max-w-2xl text-body-lg text-on-surface-variant">
             Vəsiqə almaq üçün ilk növbədə yol hərəkəti qaydalarını bilmək lazımdır. Bu qaydaları
-            öyrənmək üçün isə aşağıdakı dərslərə qatıla bilərsiniz.
+            öyrənmək üçün isə aşağıdakı kurslara qatıla bilərsiniz.
           </p>
 
-          {totalQuestions > 0 && (
+          {totalTopics > 0 && (
             <div className="glass-panel mt-2 w-full max-w-md rounded-2xl p-5">
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-label-sm text-on-surface-variant">Ümumi irəliləyiş</span>
                 <span className="text-label-sm text-go-green">
-                  {totalCompleted}/{totalQuestions}
+                  {passedTopics}/{totalTopics} mövzu
                 </span>
               </div>
               <div className="h-2 w-full overflow-hidden rounded-full bg-surface-tertiary">
@@ -62,7 +65,8 @@ export default async function OyrenmePage() {
           <Link
             href="/chat"
             className={
-              buttonVariants({ variant: 'ghost', size: 'sm' }) + ' mt-2 transition-transform hover:scale-[1.03]'
+              buttonVariants({ variant: 'ghost', size: 'sm' }) +
+              ' mt-2 transition-transform hover:scale-[1.03]'
             }
           >
             Sualınız var? AI köməkçidən soruşun
@@ -72,58 +76,23 @@ export default async function OyrenmePage() {
 
       <section className="px-6 py-8 lg:py-12">
         <div className="mx-auto max-w-5xl">
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {RULE_CATEGORIES.map((category, i) => {
-              const progress = lessonByCategory.get(category.title);
-              const total = progress?.total ?? 0;
-              const completed = progress?.completed ?? 0;
-              const pct = progress?.progressPct ?? 0;
-              const accent = ACCENT_STYLES[i % ACCENT_STYLES.length];
-              const Icon = category.icon;
-              const cta = completed > 0 && completed < total ? 'Davam et' : completed >= total && total > 0 ? 'Təkrar bax' : 'Başla';
-
-              return (
-                <Link
-                  key={category.title}
-                  href={`/oyrenme/${categoryToSlug(category.title)}`}
-                  className="block h-full"
-                >
-                  <div
-                    className={`topic-card-in motion-reduce:animate-none glass-card group flex h-full flex-col border border-transparent border-l-4 ${accent.border} p-6 transition duration-200 hover:-translate-y-1 hover:shadow-lg`}
-                    style={{ animationDelay: `${i * 80}ms` }}
-                  >
-                    <div
-                      className={`mb-2 flex size-12 items-center justify-center rounded-xl transition duration-200 group-hover:scale-110 ${accent.chip}`}
-                    >
-                      <Icon />
-                    </div>
-                    <h3 className="text-headline-md text-[20px]">{category.title}</h3>
-                    <p className="mt-1 text-body-md text-on-surface-variant">{category.description}</p>
-
-                    <div className="mt-4">
-                      <div className="mb-1.5 flex items-center justify-between text-label-sm text-on-surface-variant">
-                        <span>İrəliləyiş</span>
-                        <span>
-                          {completed}/{total}
-                        </span>
-                      </div>
-                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-tertiary">
-                        <div
-                          className="h-full rounded-full bg-go-green transition-all"
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="mt-4 flex items-center justify-between border-t border-outline-variant/40 pt-3">
-                      <span className={`text-legal-citation ${accent.citation}`}>{category.citation}</span>
-                      <span className="text-label-sm font-semibold text-primary">{cta} →</span>
-                    </div>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
+          {courses.length === 0 ? (
+            <div className="glass-panel rounded-2xl px-6 py-12 text-center">
+              <h2 className="text-headline-md">Kurslar hazırlanır</h2>
+              <p className="mx-auto mt-2 max-w-md text-body-md text-on-surface-variant">
+                Hələ dərc edilmiş kurs yoxdur. Yol hərəkəti qaydaları üzrə kurslar tezliklə burada
+                görünəcək.
+              </p>
+              <Link
+                href="/chat"
+                className={buttonVariants({ variant: 'outline', size: 'sm' }) + ' mt-5'}
+              >
+                AI köməkçiyə sual ver
+              </Link>
+            </div>
+          ) : (
+            <CourseGrid courses={courses} />
+          )}
         </div>
       </section>
 
