@@ -5,7 +5,12 @@ import { usePathname } from 'next/navigation';
 import type { NotificationRow } from '@/lib/notifications/notifications';
 
 export interface NavState {
-  user: { id: string; email: string | null } | null;
+  user: {
+    id: string;
+    email: string | null;
+    fullName?: string | null;
+    avatarUrl?: string | null;
+  } | null;
   isAdmin: boolean;
   logoUrl: string | null;
   unreadCount: number;

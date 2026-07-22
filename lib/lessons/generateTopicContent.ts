@@ -1,7 +1,13 @@
 import 'server-only';
 import { generateObject } from 'ai';
 import { z } from 'zod';
-import { getChatModel, getRewriteModel, getProviderCallOptions } from '@/lib/llm';
+import {
+  getChatModel,
+  getChatModelId,
+  getRewriteModel,
+  getRewriteModelId,
+  getProviderCallOptions,
+} from '@/lib/llm';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 // Per-TOPIC content generation: reading material + a question pool, drafted
@@ -20,6 +26,14 @@ import { createAdminClient } from '@/lib/supabase/admin';
 // reason: they are the two halves of the work, each independently retryable,
 // and a model that has to emit both in one structured object tends to
 // shortchange one of them.
+//
+// ERRORS ARE NEVER SWALLOWED HERE. Both generators previously caught and
+// returned null / [], which turned a hard provider failure (bad key, quota,
+// schema rejection) into a silent no-op with only a console.error — the admin
+// saw "material yaradılmadı" with no way to tell an unusable document from an
+// expired API key. They now return a discriminated result carrying the model id
+// and the provider's own message, and the server action renders it. That is
+// acceptable to expose because every caller sits behind requireAdmin().
 //
 // GROUNDING. Same posture as lib/rag/buildPrompt.ts and
 // lib/quiz/generateQuestionsFromPdf.ts: only what the supplied chunks
@@ -86,16 +100,66 @@ const readingContentSchema = z.object({
 
 export type GeneratedTopicContent = z.infer<typeof readingContentSchema>;
 
-const READING_SYSTEM_PROMPT = `Sən Azərbaycan Yol Hərəkəti Qaydaları üzrə dərs materialı hazırlayan köməkçisən. Sənə rəsmi sənədin bir bölməsinin mətni veriləcək. Vəzifən bu mətnə əsaslanan, öyrənmək üçün nəzərdə tutulmuş izahlı dərs materialı yazmaqdır.
+// OUTPUT FORMAT: a restricted Markdown subset — `##`/`###` headings, `-`
+// bullets, `**bold**`, `>` blockquote, blank-line-separated paragraphs. No
+// tables, no HTML, no code fences, no images. The learner-side topic reader
+// does not exist yet (Phase 2), so this is the contract it must render; the
+// admin editor shows the raw text in a textarea, which the subset stays legible
+// in. Note this is DELIBERATELY the opposite of lib/rag/buildPrompt.ts, which
+// forbids markdown — the chat transcript renders plain text, a lesson page does
+// not.
+//
+// "ENGAGING" IS NOT A LICENCE TO INVENT. The whole reason this app exists is
+// that a plausible-sounding invented fine, duration or article number is worse
+// than no answer, and it is worse here than in chat because this text is
+// persisted and read by many learners. The examples the prompt asks for are
+// ILLUSTRATIONS of a rule that is literally in the source — never new rules,
+// numbers or exceptions. That sentence is in the prompt itself, not just here.
+const READING_SYSTEM_PROMPT = `Sən Azərbaycan Yol Hərəkəti Qaydaları üzrə onlayn kurs üçün DƏRS VƏSAİTİ yazan təcrübəli müəllimsən. Sənə rəsmi sənədin bir bölməsinin mətni veriləcək. Vəzifən həmin mətni oxumaq maraqlı və başa düşülən olan, yaxşı strukturlaşdırılmış dərs materialına çevirməkdir.
 
-Qaydalar:
-- Bütün mətni Azərbaycan dilində yaz.
-- YALNIZ verilən mətndə HƏRFİ VƏ AYDIN ŞƏKİLDƏ dəstəklənən məlumatlara əsaslan. Heç vaxt mətndə olmayan fakt, rəqəm, cərimə məbləği, müddət və ya maddə nömrəsi uydurma — hətta ümumi biliyinlə doğru olduğunu düşünsən belə.
-- Əgər mətnin hansısa hissəsi qeyri-aydındırsa və ya dərs materialına çevirmək üçün kifayət etmirsə, o hissəni SADƏCƏ BURAX. Az, lakin etibarlı material yazmaq, çox, lakin şübhəli material yazmaqdan daha yaxşıdır.
-- Rəsmi mətni sadəcə köçürmə — onu izah et: qısa abzaslar, aydın dil, lazım olduqda sadalama işlət. Amma izah edərkən də mətndəki məzmundan kənara çıxma.
-- Konkret qaydadan danışarkən mənbə maddəni mətndə göstərildiyi kimi qeyd et (məsələn "Maddə 45"), belə ki oxuyan mənbəyə qayıda bilsin.
-- Başlıq (title) qısa və mövzunu dəqiq təsvir edən olmalıdır.
-- Mətndə dərs materialı üçün yararlı heç nə yoxdursa, content sahəsini boş sətir kimi qaytar.`;
+MÜTLƏQ ƏMƏL EDİLMƏLİ OLAN ƏSAS QAYDA — HEÇ NƏ UYDURMA:
+- YALNIZ verilən mətndə HƏRFİ VƏ AYDIN ŞƏKİLDƏ dəstəklənən məlumatlara əsaslan.
+- Mətndə olmayan maddə nömrəsi, cərimə məbləği, müddət, məsafə, sürət həddi, yaş həddi, faiz və ya hər hansı digər rəqəm və fakt YAZMA — hətta ümumi biliyinlə doğru olduğunu düşünsən belə.
+- Materialı maraqlı etmək bəhanəsi ilə yeni qayda, istisna və ya nüans əlavə etmək QADAĞANDIR. Gətirdiyin nümunələr yalnız mətndəki qaydanın necə tətbiq olunduğunu göstərməlidir — nümunə heç vaxt yeni qayda gətirməməlidir.
+- Mətnin hansısa hissəsi qeyri-aydındırsa və ya dərsə çevirmək üçün kifayət etmirsə, o hissəni SADƏCƏ BURAX. Az, lakin etibarlı material çox, lakin şübhəli materialdan yaxşıdır.
+- Mətndə dərs üçün yararlı heç nə yoxdursa, content sahəsini boş sətir kimi qaytar.
+
+DƏRSİN QURULUŞU (content sahəsi, Markdown):
+1. Qısa giriş (2-4 cümlə): bu qaydanın nəyə aid olduğu və sürücü üçün praktikada niyə vacib olduğu. Yalnız mətndən çıxan məna əsasında.
+2. "## " ilə başlayan bölmə başlıqları, lazım olduqda "### " ilə alt başlıqlar. Hər başlıq altında qısa abzaslar (2-4 cümlə).
+3. Qaydaların özünü "- " ilə sadalama şəklində, aydın və qısa cümlələrlə ver. Ən vacib ifadələri **qalın** yaz.
+4. Mümkün olduqda "### Nümunə" bölməsi: qaydanın gündəlik həyatda necə işlədiyini göstərən konkret, sadə səhnə (məsələn sürücünün hansısa vəziyyətdə nə etməli olduğu). Nümunə YALNIZ mətndəki qaydanı izah etməlidir.
+5. Mətn ümumi səhvə və ya diqqət tələb edən məqama işarə edirsə, "> **Diqqət:** ..." formatında bir sitat bloku əlavə et. Mətn belə bir şeyə əsas vermirsə, bu bölməni tamamilə burax.
+6. Sonda "## Yekun" başlığı altında 3-5 bənddən ibarət qısa xülasə.
+
+ÜSLUB VƏ FORMAT:
+- Hər şeyi Azərbaycan dilində yaz. Sadə, canlı, birbaşa oxucuya müraciət edən dil işlət ("siz" formasında). Quru rəsmi dildən qaç, amma məzmunu dəyişmə.
+- Rəsmi mətni olduğu kimi köçürmə — izah et. Uzun hüquqi cümlələri qısa cümlələrə böl.
+- Konkret qaydadan danışarkən mənbə maddəni mətndə göründüyü kimi mötərizədə qeyd et (məsələn "(Maddə 45)"), belə ki oxucu mənbəyə qayıda bilsin. Mətndə olmayan maddə nömrəsi yazma.
+- Yalnız bu Markdown elementlərindən istifadə et: ## və ### başlıqlar, "- " sadalama, **qalın**, "> " sitat bloku, boş sətirlə ayrılmış abzaslar. Cədvəl, HTML, kod bloku və şəkil İSTİFADƏ ETMƏ.
+- title sahəsi qısa (maksimum 8-10 söz) və mövzunu dəqiq təsvir edən olmalıdır.`;
+
+export type TopicReadingOutcome =
+  | { ok: true; content: GeneratedTopicContent }
+  | { ok: false; error: string };
+
+export type TopicQuestionsOutcome =
+  | { ok: true; questions: GeneratedTopicQuestion[] }
+  | { ok: false; error: string };
+
+// Provider errors carry the useful diagnosis (401, rate limit, schema
+// rejection) and this surface is admin-only, so the message is passed through
+// verbatim — truncated, since some providers return a whole HTML page.
+const MAX_ERROR_CHARS = 300;
+
+function describeLlmError(modelId: string, error: unknown): string {
+  const message =
+    error instanceof Error ? error.message : typeof error === 'string' ? error : String(error);
+  const clean = message.replace(/\s+/g, ' ').trim() || 'naməlum xəta';
+  const truncated =
+    clean.length > MAX_ERROR_CHARS ? `${clean.slice(0, MAX_ERROR_CHARS - 1)}…` : clean;
+  return `${modelId}: ${truncated}`;
+}
 
 // Reading material is prose, not structured extraction, so it uses the main
 // chat model rather than the small/cheap rewrite model — the same quality bar
@@ -103,9 +167,11 @@ Qaydalar:
 export async function generateTopicReadingContent(
   topicTitle: string,
   chunks: TopicSourceChunk[]
-): Promise<GeneratedTopicContent | null> {
+): Promise<TopicReadingOutcome> {
   const sourceText = buildSourceText(chunks);
-  if (!sourceText.trim()) return null;
+  if (!sourceText.trim()) {
+    return { ok: false, error: 'Mövzunun mənbə mətni boşdur' };
+  }
 
   try {
     const { object } = await generateObject({
@@ -116,10 +182,17 @@ export async function generateTopicReadingContent(
       prompt: `Mövzunun təxmini adı: ${topicTitle}\n\nSənədin bu mövzuya aid hissəsi:\n"""\n${sourceText}\n"""`,
     });
 
-    return object;
+    if (!object.content.trim()) {
+      return {
+        ok: false,
+        error: 'Model bu mətndən dərs materialı çıxara bilmədi (boş nəticə qaytardı)',
+      };
+    }
+
+    return { ok: true, content: object };
   } catch (error) {
     console.error('[lessons/generateTopicContent] reading content generation failed:', error);
-    return null;
+    return { ok: false, error: `Dərs materialı yaradılmadı — ${describeLlmError(getChatModelId(), error)}` };
   }
 }
 
@@ -163,9 +236,11 @@ Qaydalar:
 export async function generateTopicQuestions(
   topicTitle: string,
   chunks: TopicSourceChunk[]
-): Promise<GeneratedTopicQuestion[]> {
+): Promise<TopicQuestionsOutcome> {
   const sourceText = buildSourceText(chunks);
-  if (!sourceText.trim()) return [];
+  if (!sourceText.trim()) {
+    return { ok: false, error: 'Mövzunun mənbə mətni boşdur' };
+  }
 
   try {
     const { object } = await generateObject({
@@ -179,7 +254,7 @@ export async function generateTopicQuestions(
     // Belt-and-braces over the zod schema: a malformed option array reaching
     // the DB would violate quiz_questions' jsonb_array_length check and fail
     // the whole insert batch, losing the valid questions alongside it.
-    return object.questions
+    const questions = object.questions
       .filter(
         (q) =>
           q.options.length === 4 &&
@@ -188,9 +263,19 @@ export async function generateTopicQuestions(
           q.question.trim().length > 0
       )
       .slice(0, TOPIC_POOL_MAX);
+
+    // Zero valid questions is reported as a failure, not as an empty success:
+    // the caller would otherwise write nothing and tell the admin the run
+    // succeeded. A genuinely question-less source and a model that returned
+    // garbage are indistinguishable from here, and both need admin attention.
+    if (questions.length === 0) {
+      return { ok: false, error: 'Model bu mətndən etibarlı sual çıxara bilmədi' };
+    }
+
+    return { ok: true, questions };
   } catch (error) {
     console.error('[lessons/generateTopicContent] question generation failed:', error);
-    return [];
+    return { ok: false, error: `Suallar yaradılmadı — ${describeLlmError(getRewriteModelId(), error)}` };
   }
 }
 

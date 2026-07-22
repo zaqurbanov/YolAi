@@ -7,6 +7,17 @@ import { createAdminClient } from '@/lib/supabase/admin';
 // — it is deterministic grouping over existing rows, so an admin can re-run it
 // freely and get the same answer.
 //
+// This file is now TWO things:
+//   1. the UNIT builder (buildDocumentUnits) — atomic, never-split runs of
+//      consecutive chunks that share an article_label, in document order. This
+//      is the candidate segmentation both proposal strategies work from.
+//   2. the deterministic PACKER (packUnitsIntoTopics) — size-based grouping of
+//      those units into topics.
+// lib/lessons/aiProposeTopics.ts reuses (1) and replaces (2) with a batched
+// LLM outline pass, falling back to (2) wholesale when the model fails. The
+// grouping/title/preview construction lives here so the AI path cannot drift
+// from the deterministic one.
+//
 // WHY GROUP AT ALL: lib/ingestion/chunkText.ts splits aggressively for
 // RETRIEVAL (~3200 chars max, often far smaller — a single sign-catalog entry
 // can be 30 chars), which is the right granularity for embedding a lookup but
@@ -51,6 +62,14 @@ export interface TopicProposal {
   documentId: string;
   documentTitle: string;
   topics: ProposedTopic[];
+  /**
+   * Which strategy actually produced `topics`. 'deterministic' after an AI
+   * failure is NOT an error the admin can ignore — the mechanical split is
+   * usually coarser — so the UI must surface it.
+   */
+  source: 'ai' | 'deterministic';
+  /** Human-readable, Azerbaijani. Set when the AI pass partly or fully failed. */
+  warning?: string;
 }
 
 // Sized so one topic is a plausible reading unit AND fits comfortably in a
@@ -70,7 +89,7 @@ const MIN_TOPIC_CHARS = 1200;
 
 const PREVIEW_CHARS = 200;
 
-interface ChunkRow {
+export interface UnitChunk {
   id: string;
   content: string;
   article_label: string | null;
@@ -78,16 +97,24 @@ interface ChunkRow {
   chunk_index: number;
 }
 
-interface Unit {
+/** An atomic run of consecutive chunks. Never split across topics. */
+export interface TopicUnit {
   label: string | null;
-  chunks: ChunkRow[];
+  chunks: UnitChunk[];
   charCount: number;
+}
+
+export interface DocumentUnits {
+  documentId: string;
+  documentTitle: string;
+  /** Empty when the document has no chunk rows at all — callers must check. */
+  units: TopicUnit[];
 }
 
 // A label like "Maddə 45. Yaşayış zonalarında hərəkət" already reads as a
 // title. A bare "Fəsil III" does not, so the first line of body text is
 // appended when the label carries no descriptive text of its own.
-function deriveTitle(unit: Unit[], fallbackIndex: number): string {
+export function deriveTitle(unit: TopicUnit[], fallbackIndex: number): string {
   const labels = unit.map((u) => u.label).filter((l): l is string => Boolean(l));
 
   if (labels.length > 0) {
@@ -119,7 +146,7 @@ function firstMeaningfulLine(content: string): string {
 
 const MAX_TITLE_CHARS = 120;
 
-function truncateTitle(title: string): string {
+export function truncateTitle(title: string): string {
   const clean = title.replace(/\s+/g, ' ').trim();
   return clean.length > MAX_TITLE_CHARS ? `${clean.slice(0, MAX_TITLE_CHARS - 1)}…` : clean;
 }
@@ -127,11 +154,11 @@ function truncateTitle(title: string): string {
 // Splits a single oversized unit (one enormous Maddə) across several topics at
 // chunk boundaries. Chunk boundaries are already sentence-aware from
 // chunkText.ts, so this never cuts mid-sentence.
-function splitOversizedUnit(unit: Unit): Unit[] {
+function splitOversizedUnit(unit: TopicUnit): TopicUnit[] {
   if (unit.charCount <= MAX_TOPIC_CHARS || unit.chunks.length <= 1) return [unit];
 
-  const parts: Unit[] = [];
-  let current: ChunkRow[] = [];
+  const parts: TopicUnit[] = [];
+  let current: UnitChunk[] = [];
   let currentChars = 0;
 
   for (const chunk of unit.chunks) {
@@ -150,7 +177,13 @@ function splitOversizedUnit(unit: Unit): Unit[] {
   return parts;
 }
 
-export async function proposeTopicsForDocument(documentId: string): Promise<TopicProposal | null> {
+/**
+ * Builds the candidate segmentation: document order, atomic units, already
+ * size-normalised (oversized units broken at chunk boundaries). Both the
+ * deterministic and the AI proposal path start here, so a unit index is a
+ * stable reference to real chunk rows in both.
+ */
+export async function buildDocumentUnits(documentId: string): Promise<DocumentUnits | null> {
   const admin = createAdminClient();
 
   const { data: document, error: documentError } = await admin
@@ -172,21 +205,23 @@ export async function proposeTopicsForDocument(documentId: string): Promise<Topi
     .select('id, content, article_label, page_number, chunk_index')
     .eq('document_id', documentId)
     .order('chunk_index', { ascending: true })
-    .returns<ChunkRow[]>();
+    .returns<UnitChunk[]>();
 
   if (chunksError) {
     console.error('[lessons/proposeTopics] chunks read failed:', chunksError);
     return null;
   }
 
+  const documentTitle = document.title as string;
+
   if (!chunks || chunks.length === 0) {
-    return { documentId, documentTitle: document.title as string, topics: [] };
+    return { documentId, documentTitle, units: [] };
   }
 
   // 1. Consecutive chunks sharing an article_label form one atomic unit.
   //    A null label never merges with anything (two unlabelled runs separated
   //    by a labelled one are genuinely different parts of the document).
-  const units: Unit[] = [];
+  const units: TopicUnit[] = [];
   for (const chunk of chunks) {
     const last = units[units.length - 1];
     if (last && chunk.article_label !== null && last.label === chunk.article_label) {
@@ -202,16 +237,54 @@ export async function proposeTopicsForDocument(documentId: string): Promise<Topi
   }
 
   // 2. Break any single unit that is already oversized.
-  const sizedUnits = units.flatMap(splitOversizedUnit);
+  return { documentId, documentTitle, units: units.flatMap(splitOversizedUnit) };
+}
 
-  // 3. Pack units into topics up to the target. A unit is never split here —
-  //    step 2 already handled anything too big — so an article's text always
-  //    stays whole within one topic.
-  const grouped: Unit[][] = [];
-  let currentGroup: Unit[] = [];
+/**
+ * Materialises one topic from a consecutive run of units. `titleOverride` is
+ * how the AI path supplies its own title — the chunk ids, labels, char count
+ * and preview are ALWAYS derived from the real unit rows, never from anything
+ * a model emitted.
+ */
+export function topicFromUnits(
+  group: TopicUnit[],
+  orderIndex: number,
+  titleOverride?: string | null
+): ProposedTopic {
+  const groupChunks = group.flatMap((u) => u.chunks);
+  const labels: string[] = [];
+  for (const unit of group) {
+    if (unit.label && !labels.includes(unit.label)) labels.push(unit.label);
+  }
+
+  const firstContent = groupChunks[0]?.content ?? '';
+  const cleanOverride = titleOverride?.replace(/\s+/g, ' ').trim();
+
+  return {
+    orderIndex,
+    title: cleanOverride ? truncateTitle(cleanOverride) : deriveTitle(group, orderIndex),
+    articleLabels: labels,
+    chunkIds: groupChunks.map((c) => c.id),
+    charCount: group.reduce((sum, u) => sum + u.charCount, 0),
+    preview:
+      firstContent.length > PREVIEW_CHARS
+        ? `${firstContent.slice(0, PREVIEW_CHARS).trim()}…`
+        : firstContent.trim(),
+  };
+}
+
+/**
+ * Groups units into runs by size only. Returned as index runs (not topics) so
+ * the AI path can reuse it per-batch and renumber afterwards. A unit is never
+ * split here — buildDocumentUnits already normalised oversized ones — so an
+ * article's text always stays whole within one topic.
+ */
+export function packUnitRuns(units: TopicUnit[]): TopicUnit[][] {
+  const grouped: TopicUnit[][] = [];
+  let currentGroup: TopicUnit[] = [];
   let currentChars = 0;
 
-  for (const unit of sizedUnits) {
+  for (const unit of units) {
     if (currentGroup.length > 0 && currentChars + unit.charCount > TARGET_TOPIC_CHARS) {
       grouped.push(currentGroup);
       currentGroup = [];
@@ -222,7 +295,7 @@ export async function proposeTopicsForDocument(documentId: string): Promise<Topi
   }
   if (currentGroup.length > 0) grouped.push(currentGroup);
 
-  // 4. Fold a runt trailing group back into its predecessor.
+  // Fold a runt trailing group back into its predecessor.
   if (grouped.length > 1) {
     const lastGroup = grouped[grouped.length - 1];
     const lastChars = lastGroup.reduce((sum, u) => sum + u.charCount, 0);
@@ -232,27 +305,30 @@ export async function proposeTopicsForDocument(documentId: string): Promise<Topi
     }
   }
 
-  const topics: ProposedTopic[] = grouped.map((group, index) => {
-    const groupChunks = group.flatMap((u) => u.chunks);
-    const labels: string[] = [];
-    for (const unit of group) {
-      if (unit.label && !labels.includes(unit.label)) labels.push(unit.label);
-    }
+  return grouped;
+}
 
-    const firstContent = groupChunks[0]?.content ?? '';
+export function packUnitsIntoTopics(units: TopicUnit[]): ProposedTopic[] {
+  return packUnitRuns(units).map((group, index) => topicFromUnits(group, index));
+}
 
-    return {
-      orderIndex: index,
-      title: deriveTitle(group, index),
-      articleLabels: labels,
-      chunkIds: groupChunks.map((c) => c.id),
-      charCount: group.reduce((sum, u) => sum + u.charCount, 0),
-      preview:
-        firstContent.length > PREVIEW_CHARS
-          ? `${firstContent.slice(0, PREVIEW_CHARS).trim()}…`
-          : firstContent.trim(),
-    };
-  });
+/**
+ * The deterministic proposal. Kept exported and unchanged in behaviour: it is
+ * both a standalone strategy and the fallback the AI pass degrades to.
+ *
+ * Returns `topics: []` for a document with zero chunks. That is honest at this
+ * layer but is a FAILURE at the action boundary — see proposeTopicsAction,
+ * which converts it into an explicit error rather than letting the admin stare
+ * at an empty proposal.
+ */
+export async function proposeTopicsForDocument(documentId: string): Promise<TopicProposal | null> {
+  const doc = await buildDocumentUnits(documentId);
+  if (!doc) return null;
 
-  return { documentId, documentTitle: document.title as string, topics };
+  return {
+    documentId,
+    documentTitle: doc.documentTitle,
+    topics: packUnitsIntoTopics(doc.units),
+    source: 'deterministic',
+  };
 }

@@ -162,10 +162,44 @@ export interface CreateCourseInput {
   createdBy: string;
 }
 
+// Documents can sit at status='ready' with ZERO chunk rows — three do in the
+// live database today, from an ingest that recorded success without persisting
+// anything. Such a document produces an empty, silently-successful topic
+// proposal, which surfaced as "the propose button disappears and nothing
+// happens". Both entry points now refuse it explicitly instead: here, and in
+// proposeTopicsAction. The document is deliberately still LISTED in the picker
+// (with chunkCount 0) so the admin can see that it is broken rather than
+// wondering where it went.
+export async function assertDocumentHasChunks(
+  documentId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { count, error } = await createAdminClient()
+    .from('chunks')
+    .select('*', { count: 'exact', head: true })
+    .eq('document_id', documentId);
+
+  if (error) {
+    console.error('[lessons/courses] chunk count failed:', error);
+    return { ok: false, error: 'Sənədin mətn hissələrini yoxlamaq uğursuz oldu' };
+  }
+
+  if ((count ?? 0) === 0) {
+    return {
+      ok: false,
+      error: 'Bu sənəddə mətn hissəsi yoxdur — sənəd yenidən ingest edilməlidir',
+    };
+  }
+
+  return { ok: true };
+}
+
 export async function createCourse(
   input: CreateCourseInput
 ): Promise<{ ok: true; course: LessonCourseRow } | { ok: false; error: string }> {
   if (!input.title.trim()) return { ok: false, error: 'Kursun adı boş ola bilməz' };
+
+  const hasChunks = await assertDocumentHasChunks(input.documentId);
+  if (!hasChunks.ok) return hasChunks;
 
   const { data, error } = await createAdminClient()
     .from('lesson_courses')
@@ -359,9 +393,9 @@ export interface CreateTopicInput {
 
 // Creates the topic SHELL only: title, order and the chunk citations, with no
 // content and no questions. Generation is a separate, explicitly-triggered
-// per-topic step (generateTopicMaterial below) precisely so that accepting a
-// 20-topic proposal is one fast write, not a 20-minute LLM run inside one
-// request.
+// per-topic step (generateTopicContent / generateTopicQuestionPool below)
+// precisely so that accepting a 20-topic proposal is one fast write, not a
+// 20-minute LLM run inside one request.
 export async function createTopics(
   inputs: CreateTopicInput[]
 ): Promise<{ ok: true; topics: LessonTopicRow[] } | { ok: false; error: string }> {
@@ -497,10 +531,17 @@ export async function reorderTopics(
   return { ok: true };
 }
 
-export interface GenerateTopicMaterialResult {
+export interface GenerateTopicContentResult {
   ok: true;
   topicId: string;
   contentGenerated: boolean;
+  /** Citations that no longer resolve to a chunk row (document re-ingested). */
+  missingChunkCount: number;
+}
+
+export interface GenerateTopicQuestionsResult {
+  ok: true;
+  topicId: string;
   questionsCreated: number;
   /** True when the model returned fewer than TOPIC_POOL_MIN valid questions. */
   belowPoolMinimum: boolean;
@@ -508,24 +549,28 @@ export interface GenerateTopicMaterialResult {
   missingChunkCount: number;
 }
 
-export type GenerateTopicMaterialOutcome =
-  | GenerateTopicMaterialResult
+export type GenerateTopicContentOutcome =
+  | GenerateTopicContentResult
   | { ok: false; error: string };
 
-// ONE topic per call. See the header of lib/lessons/generateTopicContent.ts
-// for why this must never be batched over a whole document: the caller drives
-// a per-topic loop with visible progress, and a failure costs one topic.
-//
-// Existing generated questions for the topic are DELETED first so a
-// regeneration replaces the pool rather than growing it to 40 — but only after
-// the new pool is in hand, so a failed generation leaves the old pool intact.
-export async function generateTopicMaterial(
-  topicId: string,
-  createdBy: string
-): Promise<GenerateTopicMaterialOutcome> {
-  const admin = createAdminClient();
+export type GenerateTopicQuestionsOutcome =
+  | GenerateTopicQuestionsResult
+  | { ok: false; error: string };
 
-  const { data: topic, error: topicError } = await admin
+interface TopicSource {
+  title: string;
+  status: 'draft' | 'published';
+  chunks: TopicSourceChunk[];
+  missingChunkCount: number;
+}
+
+// Shared prologue for both generators: resolve the topic and the real chunk
+// rows its citations point at. Split out so the two generation paths cannot
+// drift on what "the topic's source" means.
+async function loadTopicSource(
+  topicId: string
+): Promise<{ ok: true; source: TopicSource } | { ok: false; error: string }> {
+  const { data: topic, error: topicError } = await createAdminClient()
     .from('lesson_topics')
     .select('id, title, source_citations, status')
     .eq('id', topicId)
@@ -537,100 +582,134 @@ export async function generateTopicMaterial(
     }>();
 
   if (topicError || !topic) {
-    console.error('[lessons/courses] generateTopicMaterial topic lookup failed:', topicError);
+    console.error('[lessons/courses] topic lookup failed:', topicError);
     return { ok: false, error: 'Mövzu tapılmadı' };
   }
 
-  const citations = topic.source_citations ?? [];
-  const chunkIds = citations.map((c) => c.chunk_id).filter(Boolean);
+  const chunkIds = (topic.source_citations ?? []).map((c) => c.chunk_id).filter(Boolean);
   const chunks = await loadChunksByIds(chunkIds);
 
   if (chunks.length === 0) {
     return { ok: false, error: 'Mövzunun mənbə mətni tapılmadı (sənəd yenidən yüklənib ola bilər)' };
   }
 
-  const missingChunkCount = chunkIds.length - chunks.length;
+  return {
+    ok: true,
+    source: {
+      title: topic.title,
+      status: topic.status,
+      chunks,
+      missingChunkCount: chunkIds.length - chunks.length,
+    },
+  };
+}
 
-  // Sequential, not Promise.all: both calls hit the same provider and the
-  // free-tier account limits are shared, so firing them together mainly buys a
-  // rate-limit rejection. The reading draft is also the more valuable of the
-  // two — generating it first means a question-generation failure still leaves
-  // the admin something to review.
-  const reading = await generateTopicReadingContent(topic.title, chunks);
-  const questions = await generateTopicQuestions(topic.title, chunks);
+// ONE topic per call. See the header of lib/lessons/generateTopicContent.ts
+// for why this must never be batched over a whole document: the caller drives
+// a per-topic loop with visible progress, and a failure costs one topic.
+//
+// Content and questions are two SEPARATE entry points (they used to be one
+// generateTopicMaterial call) so an admin can regenerate just the reading
+// material of a topic whose question pool is already reviewed, and so a
+// question-generation failure is reported as itself rather than as a partial
+// success.
+export async function generateTopicContent(
+  topicId: string
+): Promise<GenerateTopicContentOutcome> {
+  const loaded = await loadTopicSource(topicId);
+  if (!loaded.ok) return loaded;
 
-  if (!reading && questions.length === 0) {
-    return { ok: false, error: 'Material yaradılmadı — model heç nə qaytarmadı' };
-  }
+  const reading = await generateTopicReadingContent(loaded.source.title, loaded.source.chunks);
+  if (!reading.ok) return { ok: false, error: reading.error };
 
-  if (reading && reading.content.trim()) {
-    const { error: contentError } = await admin
-      .from('lesson_topics')
-      .update({
-        content: reading.content,
-        // The model's suggested title is applied only when it produced one;
-        // the admin's own edit is never silently overwritten with a blank.
-        ...(reading.title.trim() ? { title: reading.title.trim() } : {}),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', topicId);
+  const { error: contentError } = await createAdminClient()
+    .from('lesson_topics')
+    .update({
+      content: reading.content.content,
+      // The model's suggested title is applied only when it produced one; the
+      // admin's own edit is never silently overwritten with a blank.
+      ...(reading.content.title.trim() ? { title: reading.content.title.trim() } : {}),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', topicId);
 
-    if (contentError) {
-      console.error('[lessons/courses] topic content write failed:', contentError);
-      return { ok: false, error: 'Dərs materialını yadda saxlamaq uğursuz oldu' };
-    }
-  }
-
-  let questionsCreated = 0;
-
-  if (questions.length > 0) {
-    const { error: deleteError } = await admin
-      .from('quiz_questions')
-      .delete()
-      .eq('topic_id', topicId);
-
-    if (deleteError) {
-      console.error('[lessons/courses] old question pool delete failed:', deleteError);
-      return { ok: false, error: 'Köhnə sual bankını silmək uğursuz oldu' };
-    }
-
-    const { data: inserted, error: insertError } = await admin
-      .from('quiz_questions')
-      .insert(
-        questions.map((q) => ({
-          topic_id: topicId,
-          // quiz_questions.category is NOT NULL and still serves the 0051
-          // category-authored bank (app/admin/quiz). Topic-authored questions
-          // are not part of that taxonomy, so the topic title is written here
-          // as a human-readable placeholder rather than a real category — the
-          // topic_id is what the lessons flow reads.
-          category: topic.title.slice(0, 200),
-          question: q.question,
-          options: q.options,
-          correct_index: q.correctIndex,
-          explanation: q.explanation ?? null,
-          status: 'draft' as const,
-          source_title: topic.title,
-          created_by: createdBy,
-        }))
-      )
-      .select('id');
-
-    if (insertError) {
-      console.error('[lessons/courses] question insert failed:', insertError);
-      return { ok: false, error: 'Sualları yadda saxlamaq uğursuz oldu' };
-    }
-
-    questionsCreated = inserted?.length ?? 0;
+  if (contentError) {
+    console.error('[lessons/courses] topic content write failed:', contentError);
+    return { ok: false, error: 'Dərs materialını yadda saxlamaq uğursuz oldu' };
   }
 
   return {
     ok: true,
     topicId,
-    contentGenerated: Boolean(reading && reading.content.trim()),
+    contentGenerated: true,
+    missingChunkCount: loaded.source.missingChunkCount,
+  };
+}
+
+// Regeneration REPLACES the draft pool rather than appending to it — otherwise
+// a second run leaves 40 near-duplicate questions. The delete is scoped to
+// status='draft': a published question is live material a learner may already
+// have been tested on, and this path must never remove it. The delete also runs
+// only AFTER the new pool is in hand, so a failed generation leaves the old
+// pool intact.
+export async function generateTopicQuestionPool(
+  topicId: string,
+  createdBy: string
+): Promise<GenerateTopicQuestionsOutcome> {
+  const loaded = await loadTopicSource(topicId);
+  if (!loaded.ok) return loaded;
+
+  const generated = await generateTopicQuestions(loaded.source.title, loaded.source.chunks);
+  if (!generated.ok) return { ok: false, error: generated.error };
+
+  const admin = createAdminClient();
+
+  const { error: deleteError } = await admin
+    .from('quiz_questions')
+    .delete()
+    .eq('topic_id', topicId)
+    .eq('status', 'draft');
+
+  if (deleteError) {
+    console.error('[lessons/courses] old question pool delete failed:', deleteError);
+    return { ok: false, error: 'Köhnə sual bankını silmək uğursuz oldu' };
+  }
+
+  const { data: inserted, error: insertError } = await admin
+    .from('quiz_questions')
+    .insert(
+      generated.questions.map((q) => ({
+        topic_id: topicId,
+        // quiz_questions.category is NOT NULL and still serves the 0051
+        // category-authored bank (app/admin/quiz). Topic-authored questions
+        // are not part of that taxonomy, so the topic title is written here
+        // as a human-readable placeholder rather than a real category — the
+        // topic_id is what the lessons flow reads.
+        category: loaded.source.title.slice(0, 200),
+        question: q.question,
+        options: q.options,
+        correct_index: q.correctIndex,
+        explanation: q.explanation ?? null,
+        status: 'draft' as const,
+        source_title: loaded.source.title,
+        created_by: createdBy,
+      }))
+    )
+    .select('id');
+
+  if (insertError) {
+    console.error('[lessons/courses] question insert failed:', insertError);
+    return { ok: false, error: 'Sualları yadda saxlamaq uğursuz oldu' };
+  }
+
+  const questionsCreated = inserted?.length ?? 0;
+
+  return {
+    ok: true,
+    topicId,
     questionsCreated,
     belowPoolMinimum: questionsCreated < TOPIC_POOL_MIN,
-    missingChunkCount,
+    missingChunkCount: loaded.source.missingChunkCount,
   };
 }
 
@@ -665,6 +744,11 @@ export interface IngestedDocumentOption {
 
 // The document picker that starts the whole flow: only 'ready' documents are
 // offered, since a pending/failed one has no chunks to build topics from.
+//
+// A 'ready' document with chunkCount === 0 IS still returned, deliberately: a
+// few exist live (ingest reported success but persisted nothing), and hiding
+// them makes the document look lost. The UI marks them unusable off chunkCount,
+// and createCourse/proposeTopicsAction refuse them with a real error.
 export async function listIngestedDocuments(): Promise<IngestedDocumentOption[]> {
   const admin = createAdminClient();
 

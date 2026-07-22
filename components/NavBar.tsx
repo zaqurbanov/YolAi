@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
+import { Avatar } from '@heroui/react';
 import { SidebarToggleButton } from '@/components/SidebarToggleButton';
 import { BackButton } from '@/components/BackButton';
 import CoinBadge from '@/components/CoinBadge';
@@ -17,6 +18,18 @@ import { useNavState } from '@/components/useNavState';
 // pages with no auth needs, which is expensive against the Vercel Hobby
 // serverless-function cap (see CLAUDE.md). Fetching the same data after mount
 // keeps one nav implementation instead of forking a static-only variant.
+// Same rule as app/account/page.tsx's avatar fallback: first letters of the
+// display name, or of the email when no name is set.
+function initialsFrom(name: string | null | undefined, email: string | null): string {
+  const source = name?.trim() || email || '';
+  return source
+    .split(/[\s@.]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('');
+}
+
 export default function NavBar() {
   const nav = useNavState();
   const logoUrl = nav?.logoUrl ?? '/logo.png';
@@ -83,6 +96,21 @@ export default function NavBar() {
           </>
         )}
         <ThemeToggle />
+        {nav?.user && (
+          <Link
+            href="/account"
+            aria-label="Hesab menyusu"
+            title="Hesab"
+            className="shrink-0 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+          >
+            <Avatar size="sm" className="ring-1 ring-primary/30 transition-opacity hover:opacity-80">
+              {nav.user.avatarUrl ? (
+                <Avatar.Image src={nav.user.avatarUrl} alt="Profil şəkli" />
+              ) : null}
+              <Avatar.Fallback>{initialsFrom(nav.user.fullName, nav.user.email)}</Avatar.Fallback>
+            </Avatar>
+          </Link>
+        )}
         {nav !== null && <NavBarMenu hasUser={!!nav.user} isAdmin={nav.isAdmin} />}
       </div>
     </nav>

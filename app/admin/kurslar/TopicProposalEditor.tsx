@@ -92,6 +92,8 @@ export default function TopicProposalEditor({
         return;
       }
       onCreated(result.data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Xəta baş verdi');
     } finally {
       setPending(false);
     }
@@ -101,7 +103,17 @@ export default function TopicProposalEditor({
     <div className="glass-card rounded-2xl p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="mono-label text-on-surface-variant uppercase">Təklif edilən mövzular</div>
+          <div className="mono-label flex flex-wrap items-center gap-2 text-on-surface-variant uppercase">
+            Təklif edilən mövzular
+            <Chip
+              size="sm"
+              variant="soft"
+              color={proposal.source === 'ai' ? 'accent' : 'default'}
+              className="mono-label"
+            >
+              {proposal.source === 'ai' ? 'AI qruplaşdırması' : 'mexaniki bölgü'}
+            </Chip>
+          </div>
           <p className="mt-1 text-label-sm text-on-surface-variant">
             {proposal.documentTitle} — {drafts.length} mövzu. Adları dəyişin, sırasını düzəldin və ya
             lazımsızları silin. Yaradılana qədər heç nə yadda saxlanmır.
@@ -127,6 +139,17 @@ export default function TopicProposalEditor({
           </Button>
         </div>
       </div>
+
+      {/* "AI failed, this is the mechanical split" is information the admin
+          must not miss — the mechanical grouping is usually coarser, and the
+          warning carries the provider's own error text. It can be set even
+          when source === 'ai' (a partial batch failure). */}
+      {proposal.warning && (
+        <div className="mt-3 rounded-xl border border-caution-orange/40 bg-caution-orange/10 px-3 py-2">
+          <p className="mono-label text-caution-orange uppercase">Diqqət</p>
+          <p className="mt-1 break-words text-sm text-on-surface">{proposal.warning}</p>
+        </div>
+      )}
 
       {error && <p className="mono-label mt-3 text-danger">{error}</p>}
 

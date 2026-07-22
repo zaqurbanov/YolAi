@@ -146,6 +146,19 @@ export function isVisionAvailable(): boolean {
   return getVisionModel() !== null;
 }
 
+// Whether the model getChatModel() returns can accept image content parts.
+// Distinct from isVisionAvailable(), which answers "can this deployment look at
+// a photo AT ALL" — that one is satisfied by the separate Gemini vision model
+// used for the identification step, and says nothing about the model that
+// writes the final answer. Callers must strip file parts from the messages they
+// hand to getChatModel() when this is false: DeepSeek (the current default) and
+// the OpenRouter free-tier text models reject an image part outright, which
+// surfaced as an intermittent "Cavab alınmadı" in chat whenever a photo was
+// attached.
+export function chatModelSupportsVision(): boolean {
+  return (process.env.LLM_PROVIDER ?? 'openrouter') === 'anthropic';
+}
+
 // deepseek-v4-flash defaults to 'adaptive' thinking, i.e. it may silently emit
 // hidden chain-of-thought tokens before any visible output — the same failure
 // mode DISABLE_REASONING exists to prevent for OpenRouter models, just gated

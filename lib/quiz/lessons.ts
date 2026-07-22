@@ -1,16 +1,20 @@
 import 'server-only';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { isMissingRelationError } from '@/lib/supabase/missingRelation';
 import { getDefaultCourseUnlockPrice } from '@/lib/coins/lessonUnlock';
 
 // User-facing reads for the restructured lessons feature (/oyrenme).
 //
-// Plain RLS-respecting client (createClient), never the service-role admin
-// client: everything read here is either a published lesson_courses row
-// (public-to-authenticated select policy) or the caller's own
-// user_course_unlocks/user_topic_progress rows (self-select policies). No
-// admin gate is needed, and using the user-scoped client means RLS is a real
-// second line of defence rather than something bypassed by habit.
+// RLS-respecting client (createClient) by default: everything read here is
+// either a published lesson_courses row (public-to-authenticated select
+// policy) or the caller's own user_course_unlocks/user_topic_progress rows
+// (self-select policies), so RLS stays a real second line of defence rather
+// than something bypassed by habit.
+//
+// ONE documented exception: the published-topic COUNT in getCourses, which RLS
+// cannot express (see the comment at that query). It selects ids only, never
+// content. Everything else here must keep using the user-scoped client.
 //
 // GRACEFUL DEGRADATION IS LOAD-BEARING HERE. 0060_lesson_courses.sql is
 // applied by hand by the owner, so between this code deploying and that SQL
@@ -94,7 +98,23 @@ export async function getCourses(userId: string): Promise<CourseSummary[]> {
     { data: progress, error: progressError },
     defaultPrice,
   ] = await Promise.all([
-    supabase
+    // THE ONE ADMIN-CLIENT READ ON THIS PAGE, and it is deliberate.
+    //
+    // lesson_topics' RLS policy (0060) requires the course to be free or
+    // unlocked by the caller — correct, because a topic row carries the full
+    // reading material, which is the paid product. But that also hid the topic
+    // COUNT of every locked course, so `totalTopics` came back 0 and CourseGrid
+    // rendered a fully-prepared paid course as "Tezliklə — Hələ mövzu yoxdur"
+    // instead of "Kilidli, N mövzu". Its `isLocked` branch was dead code.
+    // Confirmed live against a published course with 3 published topics.
+    //
+    // Only `id` and `course_id` of PUBLISHED topics in PUBLISHED courses are
+    // selected — no title, no content. That leaks nothing beyond "this course
+    // has N sections", which the card is supposed to advertise. Do NOT widen
+    // this select to include content/title: that is precisely what the RLS
+    // policy exists to prevent, and the user-scoped client must stay the only
+    // way material is read.
+    createAdminClient()
       .from('lesson_topics')
       .select('id, course_id')
       .eq('status', 'published')

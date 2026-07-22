@@ -6,6 +6,7 @@ import { Spinner } from '@/components/Spinner';
 import type { LessonTopicRow } from '@/lib/lessons/courses';
 import type { GenState } from './CourseTopicsPanel';
 import { deleteTopicAction, updateTopicAction } from './actions';
+import TopicSplitPanel from './TopicSplitPanel';
 
 interface TopicCardProps {
   topic: LessonTopicRow;
@@ -13,8 +14,11 @@ interface TopicCardProps {
   gen: GenState | undefined;
   /** True while a batch run is in flight — per-topic mutations are held back. */
   isRunLocked: boolean;
-  onGenerate: () => void;
+  onGenerateContent: () => void;
+  onGenerateQuestions: () => void;
   onPublish: () => void;
+  /** Receives the course's full refreshed topic list after a split. */
+  onSplit: (topics: LessonTopicRow[]) => void;
   onChanged: () => void;
   onError: (message: string) => void;
 }
@@ -24,15 +28,15 @@ export default function TopicCard({
   index,
   gen,
   isRunLocked,
-  onGenerate,
+  onGenerateContent,
+  onGenerateQuestions,
   onPublish,
+  onSplit,
   onChanged,
   onError,
 }: TopicCardProps) {
   const [expanded, setExpanded] = useState(false);
-  const [content, setContent] = useState(topic.content ?? '');
-  const [title, setTitle] = useState(topic.title);
-  const [saving, setSaving] = useState(false);
+  const [splitOpen, setSplitOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
 
   const isGenerating = gen?.status === 'running';
@@ -40,32 +44,24 @@ export default function TopicCard({
   const hasContent = topic.content !== null && topic.content.trim() !== '';
   const isPublished = topic.status === 'published';
   const canPublish = !isPublished && hasContent && topic.questionCount > 0;
+  const contentRunning = gen?.content?.status === 'running';
+  const questionsRunning = gen?.questions?.status === 'running';
+  // A published topic is live material a learner may be mid-way through; the
+  // backend refuses to split one, so the button is not offered at all.
+  const canSplit = !isPublished && topic.sourceCitations.length > 1;
 
-  async function handleSave() {
-    setSaving(true);
+  async function handleDelete() {
+    if (!window.confirm(`"${topic.title}" mövzusu silinsin?`)) return;
     try {
-      const result = await updateTopicAction(topic.id, {
-        title: title.trim() || topic.title,
-        content: content.trim() || null,
-      });
+      const result = await deleteTopicAction(topic.id);
       if (!result.ok) {
         onError(result.error);
         return;
       }
       onChanged();
-    } finally {
-      setSaving(false);
+    } catch (e) {
+      onError(e instanceof Error ? e.message : 'Xəta baş verdi');
     }
-  }
-
-  async function handleDelete() {
-    if (!window.confirm(`"${topic.title}" mövzusu silinsin?`)) return;
-    const result = await deleteTopicAction(topic.id);
-    if (!result.ok) {
-      onError(result.error);
-      return;
-    }
-    onChanged();
   }
 
   async function handlePublish() {
@@ -130,20 +126,38 @@ export default function TopicCard({
           {isGenerating && (
             <span className="mono-label flex items-center gap-1.5 text-primary">
               <Spinner size="sm" tone="current" />
-              yaradılır…
+              {contentRunning ? 'material yaradılır…' : questionsRunning ? 'suallar yaradılır…' : 'yaradılır…'}
             </span>
           )}
           {isQueued && <span className="mono-label text-on-surface-variant">növbədə</span>}
 
+          {/* Content and questions are separate backend calls and a topic can
+              legitimately have one without the other, so they get separate
+              buttons rather than one "material" button doing both. */}
           {!isGenerating && !isQueued && (
-            <Button
-              variant="outline"
-              size="sm"
-              isDisabled={isRunLocked}
-              onPress={onGenerate}
-            >
-              {hasContent ? 'Yenidən yarat' : 'Material yarat'}
-            </Button>
+            <>
+              <Button variant="outline" size="sm" isDisabled={isRunLocked} onPress={onGenerateContent}>
+                {hasContent ? 'Materialı yenidən yarat' : 'Dərs materialı yarat'}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                isDisabled={isRunLocked}
+                onPress={onGenerateQuestions}
+              >
+                {topic.questionCount > 0 ? 'Sualları yenilə' : 'Suallar yarat'}
+              </Button>
+              {canSplit && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  isDisabled={isRunLocked}
+                  onPress={() => setSplitOpen((v) => !v)}
+                >
+                  {splitOpen ? 'Bölgünü bağla' : 'Hissələrə böl'}
+                </Button>
+              )}
+            </>
           )}
 
           <Button variant="ghost" size="sm" onPress={() => setExpanded((v) => !v)}>
@@ -152,16 +166,30 @@ export default function TopicCard({
         </div>
       </div>
 
-      {/* Generation outcome, surfaced per topic and kept visible after the run. */}
-      {gen?.status === 'error' && (
-        <p className="mono-label mt-2 pl-8 text-danger">
-          Uğursuz oldu: {gen.message ?? 'naməlum xəta'}
+      {/* Per-STEP outcome, kept visible after the run. The provider's real error
+          text (model id + message) is rendered verbatim — collapsing it into
+          "Xəta" is what made these failures invisible in the first place. */}
+      {gen?.content?.status === 'error' && (
+        <p className="mono-label mt-2 pl-8 break-words text-danger">
+          Dərs materialı uğursuz oldu: {gen.content.message ?? 'naməlum xəta'}
         </p>
+      )}
+
+      {gen?.questions?.status === 'error' && (
+        <p className="mono-label mt-2 pl-8 break-words text-danger">
+          Suallar uğursuz oldu: {gen.questions.message ?? 'naməlum xəta'}
+        </p>
+      )}
+
+      {gen?.status === 'idle' && gen.message && (
+        <p className="mono-label mt-2 pl-8 text-on-surface-variant">{gen.message}</p>
       )}
 
       {gen?.status === 'done' && (
         <p className="mono-label mt-2 pl-8 text-go-green">
-          Hazırdır — {gen.questionsCreated ?? 0} sual yaradıldı
+          {gen.content?.status === 'done' ? 'Material hazırdır' : null}
+          {gen.content?.status === 'done' && gen.questions?.status === 'done' ? ' · ' : null}
+          {gen.questions?.status === 'done' ? `${gen.questionsCreated ?? 0} sual yaradıldı` : null}
         </p>
       )}
 
@@ -181,7 +209,91 @@ export default function TopicCard({
         </p>
       ) : null}
 
+      {splitOpen && canSplit && (
+        <TopicSplitPanel
+          topic={topic}
+          onCancel={() => setSplitOpen(false)}
+          onSplit={(refreshed) => {
+            setSplitOpen(false);
+            onSplit(refreshed);
+          }}
+        />
+      )}
+
       {expanded && (
+        <TopicEditor
+          // REMOUNTS WHENEVER THE SERVER'S COPY CHANGES. The title/content
+          // fields are uncontrolled-from-the-server: they seed local state
+          // once. Before this, that state was seeded in TopicCard itself, so a
+          // card mounted while the topic was still empty kept showing an EMPTY
+          // textarea after generation finished and refreshed the row — the
+          // chips said "material var" while the editor said "Material hələ
+          // yaradılmayıb". Keying on the server values is React's own answer to
+          // "reset state when a prop changes"; it can't fight the user's typing
+          // because the key is derived from the prop, not from local state.
+          key={`${topic.id}:${topic.title}:${topic.content ?? ''}`}
+          topic={topic}
+          isRunLocked={isRunLocked}
+          canPublish={canPublish}
+          isPublished={isPublished}
+          publishing={publishing}
+          onPublish={() => void handlePublish()}
+          onDelete={() => void handleDelete()}
+          onChanged={onChanged}
+          onError={onError}
+        />
+      )}
+    </div>
+  );
+}
+
+interface TopicEditorProps {
+  topic: LessonTopicRow;
+  isRunLocked: boolean;
+  canPublish: boolean;
+  isPublished: boolean;
+  publishing: boolean;
+  onPublish: () => void;
+  onDelete: () => void;
+  onChanged: () => void;
+  onError: (message: string) => void;
+}
+
+function TopicEditor({
+  topic,
+  isRunLocked,
+  canPublish,
+  isPublished,
+  publishing,
+  onPublish,
+  onDelete,
+  onChanged,
+  onError,
+}: TopicEditorProps) {
+  const [title, setTitle] = useState(topic.title);
+  const [content, setContent] = useState(topic.content ?? '');
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      const result = await updateTopicAction(topic.id, {
+        title: title.trim() || topic.title,
+        content: content.trim() || null,
+      });
+      if (!result.ok) {
+        onError(result.error);
+        return;
+      }
+      onChanged();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : 'Xəta baş verdi');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
         <div className="mt-3 space-y-3 border-t border-outline-variant/40 pt-3">
           <TextField value={title} onChange={setTitle} aria-label="Mövzu adı">
             <TextArea rows={1} />
@@ -190,9 +302,13 @@ export default function TopicCard({
           <TextField value={content} onChange={setContent} aria-label="Mövzu materialı">
             <TextArea
               rows={12}
-              placeholder="Material hələ yaradılmayıb. «Material yarat» düyməsini işlədin və ya əl ilə yazın."
+              placeholder="Material hələ yaradılmayıb. «Dərs materialı yarat» düyməsini işlədin və ya əl ilə yazın."
             />
           </TextField>
+          <p className="mono-label text-on-surface-variant">
+            Format: sadələşdirilmiş Markdown — ## / ### başlıqlar, «- » siyahılar, **qalın», «&gt; »
+            sitat, adi abzaslar. Cədvəl, HTML və kod bloku dəstəklənmir.
+          </p>
 
           {topic.sourceCitations.length > 0 && (
             <div>
@@ -237,7 +353,7 @@ export default function TopicCard({
                   size="sm"
                   isPending={publishing}
                   isDisabled={publishing || isRunLocked}
-                  onPress={() => void handlePublish()}
+                  onPress={onPublish}
                 >
                   {({ isPending }) => (
                     <>
@@ -253,7 +369,7 @@ export default function TopicCard({
               variant="ghost"
               size="sm"
               isDisabled={isRunLocked}
-              onPress={() => void handleDelete()}
+              onPress={onDelete}
             >
               Mövzunu sil
             </Button>
@@ -265,7 +381,5 @@ export default function TopicCard({
             </p>
           )}
         </div>
-      )}
-    </div>
   );
 }

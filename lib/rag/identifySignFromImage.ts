@@ -45,6 +45,14 @@ export async function identifySignFromImage(imagePart: FileUIPart): Promise<stri
   const { text } = await generateText({
     model,
     system: IDENTIFY_SYSTEM_PROMPT,
+    // Gemini 2.5 models think by default — a live call with this prompt spent
+    // 659 hidden thought tokens to name the contents of a trivial image. This
+    // call sits on the critical path BEFORE rewrite/retrieval/answer inside a
+    // 60s maxDuration, and naming what is in a photo in a few words needs no
+    // chain of thought. Same reasoning as DISABLE_REASONING in lib/llm.
+    // A providerOptions key that doesn't match the active provider is ignored,
+    // so the anthropic vision branch is unaffected.
+    providerOptions: { google: { thinkingConfig: { thinkingBudget: 0 } } },
     messages: [modelMessage],
   });
 

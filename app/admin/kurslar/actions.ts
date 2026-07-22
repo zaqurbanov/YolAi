@@ -3,12 +3,22 @@
 import { revalidatePath } from 'next/cache';
 import { requireAdmin } from '@/lib/auth/requireAdmin';
 import { proposeTopicsForDocument, type TopicProposal } from '@/lib/lessons/proposeTopics';
+import { aiProposeTopicsForDocument } from '@/lib/lessons/aiProposeTopics';
 import {
+  previewTopicSplit,
+  splitTopic,
+  suggestTopicSplit,
+  type TopicSplitAdvice,
+  type TopicSplitPart,
+} from '@/lib/lessons/splitTopic';
+import {
+  assertDocumentHasChunks,
   createCourse,
   createTopics,
   deleteCourse,
   deleteTopic,
-  generateTopicMaterial,
+  generateTopicContent,
+  generateTopicQuestionPool,
   listCourseTopics,
   listCourses,
   listIngestedDocuments,
@@ -18,7 +28,8 @@ import {
   updateTopic,
   type CoursePatch,
   type CreateTopicInput,
-  type GenerateTopicMaterialResult,
+  type GenerateTopicContentResult,
+  type GenerateTopicQuestionsResult,
   type IngestedDocumentOption,
   type LessonCourseRow,
   type LessonTopicRow,
@@ -107,24 +118,49 @@ export async function deleteCourseAction(courseId: string): Promise<AdminActionR
   return { ok: true, data: null };
 }
 
-// Read-only and deterministic: proposes boundaries from the document's chunks
-// without writing anything or calling an LLM, so the admin can re-run it while
-// adjusting without side effects.
+// Read-only: proposes topic boundaries from the document's chunks without
+// writing anything, so the admin can re-run it freely.
+//
+// 'ai' (the default) runs the batched outline pass in lib/lessons/
+// aiProposeTopics.ts — several small structured LLM calls, so this action is
+// the slow one on this page; the admin catch-all page exports maxDuration = 300
+// for it. 'deterministic' is the instant mechanical split, kept selectable both
+// as an escape hatch and because it is the fallback the AI path degrades to.
+// `data.source` tells the UI which one actually produced the result.
+//
+// AN EMPTY PROPOSAL IS A FAILURE HERE even though proposeTopicsForDocument
+// returning `{ topics: [] }` for a chunk-less document is honest at its own
+// layer. Returning ok:true with zero topics is what made the propose button
+// silently vanish with nothing in its place — three 'ready' documents in the
+// live DB have no chunk rows at all.
 export async function proposeTopicsAction(
-  documentId: string
+  documentId: string,
+  strategy: 'ai' | 'deterministic' = 'ai'
 ): Promise<AdminActionResult<TopicProposal>> {
   const admin = await requireAdmin();
   if (!admin.ok) return denied(admin.message);
 
-  const proposal = await proposeTopicsForDocument(documentId);
+  const hasChunks = await assertDocumentHasChunks(documentId);
+  if (!hasChunks.ok) return denied(hasChunks.error);
+
+  const proposal =
+    strategy === 'deterministic'
+      ? await proposeTopicsForDocument(documentId)
+      : await aiProposeTopicsForDocument(documentId);
+
   if (!proposal) return denied('Sənəd və ya onun mətn hissələri tapılmadı');
+
+  if (proposal.topics.length === 0) {
+    return denied('Bu sənəddə mətn hissəsi yoxdur — sənəd yenidən ingest edilməlidir');
+  }
 
   return { ok: true, data: proposal };
 }
 
 // Persists the admin-adjusted proposal as DRAFT topic shells — titles, order
 // and source citations only. Fast, one insert, no LLM. Content and questions
-// come afterwards, one topic at a time, via generateTopicMaterialAction.
+// come afterwards, one topic at a time, via generateTopicContentAction /
+// generateTopicQuestionsAction.
 export async function createTopicsAction(
   inputs: CreateTopicInput[]
 ): Promise<AdminActionResult<LessonTopicRow[]>> {
@@ -147,23 +183,92 @@ export async function listCourseTopicsAction(
   return { ok: true, data: await listCourseTopics(courseId) };
 }
 
-// ONE TOPIC PER CALL. The frontend drives the loop and renders progress;
-// generating a whole document in one action would exceed Vercel's maxDuration
-// (300s ceiling on Hobby) and lose every topic already generated. Do not add a
-// "generate all" action that wraps this in a server-side loop — the loop
-// belongs on the client precisely so each topic commits independently and a
-// failure is resumable.
-export async function generateTopicMaterialAction(
+// ONE TOPIC PER CALL, and content and questions are now TWO calls.
+//
+// The frontend drives the loop and renders progress; generating a whole
+// document in one action would exceed Vercel's maxDuration (300s ceiling on
+// Hobby) and lose every topic already generated. Do not add a "generate all"
+// action that wraps these in a server-side loop — the loop belongs on the
+// client precisely so each topic commits independently and a failure is
+// resumable.
+//
+// The former combined generateTopicMaterialAction is GONE. The client sequences
+// generateTopicContentAction then generateTopicQuestionsAction, which is what
+// makes "Suallar yarat" a per-topic button in its own right and makes a
+// question failure reportable without discarding a successful content draft.
+export async function generateTopicContentAction(
   topicId: string
-): Promise<AdminActionResult<GenerateTopicMaterialResult>> {
+): Promise<AdminActionResult<GenerateTopicContentResult>> {
   const admin = await requireAdmin();
   if (!admin.ok) return denied(admin.message);
 
-  const result = await generateTopicMaterial(topicId, admin.userId);
+  const result = await generateTopicContent(topicId);
   if (!result.ok) return denied(result.error);
 
   revalidatePath('/admin/kurslar');
   return { ok: true, data: result };
+}
+
+// Replaces the topic's DRAFT question pool. Published questions are never
+// touched by this path — see generateTopicQuestionPool.
+export async function generateTopicQuestionsAction(
+  topicId: string
+): Promise<AdminActionResult<GenerateTopicQuestionsResult>> {
+  const admin = await requireAdmin();
+  if (!admin.ok) return denied(admin.message);
+
+  const result = await generateTopicQuestionPool(topicId, admin.userId);
+  if (!result.ok) return denied(result.error);
+
+  revalidatePath('/admin/kurslar');
+  return { ok: true, data: result };
+}
+
+// Split advice: one cheap structured LLM call, non-destructive, re-runnable.
+export async function suggestTopicSplitAction(
+  topicId: string
+): Promise<AdminActionResult<TopicSplitAdvice>> {
+  const admin = await requireAdmin();
+  if (!admin.ok) return denied(admin.message);
+
+  const result = await suggestTopicSplit(topicId);
+  if (!result.ok) return denied(result.error);
+
+  return { ok: true, data: result.advice };
+}
+
+// Recomputes the seams at the admin's chosen count. No LLM, no writes — safe to
+// call on every change of a part-count control.
+export async function previewTopicSplitAction(
+  topicId: string,
+  partCount: number
+): Promise<AdminActionResult<TopicSplitPart[]>> {
+  const admin = await requireAdmin();
+  if (!admin.ok) return denied(admin.message);
+
+  const result = await previewTopicSplit(topicId, partCount);
+  if (!result.ok) return denied(result.error);
+
+  return { ok: true, data: result.parts };
+}
+
+// Destructive. Replaces the topic with `partCount` DRAFT parts (content = null,
+// the parent's draft questions cascade away with it) and reflows the course's
+// order_index. Refuses a published topic. Returns the course's full refreshed
+// topic list so the UI can replace its state wholesale.
+export async function splitTopicAction(
+  topicId: string,
+  partCount: number
+): Promise<AdminActionResult<LessonTopicRow[]>> {
+  const admin = await requireAdmin();
+  if (!admin.ok) return denied(admin.message);
+
+  const result = await splitTopic(topicId, partCount);
+  if (!result.ok) return denied(result.error);
+
+  revalidatePath('/admin/kurslar');
+  revalidatePath('/oyrenme');
+  return { ok: true, data: result.topics };
 }
 
 export async function updateTopicAction(

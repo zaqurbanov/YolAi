@@ -1,20 +1,26 @@
+import Link from 'next/link';
 import { Chip } from '@heroui/react';
+import { buttonVariants } from '@heroui/styles';
 import { ACCENT_STYLES } from '@/components/CategoryCard';
 import { CoinIcon, LockIcon } from '@/components/icons';
 import type { CourseSummary } from '@/lib/quiz/lessons';
+import UnlockCourseCard from './UnlockCourseCard';
 
 interface CourseGridProps {
   courses: CourseSummary[];
+  /** Display only. null when the balance read failed — it fails open. */
+  balance: number | null;
 }
 
-// Server component: Phase 1 has no interactive affordance on a course card.
-// The unlock purchase flow is Phase 3 and the learn -> test flow is Phase 2,
-// so there is no client state to hold and nothing to ship to the browser.
-// Locked courses show their price as read-only information only.
+// Server component. Only the LOCKED branch is interactive: it is wrapped in
+// <UnlockCourseCard> (client), which turns the card into a real button and owns
+// the coin purchase dialog. Free/open/empty cards ship no JS.
 //
-// Cards are deliberately NOT links: /oyrenme/[courseId] does not exist yet,
-// and a card that navigates to a 404 is worse than one that doesn't move.
-export default function CourseGrid({ courses }: CourseGridProps) {
+// Free and already-unlocked cards link to /oyrenme/[courseId] (the topic list),
+// which exists as of Phase 2. A <Link> ships no JS, so this branch stays
+// non-interactive in the "no hydration" sense. Empty ("Tezliklə") cards are
+// still not links — there is nothing to show behind them.
+export default function CourseGrid({ courses, balance }: CourseGridProps) {
   return (
     <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
       {courses.map((course, i) => {
@@ -26,12 +32,11 @@ export default function CourseGrid({ courses }: CourseGridProps) {
         const isLocked = !isEmpty && !course.isUnlocked;
         const isOpen = !isEmpty && course.isUnlocked;
 
-        return (
-          <div
-            key={course.id}
-            className={`topic-card-in motion-reduce:animate-none glass-card flex h-full flex-col border border-transparent border-l-4 ${accent.border} p-6`}
-            style={{ animationDelay: `${i * 80}ms` }}
-          >
+        const cardClass = `topic-card-in motion-reduce:animate-none glass-card flex h-full flex-col border border-transparent border-l-4 ${accent.border} p-6`;
+        const cardStyle = { animationDelay: `${i * 80}ms` };
+
+        const content = (
+          <>
             <div className="mb-2 flex items-start justify-between gap-2">
               <h3
                 className={`text-headline-md text-[20px] ${isOpen ? '' : 'text-on-surface-variant'}`}
@@ -87,6 +92,17 @@ export default function CourseGrid({ courses }: CourseGridProps) {
               )}
             </div>
 
+            {isLocked && (
+              // Looks like the primary action, but is a plain span: the whole
+              // card is the button, so nothing inside it may be focusable.
+              <span
+                aria-hidden
+                className={buttonVariants({ variant: 'primary', size: 'sm' }) + ' mt-4 w-full'}
+              >
+                Kursu aç
+              </span>
+            )}
+
             <div className="mt-4 flex items-center justify-between gap-3 border-t border-outline-variant/40 pt-3">
               <span className={`text-legal-citation ${accent.citation}`}>
                 {course.isFree ? 'Pulsuz' : 'Kurs'}
@@ -99,6 +115,41 @@ export default function CourseGrid({ courses }: CourseGridProps) {
                 </span>
               )}
             </div>
+          </>
+        );
+
+        if (isLocked) {
+          return (
+            <UnlockCourseCard
+              key={course.id}
+              courseId={course.id}
+              title={course.title}
+              price={course.price}
+              balance={balance}
+              className={cardClass}
+              style={cardStyle}
+            >
+              {content}
+            </UnlockCourseCard>
+          );
+        }
+
+        if (isOpen) {
+          return (
+            <Link
+              key={course.id}
+              href={`/oyrenme/${course.id}`}
+              className={`${cardClass} transition-[transform,border-color] hover:-translate-y-0.5 hover:border-primary/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary`}
+              style={cardStyle}
+            >
+              {content}
+            </Link>
+          );
+        }
+
+        return (
+          <div key={course.id} className={cardClass} style={cardStyle}>
+            {content}
           </div>
         );
       })}

@@ -259,13 +259,18 @@ export async function GET(request: NextRequest) {
     }
 
     const [{ data: profile }, unreadCount, notifications] = await Promise.all([
-      supabase.from('profiles').select('role').eq('id', user.id).single(),
+      supabase.from('profiles').select('role, full_name, avatar_url').eq('id', user.id).single(),
       getUnreadCount(user.id),
       getRecentNotifications(user.id),
     ]);
 
     return NextResponse.json({
-      user: { id: user.id, email: user.email ?? null },
+      user: {
+        id: user.id,
+        email: user.email ?? null,
+        fullName: profile?.full_name ?? null,
+        avatarUrl: profile?.avatar_url ?? null,
+      },
       isAdmin: profile?.role === 'admin',
       logoUrl,
       unreadCount,

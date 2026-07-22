@@ -19,6 +19,13 @@ import UserDetailSection from '../users/UserDetailSection';
 // unchanged — the sections still live in their original folders, only the route
 // files were collapsed.
 
+// Server-action timeout for every admin screen served by this route. Set for
+// app/admin/kurslar/actions.ts: proposeTopicsAction runs a batched multi-call
+// LLM outline pass and the per-topic generators each make a full generation
+// call, all well past the platform default. 300 is Vercel's ceiling, and it is
+// a ceiling rather than a reservation — fast actions still return immediately.
+export const maxDuration = 300;
+
 const TITLES: Record<string, string> = {
   'busy-phrases': 'Status cümlələri',
   documents: 'Sənədlər',

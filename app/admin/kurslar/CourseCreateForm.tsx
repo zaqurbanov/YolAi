@@ -46,6 +46,11 @@ export default function CourseCreateForm({ nextOrderIndex, onCreated }: CourseCr
   }, []);
 
   function pickDocument(doc: IngestedDocumentOption) {
+    // A chunkCount of 0 means ingest reported success but persisted no text.
+    // createCourseAction refuses these server-side; the picker refuses them
+    // here too so the admin never gets a course whose only possible next step
+    // ("Mövzuları təklif et") is guaranteed to fail.
+    if (doc.chunkCount === 0) return;
     setDocumentId(doc.id);
     // Prefill from the document, still fully editable — the course title is
     // usually the document title, but not always.
@@ -97,10 +102,17 @@ export default function CourseCreateForm({ nextOrderIndex, onCreated }: CourseCr
       setIsFree(false);
       setUnlockPrice('');
       onCreated(result.data);
+    } catch (e) {
+      // A rejected server action (network drop, function timeout) resolves
+      // nowhere near the `!result.ok` branch — without this the spinner just
+      // stops and nothing is rendered.
+      setError(e instanceof Error ? e.message : 'Xəta baş verdi');
     } finally {
       setPending(false);
     }
   }
+
+  const unusableCount = documents?.filter((d) => d.chunkCount === 0).length ?? 0;
 
   return (
     <div className="glass-card rounded-2xl p-5">
@@ -124,24 +136,48 @@ export default function CourseCreateForm({ nextOrderIndex, onCreated }: CourseCr
               Mənbə sənədi ({documents.length})
             </div>
             <div className="max-h-56 space-y-1.5 overflow-y-auto rounded-xl border border-outline-variant/40 p-2">
-              {documents.map((doc) => (
-                <button
-                  key={doc.id}
-                  type="button"
-                  onClick={() => pickDocument(doc)}
-                  className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm transition ${
-                    doc.id === documentId
-                      ? 'bg-primary/15 text-primary'
-                      : 'hover:bg-surface-tertiary/50'
-                  }`}
-                >
-                  <span className="min-w-0 truncate">{doc.title}</span>
-                  <Chip size="sm" variant="soft" color="default" className="mono-label shrink-0">
-                    {doc.chunkCount} hissə
-                  </Chip>
-                </button>
-              ))}
+              {documents.map((doc) => {
+                const isUnusable = doc.chunkCount === 0;
+                return (
+                  <button
+                    key={doc.id}
+                    type="button"
+                    disabled={isUnusable}
+                    aria-disabled={isUnusable}
+                    title={
+                      isUnusable
+                        ? 'Bu sənəddə mətn hissəsi yoxdur — kurs qurmaq üçün yenidən ingest edilməlidir'
+                        : undefined
+                    }
+                    onClick={() => pickDocument(doc)}
+                    className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm transition ${
+                      isUnusable
+                        ? 'cursor-not-allowed text-on-surface-variant/60 line-through decoration-danger/50'
+                        : doc.id === documentId
+                          ? 'bg-primary/15 text-primary'
+                          : 'hover:bg-surface-tertiary/50'
+                    }`}
+                  >
+                    <span className="min-w-0 truncate">{doc.title}</span>
+                    <Chip
+                      size="sm"
+                      variant="soft"
+                      color={isUnusable ? 'danger' : 'default'}
+                      className="mono-label shrink-0"
+                    >
+                      {isUnusable ? '0 hissə — yararsız' : `${doc.chunkCount} hissə`}
+                    </Chip>
+                  </button>
+                );
+              })}
             </div>
+
+            {unusableCount > 0 && (
+              <p className="mono-label mt-2 text-caution-orange">
+                {unusableCount} sənəd mətn hissəsi olmadan «hazır» görünür və seçilə bilmir —
+                onları «Sənədlər» bölməsindən yenidən ingest edin.
+              </p>
+            )}
           </div>
 
           <div className="mt-4 grid gap-4 sm:grid-cols-2">

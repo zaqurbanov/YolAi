@@ -7,7 +7,7 @@ import {
   type UIMessage,
   type FileUIPart,
 } from 'ai';
-import { getChatModel, getChatModelFallback, getChatModelId, getChatModelFallbackId, getProviderCallOptions, isVisionAvailable } from '@/lib/llm';
+import { getChatModel, getChatModelFallback, getChatModelId, getChatModelFallbackId, getProviderCallOptions, isVisionAvailable, chatModelSupportsVision } from '@/lib/llm';
 import { streamTextWithFallback } from '@/lib/llm/streamWithFallback';
 import { identifySignFromImage } from '@/lib/rag/identifySignFromImage';
 import { retrieveRelevantChunks, retrievePerDocumentChunks, retrieveChunksByArticle, embedQueryWithActiveModel, type RetrievedChunk } from '@/lib/retrieval/search';
@@ -46,6 +46,62 @@ function findImagePart(message: UIMessage | undefined): FileUIPart | null {
     (p): p is FileUIPart => p.type === 'file' && p.mediaType?.startsWith('image/'),
   );
   return part ?? null;
+}
+
+// Prepares the message list for the ANSWERING model, which is not the model
+// that looked at the photo.
+//
+// Two separate problems, both fixed here:
+//
+// 1. The attached image part used to be forwarded verbatim to getChatModel().
+//    That model is DeepSeek by default and has no vision support at all — it
+//    rejects an image content part, which the user saw as an intermittent
+//    "Cavab alınmadı" whenever a photo was attached. File parts are therefore
+//    dropped unless the active chat model can actually accept them.
+// 2. Even when the request survived, the answering model was never TOLD what
+//    was in the photo: identifySignFromImage's output was used only as the
+//    retrieval query. The model saw the caption (or the "[Şəkil göndərildi]"
+//    placeholder) plus some retrieved context and no subject, so it answered as
+//    if no image existed — "AI şəkli oxuya bilmir". The identification string is
+//    now injected as text into the last user message.
+//
+// The injected line is explicitly marked as a vision-model observation, not as
+// something the user typed and not as retrieved source text, so buildPrompt's
+// grounding rules still apply to everything else: it names the subject, it is
+// never a licence to state a rule that isn't in KONTEKST.
+function prepareModelMessages(
+  windowed: UIMessage[],
+  imageIdentification: string | null,
+): UIMessage[] {
+  const keepFiles = chatModelSupportsVision();
+  if (keepFiles && !imageIdentification) return windowed;
+
+  const lastUserIndex = windowed.map((m) => m.role).lastIndexOf('user');
+
+  return windowed.map((message, index) => {
+    const hasFilePart = message.parts?.some((p) => p.type === 'file') ?? false;
+    const inject = index === lastUserIndex && imageIdentification !== null;
+    if (!hasFilePart && !inject) return message;
+
+    const parts = keepFiles
+      ? [...(message.parts ?? [])]
+      : (message.parts ?? []).filter((p) => p.type !== 'file');
+
+    if (inject) {
+      parts.unshift({
+        type: 'text',
+        text: `[Şəkil analizi — istifadəçi şəkil göndərdi, şəkildə görünən: ${imageIdentification}]`,
+      });
+    }
+
+    // Stripping the only part would leave a message with no content, which the
+    // provider rejects — keep the same placeholder the persisted row uses.
+    if (parts.length === 0) {
+      parts.push({ type: 'text', text: IMAGE_PLACEHOLDER_CONTENT });
+    }
+
+    return { ...message, parts };
+  });
 }
 
 function toClientErrorMessage(error: unknown): string {
@@ -308,9 +364,14 @@ export async function POST(request: Request) {
   // buildCitations/buildSystemPrompt are untouched — they only ever see
   // whatever relevantChunks retrieval returns for retrievalSourceText.
   let retrievalSourceText = query;
+  // Also handed to the answering model via prepareModelMessages — see its doc
+  // comment. Stays null when identification fails, so the model is never told
+  // about an image whose contents are unknown.
+  let imageIdentification: string | null = null;
   if (imagePart && identifyPromise) {
     try {
-      retrievalSourceText = await identifyPromise;
+      imageIdentification = await identifyPromise;
+      retrievalSourceText = imageIdentification;
     } catch (err) {
       console.error('[chat] identifySignFromImage failed, falling back to raw query text:', err);
     }
@@ -444,7 +505,7 @@ export async function POST(request: Request) {
     ? `\n\nSÖHBƏTİN XÜLASƏSİ (əvvəlki mesajlardan qısa yaddaş, yalnız kontekst üçündür, faktları yenidən sitat gətirmə mənbəyi kimi istifadə etmə):\n${JSON.stringify(conversation.contextSummary)}`
     : '';
 
-  const windowedMessages = messages.slice(-MESSAGE_WINDOW);
+  const windowedMessages = prepareModelMessages(messages.slice(-MESSAGE_WINDOW), imageIdentification);
 
   const llmStartTime = performance.now();
   let llmFirstTokenMs: number | null = null;

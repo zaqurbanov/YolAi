@@ -44,24 +44,32 @@ export default function KurslarClient({ initialCourses }: KurslarClientProps) {
     setError(null);
     // The backend refuses to publish a course with no published topic, so this
     // only ever succeeds after the per-topic publish step in CourseTopicsPanel.
-    const result = await updateCourseAction(course.id, { status: 'published' });
-    if (!result.ok) {
-      setError(result.error);
-      return;
+    try {
+      const result = await updateCourseAction(course.id, { status: 'published' });
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      refreshCourses();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Xəta baş verdi');
     }
-    refreshCourses();
   }
 
   async function handleDeleteCourse(course: LessonCourseRow) {
     if (!window.confirm(`"${course.title}" kursu və bütün mövzuları silinsin?`)) return;
     setError(null);
-    const result = await deleteCourseAction(course.id);
-    if (!result.ok) {
-      setError(result.error);
-      return;
+    try {
+      const result = await deleteCourseAction(course.id);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setCourses((prev) => prev.filter((c) => c.id !== course.id));
+      if (selectedId === course.id) setSelectedId(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Xəta baş verdi');
     }
-    setCourses((prev) => prev.filter((c) => c.id !== course.id));
-    if (selectedId === course.id) setSelectedId(null);
   }
 
   return (

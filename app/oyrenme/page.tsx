@@ -5,6 +5,7 @@ import { buttonVariants } from '@heroui/styles';
 import { createClient } from '@/lib/supabase/server';
 import Footer from '@/components/Footer';
 import { getCourses } from '@/lib/quiz/lessons';
+import { getCoinBalanceStatus } from '@/lib/chat/coins';
 import CourseGrid from './CourseGrid';
 
 export const metadata: Metadata = {
@@ -22,7 +23,15 @@ export default async function OyrenmePage() {
   // getCourses() returns [] (never throws) when the lessons migration has not
   // been applied yet — the empty state below is the live path today, not a
   // theoretical edge case.
-  const courses = await getCourses(user.id);
+  // Balance is display-only (the unlock action re-reads and charges its own).
+  // getCoinBalanceStatus fails open; null just renders as "—" in the dialog.
+  // Its `price` field is the CHAT MESSAGE price — not a course price. Ignored.
+  const [courses, balance] = await Promise.all([
+    getCourses(user.id),
+    getCoinBalanceStatus(user.id)
+      .then((s) => s.balance)
+      .catch(() => null),
+  ]);
 
   // Overall progress is counted in TOPICS across all published courses, which
   // is the unit a user actually advances through now.
@@ -91,7 +100,7 @@ export default async function OyrenmePage() {
               </Link>
             </div>
           ) : (
-            <CourseGrid courses={courses} />
+            <CourseGrid balance={balance} courses={courses} />
           )}
         </div>
       </section>
