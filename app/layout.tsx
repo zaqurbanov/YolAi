@@ -33,6 +33,13 @@ export const metadata: Metadata = {
     title: "Yol QA",
     statusBarStyle: "black-translucent",
   },
+  // Monetag site-ownership verification. Meta-tag route chosen deliberately:
+  // their sw.js alternative would replace public/sw.js and break the app's own
+  // push-notification reward flow and the PWA install prompt (one service
+  // worker per scope, one push subscription per registration).
+  other: {
+    monetag: "c5de650481e87e7478be1a0596e1e67e",
+  },
 };
 
 export const viewport: Viewport = {

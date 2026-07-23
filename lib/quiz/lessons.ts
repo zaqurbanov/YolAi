@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isMissingRelationError } from '@/lib/supabase/missingRelation';
 import { getDefaultCourseUnlockPrice } from '@/lib/coins/lessonUnlock';
+import { isUserAdmin } from '@/lib/auth/isAdmin';
 
 // User-facing reads for the restructured lessons feature (/oyrenme).
 //
@@ -97,6 +98,7 @@ export async function getCourses(userId: string): Promise<CourseSummary[]> {
     { data: unlocks, error: unlocksError },
     { data: progress, error: progressError },
     defaultPrice,
+    isAdmin,
   ] = await Promise.all([
     // THE ONE ADMIN-CLIENT READ ON THIS PAGE, and it is deliberate.
     //
@@ -123,6 +125,10 @@ export async function getCourses(userId: string): Promise<CourseSummary[]> {
     supabase.from('user_course_unlocks').select('course_id').eq('user_id', userId),
     supabase.from('user_topic_progress').select('topic_id').eq('user_id', userId).eq('passed', true),
     getDefaultCourseUnlockPrice(),
+    // Admins bypass the unlock paywall entirely — every published course reads
+    // as open (see canAccessCourse). Display-only here; the authoritative gate
+    // is server-side. isUserAdmin fails closed to a normal (non-admin) view.
+    isUserAdmin(userId),
   ]);
 
   // Each of the three below degrades to "no rows" independently: a partially
@@ -160,7 +166,7 @@ export async function getCourses(userId: string): Promise<CourseSummary[]> {
       description: course.description,
       orderIndex: course.order_index,
       isFree: course.is_free,
-      isUnlocked: course.is_free || unlockedCourseIds.has(course.id),
+      isUnlocked: isAdmin || course.is_free || unlockedCourseIds.has(course.id),
       // 0 is a legitimate per-course override, so check for null explicitly
       // rather than relying on falsiness.
       price: course.unlock_price !== null ? Number(course.unlock_price) : defaultPrice,
@@ -202,9 +208,26 @@ export interface TopicSummary {
 export async function getCourseTopics(courseId: string, userId: string): Promise<TopicSummary[]> {
   const supabase = await createClient();
 
-  const [{ data: topics, error: topicsError }, { data: progress, error: progressError }] =
-    await Promise.all([
-      supabase
+  // Admins see the whole course open: every published topic is unlocked
+  // regardless of the sequential pass rule, so they can read content without
+  // passing tests. Resolved BEFORE the topic-list read because it also decides
+  // which client that read uses (see below). Fails closed to the normal view.
+  const isAdmin = await isUserAdmin(userId);
+
+  // The topic list (ids/titles, no content) is normally read USER-SCOPED so
+  // lesson_topics' RLS (0060) stays a real second line of defence. But that
+  // policy hides EVERY row of a paid course the caller has not purchased — and
+  // an admin never purchases — so for an admin the list must go through the
+  // service-role client or it comes back empty. Same "THE ONE ADMIN-CLIENT
+  // READ" reasoning as getCourses: ids/titles of published topics leak nothing
+  // beyond the course structure the admin already fully controls.
+  const topicsClient = isAdmin ? createAdminClient() : supabase;
+
+  const [
+    { data: topics, error: topicsError },
+    { data: progress, error: progressError },
+  ] = await Promise.all([
+      topicsClient
         .from('lesson_topics')
         .select('id, course_id, title, order_index')
         .eq('course_id', courseId)
@@ -245,7 +268,7 @@ export async function getCourseTopics(courseId: string, userId: string): Promise
   return (topics ?? []).map((topic) => {
     const p = progressByTopic.get(topic.id as string);
     const passed = p?.passed ?? false;
-    const isUnlocked = previousPassed;
+    const isUnlocked = isAdmin || previousPassed;
     previousPassed = passed;
     return {
       id: topic.id as string,

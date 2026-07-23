@@ -5,6 +5,7 @@ import { Modal, Button, toast } from '@heroui/react';
 import { SparkleIcon } from '@/components/icons';
 import { Spinner } from '@/components/Spinner';
 import { claimAdWatchRewardAction, startAdViewAction } from '@/app/coin-qazan/actions';
+import { isRewardedAdConfigured, showRewardedAd } from '@/lib/ads/rewardedAd';
 
 interface AdWatchCardProps {
   adsEnabled: boolean;
@@ -14,6 +15,13 @@ interface AdWatchCardProps {
 }
 
 const COUNTDOWN_SECONDS = 5;
+
+// When NEXT_PUBLIC_MONETAG_ZONE_ID is set, the real Monetag rewarded
+// interstitial replaces the simulation modal entirely (the SDK renders its
+// own fullscreen overlay). When it is unset, the simulation flow below is
+// unchanged. Either way the reward is gated server-side by the single-use
+// nonce + server-clock elapsed check — the client never proves anything.
+const REAL_AD_CONFIGURED = isRewardedAdConfigured();
 
 export default function AdWatchCard({ adsEnabled, reward, dailyMax, claimsToday }: AdWatchCardProps) {
   const [claimsUsed, setClaimsUsed] = useState(claimsToday);
@@ -41,9 +49,39 @@ export default function AdWatchCard({ adsEnabled, reward, dailyMax, claimsToday 
     return () => window.clearInterval(interval);
   }, [isModalOpen]);
 
-  // Mint the token first, then open the modal — the countdown must not start
-  // before the server has recorded issued_at, otherwise an honest user who
-  // watches the full ad could still be told they claimed too early.
+  // Shared claim handling for both flows. `fromModal` controls whether the
+  // simulation modal needs closing/keeping open; the real-ad flow has no
+  // modal of ours (the SDK overlay has already closed by claim time).
+  async function performClaim(currentNonce: string, fromModal: boolean) {
+    const result = await claimAdWatchRewardAction(currentNonce);
+    if (result.status === 'success') {
+      toast.success(result.message);
+      if (result.balance != null) {
+        window.dispatchEvent(new CustomEvent('coin-balance-update', { detail: { balance: result.balance } }));
+      }
+      if (fromModal) handleModalOpenChange(false);
+      setClaimsUsed((c) => c + 1);
+    } else if (result.status === 'daily_limit_reached') {
+      toast.danger(result.message);
+      if (fromModal) handleModalOpenChange(false);
+      setClaimsUsed(dailyMax);
+    } else if (result.status === 'too_early') {
+      // Server clock says the ad was not watched long enough — in the modal
+      // flow, keep it open so an honest user can simply wait and retry. In
+      // the real-ad flow this should not happen (the ad runs ~15s vs the
+      // server minimum of ~4s), so just surface the message.
+      toast.danger(result.message);
+    } else {
+      // invalid_token (expired/consumed/unknown) or a generic error: the
+      // token is spent either way, so close and let them start over.
+      toast.danger(result.message || 'Xəta baş verdi. Bir az sonra yenidən cəhd edin');
+      if (fromModal) handleModalOpenChange(false);
+    }
+  }
+
+  // Mint the token first, then run the ad — the elapsed-time window must not
+  // start before the server has recorded issued_at, otherwise an honest user
+  // who watches the full ad could still be told they claimed too early.
   async function handleStart() {
     setIsStarting(true);
     try {
@@ -52,8 +90,24 @@ export default function AdWatchCard({ adsEnabled, reward, dailyMax, claimsToday 
         toast.danger(result.message ?? 'Xəta baş verdi. Bir az sonra yenidən cəhd edin');
         return;
       }
-      setNonce(result.nonce);
-      setIsModalOpen(true);
+      if (REAL_AD_CONFIGURED) {
+        // Real Monetag rewarded interstitial: the SDK shows its own
+        // fullscreen overlay and resolves only when the user finishes
+        // watching. No second click — claim automatically on resolve.
+        // On reject (ad blocker / no inventory / network) the nonce is
+        // simply dropped; it is single-use and expires server-side anyway.
+        try {
+          await showRewardedAd();
+        } catch {
+          toast.danger('Reklam yüklənmədi. Reklam bloklayıcısını söndürün və ya bir az sonra yenidən cəhd edin');
+          return;
+        }
+        await performClaim(result.nonce, false);
+      } else {
+        // Simulation flow (no Zone ID configured) — unchanged.
+        setNonce(result.nonce);
+        setIsModalOpen(true);
+      }
     } finally {
       setIsStarting(false);
     }
@@ -70,28 +124,7 @@ export default function AdWatchCard({ adsEnabled, reward, dailyMax, claimsToday 
   function handleClaim() {
     if (!nonce) return;
     startTransition(async () => {
-      const result = await claimAdWatchRewardAction(nonce);
-      if (result.status === 'success') {
-        toast.success(result.message);
-        if (result.balance != null) {
-          window.dispatchEvent(new CustomEvent('coin-balance-update', { detail: { balance: result.balance } }));
-        }
-        handleModalOpenChange(false);
-        setClaimsUsed((c) => c + 1);
-      } else if (result.status === 'daily_limit_reached') {
-        toast.danger(result.message);
-        handleModalOpenChange(false);
-        setClaimsUsed(dailyMax);
-      } else if (result.status === 'too_early') {
-        // Server clock says the ad wasn't watched long enough — keep the
-        // modal open so an honest user can simply wait a moment and retry.
-        toast.danger(result.message);
-      } else {
-        // invalid_token (expired/consumed/unknown) or a generic error: the
-        // token is spent either way, so close and let them start over.
-        toast.danger(result.message || 'Xəta baş verdi. Bir az sonra yenidən cəhd edin');
-        handleModalOpenChange(false);
-      }
+      await performClaim(nonce, true);
     });
   }
 
@@ -139,6 +172,8 @@ export default function AdWatchCard({ adsEnabled, reward, dailyMax, claimsToday 
         </Button>
       )}
 
+      {/* Simulation modal — only ever opened when no Monetag Zone ID is
+          configured; the real ad flow uses the SDK fullscreen overlay. */}
       <Modal.Backdrop isOpen={isModalOpen} onOpenChange={handleModalOpenChange}>
         <Modal.Container>
           <Modal.Dialog className="sm:max-w-[380px]">

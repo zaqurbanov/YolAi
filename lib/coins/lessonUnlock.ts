@@ -1,6 +1,7 @@
 import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isMissingRelationError } from '@/lib/supabase/missingRelation';
+import { isUserAdmin } from '@/lib/auth/isAdmin';
 
 // Coin-facing layer for the COURSE unlock economy (0060_lesson_courses.sql).
 //
@@ -174,6 +175,11 @@ export async function canAccessCourse(userId: string, courseId: string): Promise
   const course = await getPublishedCourse(courseId);
   if (!course) return false;
   if (course.is_free) return true;
+  // Admins are exempt from the course-unlock paywall: any PUBLISHED course is
+  // fully accessible without spending coins. The draft gate above still holds
+  // (getPublishedCourse already returned null for a draft), so this only ever
+  // grants access to published content. isUserAdmin fails closed.
+  if (await isUserAdmin(userId)) return true;
   return hasUnlockedCourse(userId, courseId);
 }
 
@@ -204,6 +210,13 @@ export async function unlockLessonCourse(
   const course = await getPublishedCourse(courseId);
   if (!course) return { ok: false, error: 'invalid_course' };
   if (course.is_free) return { ok: false, error: 'already_free' };
+
+  // Defense in depth: an admin already has full access via canAccessCourse, so
+  // this spend path must never debit them. Report 'already_unlocked' (the
+  // action revalidates and treats the course as open) rather than charging.
+  // Frontend never surfaces the purchase card to an admin, but a server action
+  // is a plain POST any authenticated user can call directly.
+  if (await isUserAdmin(userId)) return { ok: false, error: 'already_unlocked' };
 
   const admin = createAdminClient();
 

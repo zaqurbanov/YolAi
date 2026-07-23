@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isMissingRelationError } from '@/lib/supabase/missingRelation';
 import { canAccessCourse, getTopicTestConfig, getLessonRetryCost } from '@/lib/coins/lessonUnlock';
+import { isUserAdmin } from '@/lib/auth/isAdmin';
 import { getCourseTopics, type TopicSummary } from '@/lib/quiz/lessons';
 
 // Phase 2 of the lessons feature: reading a topic, drawing a topic test,
@@ -451,7 +452,19 @@ export async function getTopicForReading(
 
   // Content is read with the USER-SCOPED client, after the gate above: RLS on
   // lesson_topics (0060) independently requires the course to be free or
-  // unlocked, so this stays a real second line of defence.
+  // unlocked, so this stays a real second line of defence FOR NORMAL USERS.
+  //
+  // An admin is exempt from the unlock paywall (canAccessCourse, run inside
+  // resolveAccessibleTopic above, already granted them the topic) but never
+  // BUYS the course, so that same RLS policy would hide the content row and
+  // the course-title row from them — leaving canAttemptToday/read broken with a
+  // spurious not-found. So the two lesson_topics/lesson_courses reads below go
+  // through the service-role client for an admin, mirroring getCourseTopics.
+  // Everything else here is already service-role machinery. isAdmin fails
+  // closed: a non-admin (or an unreadable role) keeps the user-scoped reads.
+  const isAdmin = await isUserAdmin(userId);
+  const readClient = isAdmin ? createAdminClient() : supabase;
+
   const [
     { data: topic, error: topicError },
     { data: course, error: courseError },
@@ -460,13 +473,13 @@ export async function getTopicForReading(
     config,
     retryCost,
   ] = await Promise.all([
-    supabase
+    readClient
       .from('lesson_topics')
       .select('title, content, source_citations, order_index')
       .eq('id', topicId)
       .eq('status', 'published')
       .maybeSingle(),
-    supabase.from('lesson_courses').select('title').eq('id', access.courseId).maybeSingle(),
+    readClient.from('lesson_courses').select('title').eq('id', access.courseId).maybeSingle(),
     getAttemptState(userId, topicId),
     getTopicPoolSize(topicId),
     getTopicTestConfig(),
