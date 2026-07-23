@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import { Modal, Button, toast } from '@heroui/react';
 import { SparkleIcon } from '@/components/icons';
 import { Spinner } from '@/components/Spinner';
@@ -40,6 +40,10 @@ export default function AdWatchCard({ adsEnabled, reward, dailyMax, claimsToday 
   // gets 'too_early' rather than a coin.
   const [nonce, setNonce] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(false);
+  // Direct-link mode: handle of the ad tab, kept so closing the countdown
+  // modal also closes the ad tab (user request — the two open together, they
+  // should close together). A ref, not state: the handle is never rendered.
+  const adTabRef = useRef<Window | null>(null);
 
   const isCapped = claimsUsed >= dailyMax;
 
@@ -128,6 +132,7 @@ export default function AdWatchCard({ adsEnabled, reward, dailyMax, claimsToday 
         if (url) {
           if (adTab) {
             adTab.location.href = url;
+            adTabRef.current = adTab;
           } else {
             window.open(url, '_blank', 'noopener');
           }
@@ -153,7 +158,19 @@ export default function AdWatchCard({ adsEnabled, reward, dailyMax, claimsToday 
     // Drop the token on close so a stale one is never replayed on the next
     // view — the server would reject it anyway (single-use), but holding it
     // client-side serves no purpose.
-    if (!open) setNonce(null);
+    if (!open) {
+      setNonce(null);
+      // Close the ad tab together with the modal (direct-link mode). Wrapped
+      // in try/catch: the handle may already be dead (user closed the tab, or
+      // a cross-origin navigation invalidated close() in some browsers) —
+      // best effort only, never let it break the modal close.
+      try {
+        adTabRef.current?.close();
+      } catch {
+        // ignore — tab already gone or close() not permitted
+      }
+      adTabRef.current = null;
+    }
   }
 
   function handleClaim() {
