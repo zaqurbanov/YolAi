@@ -5,7 +5,7 @@ import { Modal, Button, toast } from '@heroui/react';
 import { SparkleIcon } from '@/components/icons';
 import { Spinner } from '@/components/Spinner';
 import { claimAdWatchRewardAction, startAdViewAction } from '@/app/coin-qazan/actions';
-import { isRewardedAdConfigured, showRewardedAd } from '@/lib/ads/rewardedAd';
+import { getDirectLinkUrl, getRewardedAdMode, showRewardedAd } from '@/lib/ads/rewardedAd';
 
 interface AdWatchCardProps {
   adsEnabled: boolean;
@@ -16,12 +16,16 @@ interface AdWatchCardProps {
 
 const COUNTDOWN_SECONDS = 5;
 
-// When NEXT_PUBLIC_MONETAG_ZONE_ID is set, the real Monetag rewarded
-// interstitial replaces the simulation modal entirely (the SDK renders its
-// own fullscreen overlay). When it is unset, the simulation flow below is
-// unchanged. Either way the reward is gated server-side by the single-use
-// nonce + server-clock elapsed check — the client never proves anything.
-const REAL_AD_CONFIGURED = isRewardedAdConfigured();
+// Ad mode is decided once from env (lib/ads/rewardedAd.ts):
+// - 'sdk':         Monetag Rewarded Interstitial — fullscreen overlay, auto-
+//                  claim when its Promise resolves. No modal of ours.
+// - 'direct-link': Monetag Direct Link — the ad opens in a new tab, and the
+//                  countdown modal below stays as the claim gate (there is no
+//                  completion callback in this mode).
+// - 'none':        the original 5-second simulation modal, unchanged.
+// In every mode the reward is gated server-side by the single-use nonce +
+// server-clock elapsed check — the client never proves anything.
+const AD_MODE = getRewardedAdMode();
 
 export default function AdWatchCard({ adsEnabled, reward, dailyMax, claimsToday }: AdWatchCardProps) {
   const [claimsUsed, setClaimsUsed] = useState(claimsToday);
@@ -49,9 +53,9 @@ export default function AdWatchCard({ adsEnabled, reward, dailyMax, claimsToday 
     return () => window.clearInterval(interval);
   }, [isModalOpen]);
 
-  // Shared claim handling for both flows. `fromModal` controls whether the
-  // simulation modal needs closing/keeping open; the real-ad flow has no
-  // modal of ours (the SDK overlay has already closed by claim time).
+  // Shared claim handling for all flows. `fromModal` controls whether the
+  // countdown modal needs closing/keeping open; the SDK flow has no modal of
+  // ours (the SDK overlay has already closed by claim time).
   async function performClaim(currentNonce: string, fromModal: boolean) {
     const result = await claimAdWatchRewardAction(currentNonce);
     if (result.status === 'success') {
@@ -67,9 +71,7 @@ export default function AdWatchCard({ adsEnabled, reward, dailyMax, claimsToday 
       setClaimsUsed(dailyMax);
     } else if (result.status === 'too_early') {
       // Server clock says the ad was not watched long enough — in the modal
-      // flow, keep it open so an honest user can simply wait and retry. In
-      // the real-ad flow this should not happen (the ad runs ~15s vs the
-      // server minimum of ~4s), so just surface the message.
+      // flow, keep it open so an honest user can simply wait and retry.
       toast.danger(result.message);
     } else {
       // invalid_token (expired/consumed/unknown) or a generic error: the
@@ -83,19 +85,34 @@ export default function AdWatchCard({ adsEnabled, reward, dailyMax, claimsToday 
   // start before the server has recorded issued_at, otherwise an honest user
   // who watches the full ad could still be told they claimed too early.
   async function handleStart() {
+    // Direct-link mode: popup blockers only allow window.open while we are
+    // still synchronously inside the user's click-handler chain — calling it
+    // after `await startAdViewAction()` gets blocked in several browsers.
+    // Simplest reliable fix: open a blank tab NOW (synchronously), then
+    // navigate it to the ad URL once the nonce arrives, or close it if the
+    // nonce request fails. We keep a handle to the tab, so the 'noopener'
+    // feature string can't be used (it makes window.open return null);
+    // instead we sever the reverse handle ourselves via adTab.opener = null
+    // so the ad page cannot script/navigate our app.
+    let adTab: Window | null = null;
+    if (AD_MODE === 'direct-link') {
+      adTab = window.open('about:blank', '_blank');
+      if (adTab) adTab.opener = null;
+    }
     setIsStarting(true);
     try {
       const result = await startAdViewAction();
       if (result.status !== 'success' || !result.nonce) {
+        adTab?.close();
         toast.danger(result.message ?? 'Xəta baş verdi. Bir az sonra yenidən cəhd edin');
         return;
       }
-      if (REAL_AD_CONFIGURED) {
-        // Real Monetag rewarded interstitial: the SDK shows its own
-        // fullscreen overlay and resolves only when the user finishes
-        // watching. No second click — claim automatically on resolve.
-        // On reject (ad blocker / no inventory / network) the nonce is
-        // simply dropped; it is single-use and expires server-side anyway.
+      if (AD_MODE === 'sdk') {
+        // Monetag Rewarded Interstitial: the SDK shows its own fullscreen
+        // overlay and resolves only when the user finishes watching. No
+        // second click — claim automatically on resolve. On reject
+        // (ad blocker / no inventory / network) the nonce is simply dropped;
+        // it is single-use and expires server-side anyway.
         try {
           await showRewardedAd();
         } catch {
@@ -103,8 +120,26 @@ export default function AdWatchCard({ adsEnabled, reward, dailyMax, claimsToday 
           return;
         }
         await performClaim(result.nonce, false);
+      } else if (AD_MODE === 'direct-link') {
+        // Navigate the pre-opened tab to the ad; if the popup was blocked
+        // even synchronously, try a direct open as a best effort (the claim
+        // gate is the server-side elapsed check, not this tab).
+        const url = getDirectLinkUrl();
+        if (url) {
+          if (adTab) {
+            adTab.location.href = url;
+          } else {
+            window.open(url, '_blank', 'noopener');
+          }
+        }
+        // The countdown modal stays as the claim gate: "Coin al" enables
+        // after COUNTDOWN_SECONDS, matching the server's minimum elapsed
+        // time. Direct Link has no completion callback, so this is the
+        // honest UX — we cannot know when (or whether) the ad was viewed.
+        setNonce(result.nonce);
+        setIsModalOpen(true);
       } else {
-        // Simulation flow (no Zone ID configured) — unchanged.
+        // Simulation flow (nothing configured) — unchanged.
         setNonce(result.nonce);
         setIsModalOpen(true);
       }
@@ -172,8 +207,9 @@ export default function AdWatchCard({ adsEnabled, reward, dailyMax, claimsToday 
         </Button>
       )}
 
-      {/* Simulation modal — only ever opened when no Monetag Zone ID is
-          configured; the real ad flow uses the SDK fullscreen overlay. */}
+      {/* Countdown modal — used by the direct-link flow (real ad opened in a
+          new tab, this gates the claim) and by the simulation flow (nothing
+          configured). Never opened in SDK mode. */}
       <Modal.Backdrop isOpen={isModalOpen} onOpenChange={handleModalOpenChange}>
         <Modal.Container>
           <Modal.Dialog className="sm:max-w-[380px]">
@@ -183,9 +219,13 @@ export default function AdWatchCard({ adsEnabled, reward, dailyMax, claimsToday 
             </Modal.Header>
             <Modal.Body>
               <p className="text-body-md text-on-surface-variant">
-                {secondsLeft > 0
-                  ? `Reklam simulyasiyası — ${secondsLeft} saniyə`
-                  : 'Reklam tamamlandı — coin qazanmaq üçün klikləyin'}
+                {AD_MODE === 'direct-link'
+                  ? secondsLeft > 0
+                    ? `Reklam açıldı — davam etmək üçün ${secondsLeft} saniyə gözləyin`
+                    : 'Coin qazanmaq üçün klikləyin'
+                  : secondsLeft > 0
+                    ? `Reklam simulyasiyası — ${secondsLeft} saniyə`
+                    : 'Reklam tamamlandı — coin qazanmaq üçün klikləyin'}
               </p>
             </Modal.Body>
             <Modal.Footer>
