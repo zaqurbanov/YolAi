@@ -12,9 +12,11 @@ interface AdWatchCardProps {
   reward: number;
   dailyMax: number;
   claimsToday: number;
+  // Server-resolved watch duration (app_settings.ad_view_duration_seconds via
+  // getAdViewDurationSeconds) - presentation only here; the enforced copy is
+  // the server's minimum-elapsed token check.
+  durationSeconds: number;
 }
-
-const COUNTDOWN_SECONDS = 5;
 
 // Ad mode is decided once from env (lib/ads/rewardedAd.ts):
 // - 'sdk':         Monetag Rewarded Interstitial — fullscreen overlay, auto-
@@ -22,15 +24,21 @@ const COUNTDOWN_SECONDS = 5;
 // - 'direct-link': Monetag Direct Link — the ad opens in a new tab, and the
 //                  countdown modal below stays as the claim gate (there is no
 //                  completion callback in this mode).
-// - 'none':        the original 5-second simulation modal, unchanged.
+// - 'none':        the original countdown simulation modal, unchanged.
 // In every mode the reward is gated server-side by the single-use nonce +
 // server-clock elapsed check — the client never proves anything.
 const AD_MODE = getRewardedAdMode();
 
-export default function AdWatchCard({ adsEnabled, reward, dailyMax, claimsToday }: AdWatchCardProps) {
+export default function AdWatchCard({
+  adsEnabled,
+  reward,
+  dailyMax,
+  claimsToday,
+  durationSeconds,
+}: AdWatchCardProps) {
   const [claimsUsed, setClaimsUsed] = useState(claimsToday);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [secondsLeft, setSecondsLeft] = useState(COUNTDOWN_SECONDS);
+  const [secondsLeft, setSecondsLeft] = useState(durationSeconds);
   const [isPending, startTransition] = useTransition();
   // Server-issued single-use token for THIS ad view. The reward is only
   // payable against a token the server minted, so the countdown below is
@@ -44,18 +52,58 @@ export default function AdWatchCard({ adsEnabled, reward, dailyMax, claimsToday 
   // modal also closes the ad tab (user request — the two open together, they
   // should close together). A ref, not state: the handle is never rendered.
   const adTabRef = useRef<Window | null>(null);
+  // Set when the poll below notices the user closed the ad tab; drives the
+  // auto-claim (close the ad → get the coin, no second click needed).
+  const [adTabClosed, setAdTabClosed] = useState(false);
+  // Guards against the auto-claim effect and the manual button double-firing
+  // the same nonce (the server would reject the replay anyway — single-use —
+  // but a double toast is ugly).
+  const claimFiredRef = useRef(false);
 
   const isCapped = claimsUsed >= dailyMax;
 
   useEffect(() => {
     if (!isModalOpen) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- resets the countdown each time the modal opens, matching ReferralCard's copy-link-state reset pattern
-    setSecondsLeft(COUNTDOWN_SECONDS);
+    setSecondsLeft(durationSeconds);
     const interval = window.setInterval(() => {
       setSecondsLeft((s) => (s > 0 ? s - 1 : 0));
     }, 1000);
     return () => window.clearInterval(interval);
+  }, [isModalOpen, durationSeconds]);
+
+  // Direct-link mode: watch for the user closing the ad tab. `closed` is one
+  // of the few properties readable across origins, so a simple poll works.
+  // Only meaningful while the modal is open and we actually hold a handle
+  // (popup-blocked fallback opens have none — they keep the manual button).
+  useEffect(() => {
+    if (!isModalOpen || AD_MODE !== 'direct-link') return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- resets the tab-closed flag each time a new ad view starts, same pattern as the countdown reset above
+    setAdTabClosed(false);
+    claimFiredRef.current = false;
+    const poll = window.setInterval(() => {
+      if (adTabRef.current && adTabRef.current.closed) {
+        setAdTabClosed(true);
+        window.clearInterval(poll);
+      }
+    }, 500);
+    return () => window.clearInterval(poll);
   }, [isModalOpen]);
+
+  // Auto-claim: once the countdown has finished AND the user has closed the
+  // ad tab, credit the coin without a second click. The countdown condition
+  // matters — claiming the instant an early close happens would earn a
+  // server-side 'too_early'; waiting for secondsLeft === 0 aligns the claim
+  // with the server's minimum-elapsed check.
+  useEffect(() => {
+    if (!isModalOpen || AD_MODE !== 'direct-link') return;
+    if (!adTabClosed || secondsLeft > 0 || !nonce || claimFiredRef.current) return;
+    claimFiredRef.current = true;
+    startTransition(async () => {
+      await performClaim(nonce, true);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- performClaim/startTransition are stable enough for this one-shot trigger; the claimFiredRef guard makes re-runs harmless
+  }, [isModalOpen, adTabClosed, secondsLeft, nonce]);
 
   // Shared claim handling for all flows. `fromModal` controls whether the
   // countdown modal needs closing/keeping open; the SDK flow has no modal of
@@ -138,7 +186,7 @@ export default function AdWatchCard({ adsEnabled, reward, dailyMax, claimsToday 
           }
         }
         // The countdown modal stays as the claim gate: "Coin al" enables
-        // after COUNTDOWN_SECONDS, matching the server's minimum elapsed
+        // after the countdown, matching the server's minimum elapsed
         // time. Direct Link has no completion callback, so this is the
         // honest UX — we cannot know when (or whether) the ad was viewed.
         setNonce(result.nonce);
@@ -238,8 +286,8 @@ export default function AdWatchCard({ adsEnabled, reward, dailyMax, claimsToday 
               <p className="text-body-md text-on-surface-variant">
                 {AD_MODE === 'direct-link'
                   ? secondsLeft > 0
-                    ? `Reklam açıldı — davam etmək üçün ${secondsLeft} saniyə gözləyin`
-                    : 'Coin qazanmaq üçün klikləyin'
+                    ? `Reklam açıldı — ${secondsLeft} saniyə...`
+                    : 'Coini qazandınız! Reklamı bağlayın — coin avtomatik hesabınıza yazılacaq'
                   : secondsLeft > 0
                     ? `Reklam simulyasiyası — ${secondsLeft} saniyə`
                     : 'Reklam tamamlandı — coin qazanmaq üçün klikləyin'}

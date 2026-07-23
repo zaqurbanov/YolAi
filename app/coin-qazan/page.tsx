@@ -5,7 +5,12 @@ import { buttonVariants } from '@heroui/styles';
 import { createClient } from '@/lib/supabase/server';
 import { getQuizRewardAmount, hasClaimedToday, getQuizStreak } from '@/lib/coins/quiz';
 import { getOrCreateReferralCode, getReferralBonusAmount } from '@/lib/coins/referrals';
-import { getAdWatchRewardAmount, getAdWatchDailyMax, getAdWatchClaimsToday } from '@/lib/coins/adWatch';
+import {
+  getAdWatchRewardAmount,
+  getAdWatchDailyMax,
+  getAdWatchClaimsToday,
+  getAdViewDurationSeconds,
+} from '@/lib/coins/adWatch';
 import { getDailyQuestionForUser } from '@/lib/quiz/questions';
 import DailyQuizCard from '@/components/account/DailyQuizCard';
 import ReferralCard from '@/components/account/ReferralCard';
@@ -40,6 +45,7 @@ export default async function CoinQazanPage() {
     adWatchReward,
     adWatchDailyMax,
     adWatchClaimsToday,
+    adViewDurationSeconds,
   ] = await Promise.all([
     getQuizRewardAmount(),
     hasClaimedToday(user.id),
@@ -49,6 +55,7 @@ export default async function CoinQazanPage() {
     getAdWatchRewardAmount(),
     getAdWatchDailyMax(),
     getAdWatchClaimsToday(user.id),
+    getAdViewDurationSeconds(),
   ]);
 
   // Strip correctIndex before it ever reaches the client component's props —
@@ -92,6 +99,7 @@ export default async function CoinQazanPage() {
           reward={adWatchReward}
           dailyMax={adWatchDailyMax}
           claimsToday={adWatchClaimsToday}
+          durationSeconds={adViewDurationSeconds}
         />
 
         <div className="glass-card rounded-2xl p-6 space-y-4 lg:col-span-2">

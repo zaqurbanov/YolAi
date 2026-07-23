@@ -74,20 +74,48 @@ export async function getAdWatchClaimsToday(userId: string): Promise<number> {
 // used to take no arguments at all, so five direct POSTs to the server
 // action were five coins in under a second — the countdown existed only in
 // the client component. These constants are the SERVER's copy of the ad
-// duration; components/account/AdWatchCard.tsx's COUNTDOWN_SECONDS is now
-// only a UI affordance and is never trusted or transmitted.
-const AD_VIEW_DURATION_SECONDS = 5;
+// duration; components/account/AdWatchCard.tsx's countdown (fed the same
+// value as a prop) is only a UI affordance and is never trusted or
+// transmitted.
+//
+// Admin-tunable via app_settings.ad_view_duration_seconds (positive integer,
+// seconds; no seed row - TS-side default below, edited from /admin/users
+// economy card through /api/admin/chat-meta?type=lesson-economy).
+const AD_VIEW_DURATION_KEY = 'ad_view_duration_seconds';
+const DEFAULT_AD_VIEW_DURATION_SECONDS = 5;
+// Ceiling on what the setting may demand - an absurd stored value (e.g. 9999)
+// falls back to the default rather than locking users into an unwatchable ad.
+const MAX_AD_VIEW_DURATION_SECONDS = 60;
 // Subtracted from the required elapsed time so a user whose round trip is
 // marginally faster than the countdown isn't rejected. Small enough that it
 // can't meaningfully shorten the watch.
 const AD_VIEW_SKEW_MARGIN_SECONDS = 1;
-const AD_VIEW_MIN_ELAPSED_SECONDS = AD_VIEW_DURATION_SECONDS - AD_VIEW_SKEW_MARGIN_SECONDS;
 // A token is only valid for a short window after issuance. Bounds how long a
 // stockpiled batch of nonces stays spendable, and gives the sweep below a
 // definition of "stale".
 const AD_VIEW_TOKEN_MAX_AGE_SECONDS = 10 * 60;
 
-export { AD_VIEW_DURATION_SECONDS };
+export { AD_VIEW_DURATION_KEY, DEFAULT_AD_VIEW_DURATION_SECONDS, MAX_AD_VIEW_DURATION_SECONDS };
+
+// Same shape as getAdWatchDailyMax: fail-open to the default, and require a
+// sane positive integer - this value gates a security check (minimum elapsed
+// seconds) AND drives the client countdown, so an out-of-range row must never
+// win over the default.
+export async function getAdViewDurationSeconds(): Promise<number> {
+  const { data, error } = await createAdminClient()
+    .from('app_settings')
+    .select('value')
+    .eq('key', AD_VIEW_DURATION_KEY)
+    .maybeSingle();
+
+  if (error || !data) return DEFAULT_AD_VIEW_DURATION_SECONDS;
+
+  const value = typeof data.value === 'number' ? data.value : Number(data.value);
+  if (!Number.isInteger(value) || value < 1 || value > MAX_AD_VIEW_DURATION_SECONDS) {
+    return DEFAULT_AD_VIEW_DURATION_SECONDS;
+  }
+  return value;
+}
 
 // Issued when an ad view STARTS. 32 random bytes, hex — unguessable, so a
 // claim can only present a nonce the server actually handed this user.
@@ -127,12 +155,13 @@ export type AdViewTokenFailure = 'not_found' | 'consumed' | 'expired' | 'too_ear
 // reward follows.
 async function consumeAdViewToken(
   userId: string,
-  nonce: string
+  nonce: string,
+  minElapsedSeconds: number
 ): Promise<{ ok: true } | { ok: false; error: AdViewTokenFailure }> {
   const { data, error } = await createAdminClient().rpc('consume_ad_view_token', {
     p_user_id: userId,
     p_nonce: nonce,
-    p_min_elapsed_seconds: AD_VIEW_MIN_ELAPSED_SECONDS,
+    p_min_elapsed_seconds: minElapsedSeconds,
     p_max_age_seconds: AD_VIEW_TOKEN_MAX_AGE_SECONDS,
   });
 
@@ -169,7 +198,13 @@ export async function claimAdWatchReward(userId: string, nonce: string): Promise
     return { ok: false, error: 'invalid_token' };
   }
 
-  const consumed = await consumeAdViewToken(userId, nonce);
+  // Server-resolved duration (never client-supplied), converted to the RPC's
+  // minimum-elapsed requirement with the skew margin, floored at 1 second so
+  // a duration of 1 still requires real time to pass.
+  const durationSeconds = await getAdViewDurationSeconds();
+  const minElapsedSeconds = Math.max(1, durationSeconds - AD_VIEW_SKEW_MARGIN_SECONDS);
+
+  const consumed = await consumeAdViewToken(userId, nonce, minElapsedSeconds);
   if (!consumed.ok) {
     if (consumed.error === 'too_early') return { ok: false, error: 'too_early' };
     if (consumed.error === 'error') return { ok: false, error: 'error' };

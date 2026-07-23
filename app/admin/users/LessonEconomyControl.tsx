@@ -17,7 +17,8 @@ type Param =
   | 'topicQuestionsPerAttempt'
   | 'lessonRetryCost'
   | 'adWatchReward'
-  | 'adWatchDailyMax';
+  | 'adWatchDailyMax'
+  | 'adViewDurationSeconds';
 
 type Settings = Record<Param, Setting>;
 
@@ -79,12 +80,20 @@ const FIELDS: {
     min: 1,
     max: 1000,
   },
+  {
+    param: 'adViewDurationSeconds',
+    label: 'Reklam izləmə müddəti (saniyə)',
+    hint: 'Coin qazanmaq üçün reklama minimum baxış müddəti - həm serverdəki yoxlamanı, həm istifadəçiyə görünən geri sayımı idarə edir.',
+    integerOnly: true,
+    min: 1,
+    max: 60,
+  },
 ];
 
 const ENDPOINT = '/api/admin/chat-meta?type=lesson-economy';
 
-// All six tunables share one endpoint and one partial PATCH, so they're one
-// card rather than six — they're also read together when reasoning about the
+// All these tunables share one endpoint and one partial PATCH, so they're one
+// card rather than one each — they're also read together when reasoning about the
 // coin economy as a whole.
 export default function LessonEconomyControl() {
   const [settings, setSettings] = useState<Settings | null>(null);

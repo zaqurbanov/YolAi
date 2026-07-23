@@ -33,6 +33,9 @@ import {
   DEFAULT_AD_WATCH_REWARD,
   AD_WATCH_DAILY_MAX_KEY,
   DEFAULT_AD_WATCH_DAILY_MAX,
+  AD_VIEW_DURATION_KEY,
+  DEFAULT_AD_VIEW_DURATION_SECONDS,
+  MAX_AD_VIEW_DURATION_SECONDS,
 } from '@/lib/coins/adWatch';
 
 // Inherited from the folded-in documents/quiz-questions routes: PDF ingestion
@@ -158,6 +161,17 @@ const LESSON_ECONOMY_FIELDS = [
     integerOnly: true,
     min: 1,
     max: 1000,
+  },
+  {
+    // Seconds the ad must be watched. Drives BOTH the server's minimum-elapsed
+    // token check (getAdViewDurationSeconds -> consume_ad_view_token) and the
+    // client countdown in AdWatchCard - one setting, one source of truth.
+    param: 'adViewDurationSeconds',
+    key: AD_VIEW_DURATION_KEY,
+    defaultValue: DEFAULT_AD_VIEW_DURATION_SECONDS,
+    integerOnly: true,
+    min: 1,
+    max: MAX_AD_VIEW_DURATION_SECONDS,
   },
 ] as const;
 
