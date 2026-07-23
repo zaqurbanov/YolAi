@@ -10,7 +10,7 @@ import {
 import { getChatModel, getChatModelFallback, getChatModelId, getChatModelFallbackId, getProviderCallOptions, isVisionAvailable, chatModelSupportsVision } from '@/lib/llm';
 import { streamTextWithFallback } from '@/lib/llm/streamWithFallback';
 import { identifySignFromImage } from '@/lib/rag/identifySignFromImage';
-import { retrieveRelevantChunks, retrievePerDocumentChunks, retrieveChunksByArticle, embedQueryWithActiveModel, type RetrievedChunk } from '@/lib/retrieval/search';
+import { retrieveCombinedChunks, retrieveChunksByArticle, embedQueryWithActiveModel, type RetrievedChunk } from '@/lib/retrieval/search';
 import { extractArticleReferences, articleLabelPrefixes, isPureArticleReferenceQuery } from '@/lib/retrieval/articleQuery';
 import { buildSystemPrompt, buildContextBlock, buildCitations, filterCitedChunks } from '@/lib/rag/buildPrompt';
 import { shouldUpdateSummary, updateContextSummary } from '@/lib/rag/contextSummary';
@@ -438,32 +438,35 @@ export async function POST(request: Request) {
   ]);
   const queryEmbedMs = performance.now() - embedStart;
 
-  const [primaryResult, rawQueryResult, perDocumentResult, articleResult] = await Promise.all([
-    retrieveRelevantChunks({
+  // The three hybrid searches used to be three separate RPC round-trips, each
+  // independently re-running the same expensive trigram scan (~3.3s each after
+  // 0062, ~10s summed into db_search_ms). They all pass the same query_text,
+  // so match_chunks_combined (0063) computes the trigram scored set once and
+  // returns all three result sets — functionally identical to the old
+  // per-call results — in one round-trip. retrieveCombinedChunks transparently
+  // falls back to the legacy three-call path until migration 0063 is applied.
+  // The article fast path stays a separate (cheap, trigram-free, usually
+  // skipped) call.
+  const [combinedResult, articleResult] = await Promise.all([
+    retrieveCombinedChunks({
       embedQuery: retrievalQuery,
+      rawQuery: rawQueryDiffersFromRewrite ? retrievalSourceText : undefined,
       ftsQuery: ftsQueryForSearch,
       documentId,
+      includePerDocument: !documentId,
       precomputedEmbedding: retrievalQueryEmbedding,
+      precomputedRawEmbedding: rawQueryEmbedding,
     }),
-    rawQueryDiffersFromRewrite && rawQueryEmbedding
-      ? retrieveRelevantChunks({
-          embedQuery: retrievalSourceText,
-          ftsQuery: ftsQueryForSearch,
-          documentId,
-          precomputedEmbedding: rawQueryEmbedding,
-        })
-      : null,
-    documentId ? null : retrievePerDocumentChunks(retrievalQuery, ftsQueryForSearch, retrievalQueryEmbedding),
     articlePrefixes.length > 0
       ? retrieveChunksByArticle(retrievalQuery, articlePrefixes, retrievalQueryEmbedding)
       : null,
   ]);
 
-  const seenChunkIds = new Set(primaryResult.chunks.map((c) => c.id));
-  const mergedChunks = [...primaryResult.chunks];
-  for (const source of [rawQueryResult, perDocumentResult, articleResult]) {
+  const seenChunkIds = new Set(combinedResult.primary.map((c) => c.id));
+  const mergedChunks = [...combinedResult.primary];
+  for (const source of [combinedResult.raw, combinedResult.perDocument, articleResult?.chunks ?? null]) {
     if (!source) continue;
-    for (const chunk of source.chunks) {
+    for (const chunk of source) {
       if (seenChunkIds.has(chunk.id)) continue;
       seenChunkIds.add(chunk.id);
       mergedChunks.push(chunk);
@@ -482,11 +485,10 @@ export async function POST(request: Request) {
   // the per-call embedMs values are all 0 — summing them would under-report
   // the real cost in chat_request_timing. Report the actual measured time.
   const embedMs = queryEmbedMs;
-  const dbSearchMs =
-    primaryResult.dbSearchMs +
-    (rawQueryResult?.dbSearchMs ?? 0) +
-    (perDocumentResult?.dbSearchMs ?? 0) +
-    (articleResult?.dbSearchMs ?? 0);
+  // One combined RPC round-trip (or the summed legacy calls when falling
+  // back pre-0063) plus the optional article fast path — same coverage
+  // db_search_ms always had.
+  const dbSearchMs = combinedResult.dbSearchMs + (articleResult?.dbSearchMs ?? 0);
 
   const { keptIds, rerankMs } = await rerankChunks(retrievalSourceText, initialChunks);
   let relevantChunks: RetrievedChunk[];

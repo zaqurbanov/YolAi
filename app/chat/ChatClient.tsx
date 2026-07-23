@@ -292,6 +292,7 @@ function BusyIndicator({
   const [elapsedMs, setElapsedMs] = useState(0);
   useEffect(() => {
     if (!isBusy) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- resets the timer when the busy state ends, same pattern as the other busy/stream resets in this file.
       setElapsedMs(0);
       return;
     }
@@ -303,16 +304,29 @@ function BusyIndicator({
   if (!isBusy) return null;
 
   const phrase = busyPhraseFor(status, elapsedMs, phrasesByStage);
-  const seconds = Math.floor(elapsedMs / 1000);
+  // Countdown, not count-up: anticipation ("cavab yaxınlaşır") reads better
+  // than a climbing timer. Starts from the measured median full-answer time
+  // (~10s after the 0063 retrieval consolidation). If the answer takes
+  // longer, the number is hidden and only "az qaldı…" remains — a counter
+  // that goes negative or freezes at 0 would signal "stuck", the opposite of
+  // the intent.
+  const remaining = COUNTDOWN_FROM_SECONDS - Math.floor(elapsedMs / 1000);
 
   return (
     <div className="mt-6 flex items-center gap-2 text-on-surface-variant">
       <Spinner size="sm" />
       <span className="mono-label uppercase">{phrase}</span>
-      {seconds > 0 && <span className="mono-label text-on-surface-variant/60">{seconds}s</span>}
+      <span className="mono-label text-on-surface-variant/60">
+        {remaining > 0 ? `${remaining}s` : 'az qaldı…'}
+      </span>
     </div>
   );
 }
+
+// Median full-answer latency (see chat_request_logs after migration 0063);
+// deliberately a touch above it so the countdown usually finishes just as —
+// or slightly after — the first tokens stream in.
+const COUNTDOWN_FROM_SECONDS = 10;
 
 // Reflects the real backend pipeline (app/api/chat/route.ts) instead of an
 // arbitrary rotation, so the wait reads as "here's what's actually

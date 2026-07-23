@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { embedText } from '@/lib/embeddings/embed';
 import { embedTextGemini } from '@/lib/embeddings/gemini';
 import { getActiveEmbeddingModel, type EmbeddingModel } from '@/lib/embeddings/activeModel';
+import { isMissingRelationError } from '@/lib/supabase/missingRelation';
 
 /**
  * A query vector tagged with the model that produced it. The tag is not
@@ -217,4 +218,141 @@ export async function retrieveRelevantChunks({
 
   if (error) throw error;
   return { chunks: data ?? [], embedMs, dbSearchMs };
+}
+
+// ---------------------------------------------------------------------------
+// Combined retrieval (0063). The chat route used to fire three hybrid RPCs
+// per request — match_chunks with the rewritten query's embedding, match_chunks
+// with the raw query's embedding (when the rewrite changed the text), and
+// match_chunks_per_document — each independently re-running the SAME expensive
+// trigram scan (~3.3s each after 0062; ~10s summed into db_search_ms). All
+// three receive the same query_text, so match_chunks_combined computes the
+// trigram scored set once and returns all three result sets in one round-trip,
+// tagged with a `source` discriminator. See 0063's migration comment for the
+// equivalence argument — each variant's rows are functionally identical to
+// what the legacy call returned.
+// ---------------------------------------------------------------------------
+
+export type CombinedChunkSource = 'primary' | 'raw' | 'per_document';
+
+interface CombinedRetrievedChunkRow extends RetrievedChunk {
+  source: CombinedChunkSource;
+}
+
+export interface RetrieveCombinedChunksParams {
+  /** Rewritten/expanded query — its embedding drives the primary and per-document vector searches. */
+  embedQuery: string;
+  /**
+   * Raw user query. When provided (i.e. rewriting changed the text), a second
+   * corpus-wide search runs against its embedding — the stability hedge the
+   * old second retrieveRelevantChunks call implemented (see route.ts comment).
+   */
+  rawQuery?: string;
+  /** Trigram keyword text — same semantics as RetrieveRelevantChunksParams.ftsQuery. */
+  ftsQuery?: string;
+  documentId?: string;
+  matchCount?: number;
+  /** Mirrors the old `documentId ? null : retrievePerDocumentChunks(...)` gate in route.ts. */
+  includePerDocument: boolean;
+  precomputedEmbedding: QueryEmbedding;
+  precomputedRawEmbedding?: QueryEmbedding | null;
+}
+
+export interface RetrieveCombinedChunksResult {
+  primary: RetrievedChunk[];
+  raw: RetrievedChunk[] | null;
+  perDocument: RetrievedChunk[] | null;
+  dbSearchMs: number;
+  /**
+   * false when the request was served by the legacy three-call path instead —
+   * either because migration 0063 hasn't been applied yet (missing-relation
+   * error from PostgREST) or because the two precomputed embeddings carry
+   * different model tags (admin flipped the embedding toggle mid-request).
+   */
+  usedCombinedRpc: boolean;
+}
+
+function stripSource(row: CombinedRetrievedChunkRow): RetrievedChunk {
+  // Don't leak the discriminator into downstream consumers (merged pools,
+  // citation building) — legacy rows never carried it.
+  const chunk: RetrievedChunk & { source?: CombinedChunkSource } = { ...row };
+  delete chunk.source;
+  return chunk;
+}
+
+export async function retrieveCombinedChunks(
+  params: RetrieveCombinedChunksParams,
+): Promise<RetrieveCombinedChunksResult> {
+  const {
+    embedQuery,
+    rawQuery,
+    ftsQuery,
+    documentId,
+    matchCount = 60,
+    includePerDocument,
+    precomputedEmbedding: embedding,
+    precomputedRawEmbedding,
+  } = params;
+  const rawEmbedding = rawQuery ? precomputedRawEmbedding ?? null : null;
+
+  // Both vectors go to ONE RPC, so they must share a model. If the admin
+  // flipped the embedding toggle between the two embed calls (the exact race
+  // QueryEmbedding's tag exists to surface), use the legacy path below, where
+  // each call independently picks the RPC matching its own vector.
+  const modelsAgree = !rawEmbedding || rawEmbedding.model === embedding.model;
+
+  if (modelsAgree) {
+    const supabase = createAdminClient();
+    const dbSearchStart = performance.now();
+    const { data, error } = await supabase.rpc(rpcName('match_chunks_combined', embedding.model), {
+      query_embedding: embedding.vector,
+      raw_query_embedding: rawEmbedding?.vector ?? null,
+      query_text: ftsQuery ?? null,
+      match_count: matchCount,
+      filter_document_id: documentId ?? null,
+      include_per_document: includePerDocument,
+      per_document_limit: PER_DOCUMENT_CANDIDATE_LIMIT,
+    });
+    const dbSearchMs = performance.now() - dbSearchStart;
+
+    if (!error) {
+      const rows = (data ?? []) as CombinedRetrievedChunkRow[];
+      const bySource = (source: CombinedChunkSource) =>
+        rows.filter((row) => row.source === source).map(stripSource);
+      return {
+        primary: bySource('primary'),
+        raw: rawEmbedding ? bySource('raw') : null,
+        perDocument: includePerDocument ? bySource('per_document') : null,
+        dbSearchMs,
+        usedCombinedRpc: true,
+      };
+    }
+    if (!isMissingRelationError(error)) throw error;
+    // Migration 0063 not applied yet (PGRST202/42P01) — deployed code must
+    // keep working until the user runs it by hand (see CLAUDE.md), so fall
+    // through to the legacy three-call path.
+  }
+
+  const [primaryResult, rawResult, perDocumentResult] = await Promise.all([
+    retrieveRelevantChunks({ embedQuery, ftsQuery, documentId, matchCount, precomputedEmbedding: embedding }),
+    rawQuery && rawEmbedding
+      ? retrieveRelevantChunks({
+          embedQuery: rawQuery,
+          ftsQuery,
+          documentId,
+          matchCount,
+          precomputedEmbedding: rawEmbedding,
+        })
+      : null,
+    includePerDocument ? retrievePerDocumentChunks(embedQuery, ftsQuery, embedding) : null,
+  ]);
+
+  return {
+    primary: primaryResult.chunks,
+    raw: rawResult?.chunks ?? null,
+    perDocument: perDocumentResult?.chunks ?? null,
+    dbSearchMs:
+      primaryResult.dbSearchMs + (rawResult?.dbSearchMs ?? 0) + (perDocumentResult?.dbSearchMs ?? 0),
+    usedCombinedRpc: false,
+  };
 }
