@@ -406,11 +406,18 @@ interface ChatClientProps {
   // the backend still enforces this independently (422 vision_unavailable)
   // as a backstop, this prop only decides what the composer offers to show.
   visionAvailable: boolean;
+  // Seeds the composer input (home-page category cards link to /chat?q=...).
+  // Seed ONLY — never auto-submitted, because sending a message debits coins.
+  initialInput?: string;
 }
 
-export default function ChatClient({ conversationId: initialConversationId, visionAvailable }: ChatClientProps) {
+export default function ChatClient({
+  conversationId: initialConversationId,
+  visionAvailable,
+  initialInput,
+}: ChatClientProps) {
   const router = useRouter();
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState(initialInput ?? '');
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [attachedPreviewUrl, setAttachedPreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);

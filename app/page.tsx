@@ -5,7 +5,7 @@ import { Card } from '@heroui/react';
 import { CategoryCard } from '@/components/CategoryCard';
 import Footer from '@/components/Footer';
 import { CheckIcon, FineIcon, SparkleIcon } from '@/components/icons';
-import { RULE_CATEGORIES } from '@/lib/content/ruleCategories';
+import { getCategoryContent, getCategoryQuestionCounts } from '@/lib/content/categoryContent';
 import { getHomeBackgroundImageUrl } from '@/lib/content/homeBackground';
 import { getRegisteredDriverCount, getRecentDriverInitials } from '@/lib/content/getRegisteredDriverCount';
 
@@ -31,18 +31,10 @@ const HOME_TOPIC_TITLES = [
   'Sürət Həddi',
   'Sənədlər və Sığorta',
 ];
-const TOPICS = HOME_TOPIC_TITLES.map(
-  (title) => RULE_CATEGORIES.find((category) => category.title === title)!
-);
 // Bento asymmetry (matches the Stitch mockup's featured-large/regular card
 // rhythm) — the featured card is the first entry that lands in each row of
 // the lg:grid-cols-3 layout below, at index 0 and index 3.
 const FEATURED_TOPIC_INDEXES = new Set([0, 3]);
-
-// Real citation reused (not invented) for the hero's floating "cərimə" alert
-// card — sourced from the same RULE_CATEGORIES entry the bento grid below
-// renders, so the hero doesn't introduce a second, drifting copy of it.
-const FINE_CATEGORY = RULE_CATEGORIES.find((category) => category.title === 'Cərimələr və Bal Sistemi')!;
 
 const PROMO_FEATURES = [
   'Rəsmi sənədlərə əsaslanan, mənbəyə istinad edən cavablar',
@@ -62,11 +54,23 @@ const MOCK_STATS_TAIL = [
 ];
 
 export default async function Home() {
-  const [backgroundImageUrl, driverCount, driverInitials] = await Promise.all([
-    getHomeBackgroundImageUrl().then((url) => url ?? '/bg.png'),
-    getRegisteredDriverCount(),
-    getRecentDriverInitials(),
-  ]);
+  const [backgroundImageUrl, driverCount, driverInitials, categories, questionCounts] =
+    await Promise.all([
+      getHomeBackgroundImageUrl().then((url) => url ?? '/bg.png'),
+      getRegisteredDriverCount(),
+      getRecentDriverInitials(),
+      getCategoryContent(),
+      getCategoryQuestionCounts(),
+    ]);
+  // Admin-overridable content, so TOPICS is built per render (ISR-cached)
+  // rather than at module scope from the raw defaults.
+  const topics = HOME_TOPIC_TITLES.map(
+    (title) => categories.find((category) => category.title === title)!
+  );
+  // Real citation reused (not invented) for the hero's floating "cərimə" alert
+  // card — sourced from the same merged entry the bento grid below renders, so
+  // the hero doesn't introduce a second, drifting copy of it.
+  const fineCategory = categories.find((category) => category.title === 'Cərimələr və Bal Sistemi')!;
   const formattedDriverCount = driverCount.toLocaleString('az-AZ');
   const stats = [
     { value: formattedDriverCount, label: 'Aktiv istifadəçi', accent: 'text-primary' },
@@ -156,7 +160,7 @@ export default async function Home() {
             </div>
             <div className="flex flex-col gap-0.5">
               <span className="text-label-sm font-bold text-on-surface">Cərimə Xəbərdarlığı</span>
-              <span className="text-legal-citation text-on-surface-variant">{FINE_CATEGORY.citation}</span>
+              <span className="text-legal-citation text-on-surface-variant">{fineCategory.citation}</span>
             </div>
           </Card.Content>
         </Card>
@@ -178,9 +182,15 @@ export default async function Home() {
           </div>
 
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {TOPICS.map((topic, i) => (
+            {topics.map((topic, i) => (
               <div key={topic.title} className={FEATURED_TOPIC_INDEXES.has(i) ? 'sm:col-span-2' : ''}>
-                <CategoryCard category={topic} index={i} animationDelayMs={i * 80} />
+                <CategoryCard
+                  category={topic}
+                  index={i}
+                  animationDelayMs={i * 80}
+                  href={`/chat?q=${encodeURIComponent(topic.question)}`}
+                  questionCount={questionCounts[topic.title]}
+                />
               </div>
             ))}
           </div>

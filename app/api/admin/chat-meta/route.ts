@@ -28,6 +28,14 @@ import {
   RETRY_COST_KEY,
   DEFAULT_RETRY_COST,
 } from '@/lib/coins/lessonUnlock';
+import { RULE_CATEGORIES } from '@/lib/content/ruleCategories';
+import {
+  CATEGORY_OVERRIDES_SETTING_KEY,
+  OVERRIDABLE_CATEGORY_FIELDS,
+  parseCategoryOverrides,
+  type CategoryOverrides,
+  type OverridableCategoryField,
+} from '@/lib/content/categoryContent';
 import {
   AD_WATCH_REWARD_KEY,
   DEFAULT_AD_WATCH_REWARD,
@@ -183,6 +191,38 @@ function isValidLessonEconomyValue(field: LessonEconomyField, value: number): bo
   if (!Number.isFinite(value)) return false;
   if (field.integerOnly && !Number.isInteger(value)) return false;
   return value >= field.min && value <= field.max;
+}
+
+// Category-card override text fields (`?type=category-content`). 300 chars is
+// a card-copy bound, not a technical one — these render inside fixed-size
+// cards on the home page.
+const MAX_CATEGORY_FIELD_LENGTH = 300;
+
+const VALID_CATEGORY_TITLES = new Set(RULE_CATEGORIES.map((c) => c.title));
+
+// Same per-field value/source convention as lesson-economy, keyed under the
+// FIXED category title so the admin UI can show "default" vs "overridden"
+// per text field.
+function buildCategoryContentResponse(overrides: CategoryOverrides) {
+  return {
+    categories: RULE_CATEGORIES.map((category) => {
+      const entry = overrides[category.title] ?? {};
+      return {
+        title: category.title,
+        ...Object.fromEntries(
+          OVERRIDABLE_CATEGORY_FIELDS.map((field) => {
+            const override = entry[field];
+            return [
+              field,
+              override !== undefined
+                ? { value: override, source: 'table' }
+                : { value: category[field], source: 'default' },
+            ];
+          })
+        ),
+      };
+    }),
+  };
 }
 
 const BUSY_PHRASE_STAGES = ['analyzing', 'rewriting', 'searching', 'finalizing', 'streaming'] as const;
@@ -524,6 +564,18 @@ export async function GET(request: NextRequest) {
     );
 
     return NextResponse.json({ settings });
+  }
+
+  if (type === 'category-content') {
+    const { data, error } = await createAdminClient()
+      .from('app_settings')
+      .select('value')
+      .eq('key', CATEGORY_OVERRIDES_SETTING_KEY)
+      .maybeSingle();
+
+    if (error) return serverError(error, 'Ayarları oxumaq uğursuz oldu');
+
+    return NextResponse.json(buildCategoryContentResponse(parseCategoryOverrides(data?.value)));
   }
 
   return apiError(400, 'type parametri düzgün deyil');
@@ -943,6 +995,75 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ settings });
   }
 
+  if (type === 'category-content') {
+    const body = await request.json().catch(() => null);
+    const incoming = body?.overrides;
+
+    if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming) || Object.keys(incoming).length === 0) {
+      return apiError(400, 'overrides obyekti tələb olunur');
+    }
+
+    // Validate everything BEFORE writing anything — same all-or-nothing
+    // posture as lesson-economy above. Titles are fixed identifiers, so an
+    // unknown one is a client bug, not new content.
+    for (const [title, fields] of Object.entries(incoming)) {
+      if (!VALID_CATEGORY_TITLES.has(title)) {
+        return apiError(400, `Naməlum kateqoriya: ${title}`);
+      }
+      if (!fields || typeof fields !== 'object' || Array.isArray(fields)) {
+        return apiError(400, `${title} üçün sahələr obyekt olmalıdır`);
+      }
+      for (const [field, value] of Object.entries(fields)) {
+        if (!(OVERRIDABLE_CATEGORY_FIELDS as readonly string[]).includes(field)) {
+          return apiError(400, `Naməlum sahə: ${title}.${field}`);
+        }
+        if (typeof value !== 'string') {
+          return apiError(400, `${title}.${field} mətn olmalıdır`);
+        }
+        if (value.trim().length > MAX_CATEGORY_FIELD_LENGTH) {
+          return apiError(400, `${title}.${field} maksimum ${MAX_CATEGORY_FIELD_LENGTH} simvol ola bilər`);
+        }
+      }
+    }
+
+    const admin = createAdminClient();
+
+    const { data: existingRow, error: readError } = await admin
+      .from('app_settings')
+      .select('value')
+      .eq('key', CATEGORY_OVERRIDES_SETTING_KEY)
+      .maybeSingle();
+    if (readError) return serverError(readError, 'Ayarları oxumaq uğursuz oldu');
+
+    // Partial update: only the titles/fields present are touched; an empty
+    // string RESETS that field to its TS-side default by removing the
+    // override — same null-resets convention as lesson-economy, adapted to
+    // string fields.
+    const merged = parseCategoryOverrides(existingRow?.value);
+    for (const [title, fields] of Object.entries(incoming)) {
+      const entry = { ...(merged[title] ?? {}) };
+      for (const [field, value] of Object.entries(fields as Record<string, string>)) {
+        const trimmed = value.trim();
+        if (trimmed.length === 0) delete entry[field as OverridableCategoryField];
+        else entry[field as OverridableCategoryField] = trimmed;
+      }
+      if (Object.keys(entry).length === 0) delete merged[title];
+      else merged[title] = entry;
+    }
+
+    if (Object.keys(merged).length === 0) {
+      const { error } = await admin.from('app_settings').delete().eq('key', CATEGORY_OVERRIDES_SETTING_KEY);
+      if (error) return serverError(error, 'Ayarı sıfırlamaq uğursuz oldu');
+    } else {
+      const { error } = await admin
+        .from('app_settings')
+        .upsert({ key: CATEGORY_OVERRIDES_SETTING_KEY, value: merged, updated_at: new Date().toISOString() });
+      if (error) return serverError(error, 'Ayarı yeniləmək uğursuz oldu');
+    }
+
+    return NextResponse.json(buildCategoryContentResponse(merged));
+  }
+
   if (type === 'user') {
     const id = searchParams.get('id');
     if (!id) return apiError(400, 'id tələb olunur');
@@ -1172,6 +1293,14 @@ export async function DELETE(request: NextRequest) {
     } catch (error) {
       return serverError(error, 'Sənədləri silmək uğursuz oldu');
     }
+  }
+
+  if (type === 'category-content') {
+    // Full reset to the TS-side defaults in RULE_CATEGORIES — same
+    // row-delete-means-default convention as background-image/logo above.
+    const { error } = await createAdminClient().from('app_settings').delete().eq('key', CATEGORY_OVERRIDES_SETTING_KEY);
+    if (error) return serverError(error, 'Ayarı sıfırlamaq uğursuz oldu');
+    return NextResponse.json(buildCategoryContentResponse({}));
   }
 
   if (type !== 'busy-phrases') {

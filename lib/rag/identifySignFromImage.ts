@@ -2,30 +2,63 @@ import 'server-only';
 import { generateText, convertToModelMessages, type UIMessage, type FileUIPart } from 'ai';
 import { getVisionModel } from '@/lib/llm';
 
-// Deliberately narrow: this is step 1 of the two-step hybrid flow (see
-// app/api/chat/route.ts) — its ONLY job is to name what's visually in the
-// photo, in a few Azerbaijani words, so that string can be fed into the
-// existing text-based retrieval pipeline exactly like a typed question.
-// It must NOT cite article numbers, explain the rule, or invent anything —
-// grounding/citations still flow entirely through the normal RAG pipeline
+// This is step 1 of the two-step hybrid flow (see app/api/chat/route.ts) — its
+// job is to produce a SHORT, factual Azerbaijani description of what is visibly
+// in the photo and relevant to traffic rules (both any road sign AND the road
+// situation), so that string can be fed into the existing text-based retrieval
+// pipeline exactly like a typed question AND injected as the observed scene for
+// the answering model. It must NOT cite article numbers, explain the rule, or
+// judge whether it's a violation — grounding/citations and the conditional
+// violation assessment still flow entirely through the normal RAG pipeline
 // downstream of this call, on whatever this function returns.
-const IDENTIFY_SYSTEM_PROMPT = `Sən Azərbaycan yol nişanlarını tanıyan köməkçisən.
-Sənə göndərilən şəkildə görünən yol nişanını və ya yol vəziyyətini QISA şəkildə,
-Azərbaycan dilində müəyyən et.
+const IDENTIFY_SYSTEM_PROMPT = `Sən Azərbaycan yol hərəkəti şəkillərini təsvir edən köməkçisən.
+Sənə göndərilən şəkildə yol hərəkəti ilə bağlı GÖRÜNƏN vəziyyəti QISA və
+FAKTİKİ şəkildə, Azərbaycan dilində təsvir et.
 
 Qaydalar:
-- Yalnız şəkildə GÖRDÜYÜNÜ tanı, bir neçə söz və ya bir qısa cümlə ilə (məsələn:
-  "Dayanmaq qadağandır nişanı" və ya "Sürət həddini məhdudlaşdıran nişan, 50 km/saat").
-- Maddə nömrəsi göstərmə, hüquqi izahat vermə, qayda haqqında heç nə uydurma.
-- Əgər şəkildə heç bir yol nişanı və ya yol hərəkəti ilə bağlı element yoxdursa,
-  sadəcə "Yol nişanı aşkar edilmədi" cavabını ver.
-- Cavabın YALNIZ tanımlama ifadəsi olsun, başqa heç nə əlavə etmə.`;
+- Yalnız şəkildə GÖRÜNƏNİ təsvir et — bir və ya iki cümlə ilə, qısa. Həm varsa
+  yol nişanını, həm də yol vəziyyətini əhatə et: nəqliyyat vasitəsinin
+  nişanlanmaya/zolaqlara/dayanma xəttinə görə mövqeyi, hərəkət istiqaməti,
+  dayanma və ya park etmə, görünürsə svetoforun rəngi, piyada və ya piyada
+  keçidi və s. (məsələn: "Avtomobil piyada keçidinin üstündə dayanıb" və ya
+  "Qırmızı işıqda avtomobil dayanma xəttini keçib").
+- STATİK vəziyyətlə yanaşı DİNAMİK manevrləri də diqqətlə qeyd et: bir nəqliyyat
+  vasitəsinin qarşı (əks istiqamətli) zolağa çıxması, ötmə (qabaqlama), əks
+  istiqamətdə hərəkət, kəsilməz (bütöv) xətti keçmə, dönmə və s.
+- Şəkildəki nəqliyyat vasitələrinin ƏKSƏRİYYƏTİ eyni cür dursa/hərəkət etsə,
+  lakin BİR (və ya bir neçə) vasitə fərqli davranırsa (məsələn, hamı soldan
+  park edib, amma bir avtomobil sağa/qarşı zolağa çıxır), həmin FƏRQLİ vasitəni
+  ayrıca, konkret təsvir et — yalnız ümumi mənzərəni yazıb fərqli olanı qaçırma.
+- Yalnız şəkildə açıq-aydın GÖRDÜYÜNÜ yaz; görünməyən heç nəyi ehtimal etmə və
+  uydurma.
+- Maddə nömrəsi göstərmə, hüquqi izahat vermə, bunun pozuntu olub-olmadığı barədə
+  heç bir hökm vermə — sadəcə səhnəni təsvir et.
+- Əgər şəkildə yol hərəkəti ilə bağlı heç bir element yoxdursa, sadəcə
+  "Yol hərəkəti ilə bağlı element aşkar edilmədi" cavabını ver.
+- Cavabın YALNIZ bu qısa təsvir olsun, başqa heç nə əlavə etmə.`;
+
+// The user's own caption is the strongest hint about what in the photo matters
+// — the earlier version threw it away and let the vision model default to the
+// dominant visual (e.g. a row of parked cars), missing the single vehicle the
+// user was actually asking about. When present, it STEERS attention only; the
+// prompt still requires the model to describe what it genuinely sees, so a
+// caption can't make it hallucinate a maneuver that isn't visible.
+function buildSyntheticText(userCaption?: string): string {
+  const base = 'Bu şəkildə yol hərəkəti ilə bağlı görünən vəziyyəti qısa təsvir et.';
+  const caption = userCaption?.trim();
+  if (!caption) return base;
+  return `İstifadəçinin sualı/qeydi: "${caption}".
+${base} Xüsusilə istifadəçinin işarə etdiyi məqama diqqət et, amma YALNIZ şəkildə həqiqətən gördüyünü yaz — istifadəçinin dediyini şəkildə görmürsənsə, gördüyünü olduğu kimi bildir.`;
+}
 
 // imagePart is passed through convertToModelMessages (the same conversion the
 // main chat route already relies on for multimodal UIMessage parts) rather
 // than hand-rolling data-URL/base64 parsing here, so this stays consistent
 // with however that helper resolves FileUIPart -> ModelMessage image content.
-export async function identifySignFromImage(imagePart: FileUIPart): Promise<string> {
+export async function identifySignFromImage(
+  imagePart: FileUIPart,
+  userCaption?: string,
+): Promise<string> {
   const model = getVisionModel();
   if (!model) {
     throw new Error('identifySignFromImage called while no vision model is configured');
@@ -35,7 +68,7 @@ export async function identifySignFromImage(imagePart: FileUIPart): Promise<stri
     id: 'vision-identify',
     role: 'user',
     parts: [
-      { type: 'text', text: 'Bu şəkildəki yol nişanını və ya yol vəziyyətini tanı.' },
+      { type: 'text', text: buildSyntheticText(userCaption) },
       imagePart,
     ],
   };

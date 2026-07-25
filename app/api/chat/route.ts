@@ -297,7 +297,9 @@ export async function POST(request: Request) {
   // main chat model below. Run concurrently with the conversation/message
   // persistence work right below (which doesn't depend on it) and only
   // awaited once its result is actually needed, ahead of rewriteQuery.
-  const identifyPromise: Promise<string> | null = imagePart ? identifySignFromImage(imagePart) : null;
+  const identifyPromise: Promise<string> | null = imagePart
+    ? identifySignFromImage(imagePart, query)
+    : null;
 
   let conversation: ConversationState | null = null;
   // Reserved synchronously (before streaming starts) so the id is available to
@@ -526,7 +528,7 @@ export async function POST(request: Request) {
     { model: getChatModel(), modelId: getChatModelId() },
     fallbackModel && fallbackModelId ? { model: fallbackModel, modelId: fallbackModelId } : null,
     {
-      system: `${buildSystemPrompt(userName)}\n\nKONTEKST:\n${contextBlock || 'Heç bir uyğun məlumat tapılmadı.'}${summaryBlock}`,
+      system: `${buildSystemPrompt(userName, imagePart !== null)}\n\nKONTEKST:\n${contextBlock || 'Heç bir uyğun məlumat tapılmadı.'}${summaryBlock}`,
       messages: await convertToModelMessages(windowedMessages),
       providerOptions: getProviderCallOptions(),
       onChunk: ({ chunk }) => {

@@ -13,6 +13,7 @@ import LogoControl from './LogoControl';
 import SendPushReminderControl from './SendPushReminderControl';
 import EmbeddingModelControl from './EmbeddingModelControl';
 import LessonEconomyControl from './LessonEconomyControl';
+import CategoryContentControl from './CategoryContentControl';
 
 export default async function UsersSection() {
   const auth = await requireAdmin();
@@ -36,6 +37,7 @@ export default async function UsersSection() {
         <SendPushReminderControl />
         <EmbeddingModelControl />
         <LessonEconomyControl />
+        <CategoryContentControl />
       </div>
 
       <div className="glass-panel rounded-2xl overflow-hidden overflow-x-auto">

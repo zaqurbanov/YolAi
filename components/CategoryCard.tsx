@@ -28,6 +28,8 @@ interface CategoryCardProps {
   href?: string;
   /** Stagger delay in ms for the topic-card-in entrance animation. */
   animationDelayMs?: number;
+  /** Published quiz-question count for the category; chip is hidden when 0/undefined. */
+  questionCount?: number;
 }
 
 // Shared "category card" treatment for the traffic-rule category grid shown
@@ -35,7 +37,7 @@ interface CategoryCardProps {
 // card shape. app/oyrenme/page.tsx renders the same accent styling for its
 // lesson cards but with different content (progress bar, CTA), so it uses
 // ACCENT_STYLES directly rather than this component.
-export function CategoryCard({ category, index, href, animationDelayMs }: CategoryCardProps) {
+export function CategoryCard({ category, index, href, animationDelayMs, questionCount }: CategoryCardProps) {
   const { icon: Icon, title, description, citation } = category;
   const accent = ACCENT_STYLES[index % ACCENT_STYLES.length];
 
@@ -55,8 +57,13 @@ export function CategoryCard({ category, index, href, animationDelayMs }: Catego
           {description}
         </Card.Description>
       </Card.Header>
-      <Card.Footer className="mt-2 border-t border-outline-variant/40 pt-3">
+      <Card.Footer className="mt-2 flex items-center justify-between gap-2 border-t border-outline-variant/40 pt-3">
         <span className={`text-legal-citation ${accent.citation}`}>{citation}</span>
+        {questionCount !== undefined && questionCount > 0 && (
+          <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-label-sm ${accent.chip}`}>
+            {questionCount} sual
+          </span>
+        )}
       </Card.Footer>
     </Card>
   );
