@@ -6,7 +6,7 @@ import type { UIMessage } from 'ai';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Avatar, Badge, Input, Button, Chip, AlertDialog, Modal, Dropdown, Skeleton, toast } from '@heroui/react';
+import { Avatar, Badge, Input, Button, Chip, AlertDialog, Modal, Dropdown, Label, Skeleton, toast } from '@heroui/react';
 import {
   SendIcon,
   ShareIcon,
@@ -17,6 +17,7 @@ import {
   CheckIcon,
   ArrowUpIcon,
   CameraIcon,
+  ImageIcon,
   CloseIcon,
 } from '@/components/icons';
 import { CONVERSATION_CHANGED_EVENT } from '@/lib/chat/conversationEvents';
@@ -421,6 +422,7 @@ export default function ChatClient({
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [attachedPreviewUrl, setAttachedPreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
@@ -1285,14 +1287,39 @@ export default function ChatClient({
                 className="hidden"
                 onChange={handleFileSelect}
               />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="shrink-0 rounded-full p-2 text-on-surface-variant transition hover:bg-surface-hover hover:text-on-surface"
-                aria-label="Şəkil əlavə et"
-              >
-                <CameraIcon width={20} height={20} />
-              </button>
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={handleFileSelect}
+              />
+              <Dropdown>
+                <Dropdown.Trigger
+                  className="shrink-0 rounded-full p-2 text-on-surface-variant outline-none transition hover:bg-surface-hover hover:text-on-surface"
+                  aria-label="Şəkil əlavə et"
+                >
+                  <CameraIcon width={20} height={20} />
+                </Dropdown.Trigger>
+                <Dropdown.Popover className="min-w-[200px]">
+                  <Dropdown.Menu
+                    onAction={(key) => {
+                      if (key === 'camera') cameraInputRef.current?.click();
+                      else fileInputRef.current?.click();
+                    }}
+                  >
+                    <Dropdown.Item id="camera" textValue="Şəkil çək">
+                      <CameraIcon width={18} height={18} className="shrink-0 text-on-surface-variant" />
+                      <Label>Şəkil çək</Label>
+                    </Dropdown.Item>
+                    <Dropdown.Item id="gallery" textValue="Qalereyadan seç">
+                      <ImageIcon width={18} height={18} className="shrink-0 text-on-surface-variant" />
+                      <Label>Qalereyadan seç</Label>
+                    </Dropdown.Item>
+                  </Dropdown.Menu>
+                </Dropdown.Popover>
+              </Dropdown>
             </>
           )}
           <Input

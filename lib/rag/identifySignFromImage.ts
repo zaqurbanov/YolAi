@@ -25,10 +25,16 @@ Qaydalar:
 - STATİK vəziyyətlə yanaşı DİNAMİK manevrləri də diqqətlə qeyd et: bir nəqliyyat
   vasitəsinin qarşı (əks istiqamətli) zolağa çıxması, ötmə (qabaqlama), əks
   istiqamətdə hərəkət, kəsilməz (bütöv) xətti keçmə, dönmə və s.
+- Nəqliyyat vasitələrinin HƏRƏKƏTDƏ, yoxsa DAYANMIŞ/PARK EDİLMİŞ olduğunu bacardığın
+  qədər ayırd et və bunu açıq yaz. Əgər şəkildən bunu dəqiq müəyyən edə bilmirsənsə,
+  "maşınların hərəkətdə, yoxsa dayanmış olduğu şəkildən dəqiq bilinmir" kimi bildir —
+  HEÇ VAXT avtomatik "dayanıb/park edib" fərz etmə. Sıx hərəkət axını, açıq zolaqlar
+  və maşınların yol boyu düzülüşü çox vaxt PARK deyil, HƏRƏKƏT deməkdir.
 - Şəkildəki nəqliyyat vasitələrinin ƏKSƏRİYYƏTİ eyni cür dursa/hərəkət etsə,
-  lakin BİR (və ya bir neçə) vasitə fərqli davranırsa (məsələn, hamı soldan
-  park edib, amma bir avtomobil sağa/qarşı zolağa çıxır), həmin FƏRQLİ vasitəni
-  ayrıca, konkret təsvir et — yalnız ümumi mənzərəni yazıb fərqli olanı qaçırma.
+  lakin BİR (və ya bir neçə) vasitə fərqli davranırsa (məsələn, hamı sol zolaqda
+  hərəkət edir, amma bir avtomobil sağa/qarşı zolağa çıxır), həmin FƏRQLİ vasitəni
+  və onun HƏRƏKƏT İSTİQAMƏTİNİ ayrıca, konkret təsvir et — yalnız ümumi mənzərəni
+  yazıb fərqli olanı qaçırma.
 - Yalnız şəkildə açıq-aydın GÖRDÜYÜNÜ yaz; görünməyən heç nəyi ehtimal etmə və
   uydurma.
 - Maddə nömrəsi göstərmə, hüquqi izahat vermə, bunun pozuntu olub-olmadığı barədə
