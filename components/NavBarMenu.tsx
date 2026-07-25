@@ -5,8 +5,9 @@ import { useState } from 'react';
 import { buttonVariants } from '@heroui/styles';
 import { Popover } from '@heroui/react';
 import { logout } from '@/app/(auth)/actions';
-import { MoreIcon } from '@/components/icons';
+import { CoinIcon, MoonIcon, MoreIcon, SunIcon } from '@/components/icons';
 import { useTour } from '@/components/onboarding/TourProvider';
+import { useDarkMode } from '@/lib/theme/useDarkMode';
 
 interface NavBarMenuProps {
   hasUser: boolean;
@@ -22,6 +23,7 @@ export default function NavBarMenu({ hasUser, isAdmin }: NavBarMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const closeMenu = () => setIsOpen(false);
   const { start: startTour } = useTour();
+  const { isDark, setDark } = useDarkMode();
 
   const ghostItem = `${buttonVariants({ variant: 'ghost', size: 'sm' })} w-full justify-start`;
   const secondaryItem = `${buttonVariants({ variant: 'secondary', size: 'sm' })} w-full justify-start`;
@@ -41,6 +43,25 @@ export default function NavBarMenu({ hasUser, isAdmin }: NavBarMenuProps) {
       >
         <Popover.Dialog>
           <div className="flex flex-col gap-1">
+            {/* Mobile-only cluster: these two sit in the navbar on sm+ screens
+                and move into this menu on mobile to keep the navbar uncluttered
+                (see NavBar.tsx). Hidden on sm+ so they aren't duplicated. */}
+            {hasUser && !isAdmin && (
+              <Link href="/coin-qazan" className={`${ghostItem} gap-2 sm:hidden`} onClick={closeMenu}>
+                <CoinIcon width={16} height={16} />
+                Coin qazan
+              </Link>
+            )}
+            {isDark !== null && (
+              <button
+                type="button"
+                className={`${ghostItem} gap-2 sm:hidden`}
+                onClick={() => setDark(!isDark)}
+              >
+                {isDark ? <SunIcon width={16} height={16} /> : <MoonIcon width={16} height={16} />}
+                {isDark ? 'İşıqlı tema' : 'Qaranlıq tema'}
+              </button>
+            )}
             {hasUser && (
               <Link href="/chat" className={ghostItem} onClick={closeMenu}>
                 Chat

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ChatIcon, HomeIcon, RulesIcon, SettingsIcon } from '@/components/icons';
+import { ChatIcon, CoinIcon, HomeIcon, RulesIcon, SettingsIcon } from '@/components/icons';
 import { useSidebar } from '@/components/SidebarContext';
 
 const ICONS = {
@@ -10,6 +10,7 @@ const ICONS = {
   chat: ChatIcon,
   rules: RulesIcon,
   settings: SettingsIcon,
+  coin: CoinIcon,
 };
 
 interface NavItem {

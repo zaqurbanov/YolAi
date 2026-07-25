@@ -41,11 +41,12 @@ export default function WeeklyLeaderboardCard({ leaderboard }: WeeklyLeaderboard
         <p className="text-body-md text-on-surface-variant">Bu həftə hələ reytinq yoxdur</p>
       ) : (
         <ul className="space-y-2">
-          {top.map((entry) => (
+          {top.map((entry, index) => (
             <li
               key={entry.rank}
+              style={{ animationDelay: `${index * 60}ms` }}
               className={
-                'flex items-center gap-3 rounded-xl px-3 py-2.5 ' +
+                'leaderboard-row-in motion-reduce:animate-none flex items-center gap-3 rounded-xl px-3 py-2.5 ' +
                 (entry.isMe
                   ? 'border border-primary/40 bg-primary/10'
                   : 'border border-transparent')
@@ -76,7 +77,10 @@ export default function WeeklyLeaderboardCard({ leaderboard }: WeeklyLeaderboard
           {/* Caller ranks outside the top 10: append a visually separated row so
               they always see where they stand. */}
           {!meInTop && me && (
-            <li className="mt-3 flex items-center gap-3 rounded-xl border border-primary/40 bg-primary/10 px-3 py-2.5">
+            <li
+              style={{ animationDelay: `${top.length * 60}ms` }}
+              className="leaderboard-row-in motion-reduce:animate-none mt-3 flex items-center gap-3 rounded-xl border border-primary/40 bg-primary/10 px-3 py-2.5"
+            >
               <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-legal-citation text-primary">
                 #{me.rank}
               </span>

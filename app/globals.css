@@ -322,6 +322,31 @@ html:not(.dark) .glow-primary {
   letter-spacing: 0.04em;
 }
 
+/* Thin, on-brand HUD scrollbar — scoped, not global. Applied to the sidebar
+   chat-conversation list scroll container (components/ChatConversationList.tsx).
+   Colors come from --outline (the muted HUD outline token) so it flips with the
+   theme automatically: #6b7280 in dark, #9aa1ae in light. The thumb is a
+   translucent tint of that token (transparent track, slightly more opaque on
+   hover) so it reads as part of the glass HUD rather than an OS scrollbar. */
+.hud-scrollbar {
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: color-mix(in oklab, var(--outline) 45%, transparent) transparent;
+}
+.hud-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.hud-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.hud-scrollbar::-webkit-scrollbar-thumb {
+  background-color: color-mix(in oklab, var(--outline) 45%, transparent);
+  border-radius: 9999px;
+}
+.hud-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in oklab, var(--outline) 70%, transparent);
+}
+
 /* New Stitch "LegalDrive HUD" type scale (design-system.md frontmatter) — added
    as net-new utility classes, not applied to any screen yet. `.mono-label` above
    is left untouched (still live across ~34 files at its previous values); a
@@ -494,20 +519,45 @@ html:not(.dark) .glow-primary {
   animation-delay: 300ms;
 }
 
-@keyframes topic-card-in {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
+/* Category-card entrance (components/ScrollReveal.tsx wrapping CategoryCard on
+   app/page.tsx). Transition-based so it can be toggled by IntersectionObserver
+   when the card scrolls INTO view, rather than firing once on page load. The
+   reduced-motion block resets the hidden base state so cards can never be left
+   stuck invisible when the reveal never runs. */
+.reveal-on-scroll {
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 420ms ease-out, transform 420ms ease-out;
+}
+
+.reveal-on-scroll.reveal-visible {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal-on-scroll {
     opacity: 1;
-    transform: translateY(0);
+    transform: none;
+    transition: none;
   }
 }
 
-.topic-card-in {
-  opacity: 0;
-  animation: topic-card-in 400ms ease-out forwards;
+/* XO (tic-tac-toe) mark placement — a quick pop when an X/O lands. Guarded in
+   markup with motion-reduce:animate-none (components/games/TicTacToeGame.tsx). */
+@keyframes xo-mark-in {
+  from {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.xo-mark-in {
+  animation: xo-mark-in 180ms ease-out;
+  display: inline-block;
 }
 
 /* Guided onboarding tour (components/onboarding/TourOverlay.tsx). Entrance
@@ -670,6 +720,76 @@ html:not(.dark) .tour-spotlight {
 
 .game-thinking {
   animation: game-thinking 700ms ease-in-out infinite;
+}
+
+/* Game win: a short scale pop on the outcome line (a loss stays calm, no
+   animation). Reduced-motion guarded via motion-reduce:animate-none in markup;
+   no hidden base state, so the text is always visible regardless. */
+@keyframes game-win-pop {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.09);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.game-win-pop {
+  animation: game-win-pop 420ms ease-out;
+}
+
+/* Daily streak flame (components/account/DailyQuizCard.tsx): a slow, gentle
+   flicker while a streak is active — rooted at the base so it reads as a flame,
+   not a bounce. Guarded by motion-reduce:animate-none in markup. */
+@keyframes streak-flame {
+  0%,
+  100% {
+    opacity: 0.85;
+    transform: scale(1);
+  }
+  45% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+  70% {
+    opacity: 0.92;
+    transform: scale(0.97);
+  }
+}
+
+.streak-flame {
+  transform-origin: center bottom;
+  animation: streak-flame 2s ease-in-out infinite;
+}
+
+/* Weekly leaderboard rows (components/account/WeeklyLeaderboardCard.tsx): a
+   small staggered fade+rise on mount. Server-rendered, so the stagger is an
+   inline per-row animation-delay. Reduced-motion resets the hidden base state
+   so rows are never left invisible. */
+@keyframes leaderboard-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.leaderboard-row-in {
+  opacity: 0;
+  animation: leaderboard-row-in 360ms ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .leaderboard-row-in {
+    opacity: 1;
+    animation: none;
+  }
 }
 
 /* Chat "PDF kimi ixrac et" export (app/chat/page.tsx): print:hidden on the

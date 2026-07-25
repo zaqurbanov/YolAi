@@ -21,7 +21,7 @@ export function SidebarShell({ children }: { children: ReactNode }) {
           isOpen ? 'md:w-[250px] border-border' : 'md:w-0 border-transparent'
         }`}
       >
-        <div className="flex h-full w-[250px] flex-col min-h-0 overflow-y-auto">{children}</div>
+        <div className="hud-scrollbar flex h-full w-[250px] flex-col min-h-0 overflow-y-auto">{children}</div>
       </aside>
 
       <Drawer.Backdrop
@@ -34,7 +34,7 @@ export function SidebarShell({ children }: { children: ReactNode }) {
       >
         <Drawer.Content placement="left" className="md:hidden">
           <Drawer.Dialog className="glass-panel h-full w-72 max-w-[80vw] flex-col gap-0 rounded-r-2xl border-r border-border p-0">
-            <div className="flex h-full flex-col min-h-0 overflow-y-auto">{children}</div>
+            <div className="hud-scrollbar flex h-full flex-col min-h-0 overflow-y-auto">{children}</div>
           </Drawer.Dialog>
         </Drawer.Content>
       </Drawer.Backdrop>

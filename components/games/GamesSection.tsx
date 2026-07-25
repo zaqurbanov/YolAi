@@ -1,76 +1,94 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { CoinIcon } from '@/components/icons';
-import RpsGame from './RpsGame';
-import CoinFlipGame from './CoinFlipGame';
+import AnimatedNumber from '@/components/AnimatedNumber';
 import TicTacToeGame from './TicTacToeGame';
-
-export interface GameMultipliers {
-  rps: number;
-  coinflip: number;
-  tictactoe: number;
-}
 
 interface GamesSectionProps {
   initialBalance: number;
-  bet: number;
-  dailyCap: number;
-  multipliers: GameMultipliers;
+  initialEnergy: number;
+  maxEnergy: number;
+  initialTodayCount: number;
+  winReward: number;
 }
 
-// The three mini-games share one live balance and two section-wide states —
-// daily_cap_reached (all games locked for today) and unavailable (0066 not
-// applied yet, feature degrades to an empty state). Both are surfaced from the
-// server-action responses, never inferred client-side, so this orchestrator
-// owns them and hands each child a single settle callback + the derived
-// `locked` flag. Per-game reveal/animation lives in the children.
-export default function GamesSection({ initialBalance, bet, dailyCap, multipliers }: GamesSectionProps) {
+// The games section owns the live coin balance + energy meter and the running
+// "how many XO games today" count that decides difficulty (first game of the
+// day is easy). Every authoritative value comes from the server-action response
+// via onSettled — this never derives an outcome or mutates coins/energy itself.
+export default function GamesSection({
+  initialBalance,
+  initialEnergy,
+  maxEnergy,
+  initialTodayCount,
+  winReward,
+}: GamesSectionProps) {
   const [balance, setBalance] = useState(initialBalance);
-  const [capMessage, setCapMessage] = useState<string | null>(null);
-  const [unavailableMessage, setUnavailableMessage] = useState<string | null>(null);
+  const [energy, setEnergy] = useState(initialEnergy);
+  const [todayCount, setTodayCount] = useState(initialTodayCount);
+  const [unavailable, setUnavailable] = useState(false);
 
-  // Single settle point for every game. The shown balance is ALWAYS the
-  // server's returned `balance`; this never derives win/loss or mutates the
-  // balance itself. Broadcasts the same 'coin-balance-update' event the quiz /
-  // ad-watch cards use so the navbar CoinBadge stays live without a refresh.
-  const handleSettled = useCallback(
-    (status: string, message: string, newBalance?: number) => {
-      if (typeof newBalance === 'number') {
-        setBalance(newBalance);
-        window.dispatchEvent(new CustomEvent('coin-balance-update', { detail: { balance: newBalance } }));
-      }
-      if (status === 'daily_cap_reached') setCapMessage(message);
-      if (status === 'unavailable') setUnavailableMessage(message);
-    },
-    []
-  );
+  // The FIRST game of the day (no plays recorded yet) is easy; every game after
+  // is hard. Kept in sync with the server, which recomputes the same from the DB
+  // play count at settle time.
+  const difficulty: 'easy' | 'hard' = todayCount === 0 ? 'easy' : 'hard';
 
-  const locked = capMessage != null;
+  const handleSettled = useCallback((newBalance: number, newEnergy: number) => {
+    setBalance(newBalance);
+    setEnergy(newEnergy);
+    setTodayCount((c) => c + 1);
+    // Keep the navbar CoinBadge live without a refresh (same event the quiz /
+    // ad-watch cards emit).
+    window.dispatchEvent(new CustomEvent('coin-balance-update', { detail: { balance: newBalance } }));
+  }, []);
+
+  const handleUnavailable = useCallback(() => setUnavailable(true), []);
+
+  // Keep the header balance in sync when another card on this page (e.g. the
+  // wheel) credits coins and broadcasts the shared balance event.
+  useEffect(() => {
+    const onBalance = (e: Event) => {
+      const detail = (e as CustomEvent<{ balance?: number }>).detail;
+      if (typeof detail?.balance === 'number') setBalance(detail.balance);
+    };
+    window.addEventListener('coin-balance-update', onBalance);
+    return () => window.removeEventListener('coin-balance-update', onBalance);
+  }, []);
 
   const header = (
     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-outline-variant/30 pb-4">
       <div className="flex items-center gap-3">
         <div className="flex size-10 items-center justify-center rounded-xl bg-primary/15 text-primary">
-          <CoinIcon />
+          <span aria-hidden className="text-lg">🎮</span>
         </div>
         <div>
-          <h2 className="text-headline-md text-[18px]">Oyunlar</h2>
-          <p className="text-legal-citation text-on-surface-variant">Hər oyun {bet} coin · gündə {dailyCap} oyun</p>
+          <h2 className="text-headline-md text-[18px]">XO Oyunu</h2>
+          <p className="text-legal-citation text-on-surface-variant">
+            Kompüterə qarşı oyna · udanda +{winReward} coin
+          </p>
         </div>
       </div>
-      <span className="flex items-center gap-1.5 rounded-full bg-safety-yellow/15 px-3 py-1 text-safety-yellow">
-        <CoinIcon width={16} height={16} />
-        <span className="text-body-md font-semibold tabular-nums">{balance}</span>
-      </span>
+      <div className="flex items-center gap-2">
+        <span className="flex items-center gap-1.5 rounded-full bg-caution-orange/15 px-3 py-1 text-caution-orange">
+          <span aria-hidden>⚡</span>
+          <span className="text-body-md font-semibold tabular-nums">
+            {energy}/{maxEnergy}
+          </span>
+        </span>
+        <span className="flex items-center gap-1.5 rounded-full bg-safety-yellow/15 px-3 py-1 text-safety-yellow">
+          <CoinIcon width={16} height={16} />
+          <AnimatedNumber value={balance} className="text-body-md font-semibold tabular-nums" />
+        </span>
+      </div>
     </div>
   );
 
-  if (unavailableMessage) {
+  if (unavailable) {
     return (
       <div className="glass-card rounded-2xl p-6 space-y-4 lg:col-span-2">
         {header}
-        <p className="text-body-md text-on-surface-variant">{unavailableMessage}</p>
+        <p className="text-body-md text-on-surface-variant">Oyun hazırda əlçatan deyil.</p>
       </div>
     );
   }
@@ -78,58 +96,14 @@ export default function GamesSection({ initialBalance, bet, dailyCap, multiplier
   return (
     <div className="glass-card rounded-2xl p-6 space-y-4 lg:col-span-2">
       {header}
-
-      {capMessage && (
-        <div className="rounded-xl border border-caution-orange/30 bg-caution-orange/10 px-4 py-3">
-          <p className="text-body-md text-caution-orange">{capMessage}</p>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <RpsGame
-          balance={balance}
-          bet={bet}
-          multiplier={multipliers.rps}
-          locked={locked}
-          onSettled={handleSettled}
-        />
-        <CoinFlipGame
-          balance={balance}
-          bet={bet}
-          multiplier={multipliers.coinflip}
-          locked={locked}
-          onSettled={handleSettled}
-        />
+      <div className="mx-auto w-full max-w-sm">
         <TicTacToeGame
-          balance={balance}
-          bet={bet}
-          multiplier={multipliers.tictactoe}
-          locked={locked}
+          energy={energy}
+          difficulty={difficulty}
           onSettled={handleSettled}
+          onUnavailable={handleUnavailable}
         />
       </div>
     </div>
   );
-}
-
-// Shared child contract.
-export interface GameChildProps {
-  balance: number;
-  bet: number;
-  multiplier: number;
-  locked: boolean;
-  onSettled: (status: string, message: string, balance?: number) => void;
-}
-
-// Small helpers reused by the game children.
-export function prefersReducedMotion(): boolean {
-  return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-}
-
-// Shared shell so the three games read as one family: title, a result/outcome
-// strip, and the disabled-reason messaging all live in one place.
-export function outcomeToneClass(outcome: 'win' | 'draw' | 'loss' | undefined): string {
-  if (outcome === 'win') return 'text-go-green';
-  if (outcome === 'loss') return 'text-error';
-  return 'text-on-surface-variant';
 }

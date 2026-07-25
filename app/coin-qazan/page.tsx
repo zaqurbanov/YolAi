@@ -15,13 +15,13 @@ import { getDailyQuestionForUser } from '@/lib/quiz/questions';
 import { getWeeklyLeaderboard } from '@/lib/coins/leaderboard';
 import { getCoinBalanceStatus } from '@/lib/chat/coins';
 import {
-  DEFAULT_GAME_BET_AMOUNT,
-  DEFAULT_GAME_DAILY_PLAY_CAP,
-  DEFAULT_RPS_WIN_MULTIPLIER,
-  DEFAULT_COINFLIP_WIN_MULTIPLIER,
-  DEFAULT_TICTACTOE_WIN_MULTIPLIER,
+  getEnergyStatus,
+  getTicTacToeTodayCount,
+  getTicTacToeWinReward,
 } from '@/lib/coins/games';
+import { getWheelStatus } from '@/lib/coins/wheel';
 import GamesSection from '@/components/games/GamesSection';
+import WheelGame from '@/components/games/WheelGame';
 import DailyQuizCard from '@/components/account/DailyQuizCard';
 import ReferralCard from '@/components/account/ReferralCard';
 import AdWatchCard from '@/components/account/AdWatchCard';
@@ -59,6 +59,10 @@ export default async function CoinQazanPage() {
     adViewDurationSeconds,
     weeklyLeaderboard,
     coinStatus,
+    energyStatus,
+    ticTacToeTodayCount,
+    ticTacToeWinReward,
+    wheelStatus,
   ] = await Promise.all([
     getQuizRewardAmount(),
     hasClaimedToday(user.id),
@@ -71,6 +75,10 @@ export default async function CoinQazanPage() {
     getAdViewDurationSeconds(),
     getWeeklyLeaderboard(user.id),
     getCoinBalanceStatus(user.id),
+    getEnergyStatus(user.id),
+    getTicTacToeTodayCount(user.id),
+    getTicTacToeWinReward(),
+    getWheelStatus(user.id),
   ]);
 
   // Strip correctIndex before it ever reaches the client component's props —
@@ -121,14 +129,13 @@ export default async function CoinQazanPage() {
 
         <GamesSection
           initialBalance={coinStatus.balance}
-          bet={DEFAULT_GAME_BET_AMOUNT}
-          dailyCap={DEFAULT_GAME_DAILY_PLAY_CAP}
-          multipliers={{
-            rps: DEFAULT_RPS_WIN_MULTIPLIER,
-            coinflip: DEFAULT_COINFLIP_WIN_MULTIPLIER,
-            tictactoe: DEFAULT_TICTACTOE_WIN_MULTIPLIER,
-          }}
+          initialEnergy={energyStatus.balance}
+          maxEnergy={energyStatus.max}
+          initialTodayCount={ticTacToeTodayCount}
+          winReward={ticTacToeWinReward}
         />
+
+        <WheelGame prizes={wheelStatus.prizes} initialStatus={wheelStatus.status} />
 
         <div className="glass-card rounded-2xl p-6 space-y-4 lg:col-span-2">
           <div className="flex items-center gap-3 border-b border-outline-variant/30 pb-4">

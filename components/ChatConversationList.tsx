@@ -173,7 +173,7 @@ export function ChatConversationList() {
         Yeni söhbət
       </button>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
+      <div className="hud-scrollbar flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
         {conversations === null && <p className="mono-label px-2 py-1 text-muted">Yüklənir...</p>}
         {conversations !== null && conversations.length === 0 && (
           <p className="mono-label px-2 py-1 text-muted">Söhbət yoxdur</p>

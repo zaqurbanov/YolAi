@@ -26,8 +26,6 @@ interface CategoryCardProps {
   index: number;
   /** Wraps the card in a Link when provided (used by the home-page category preview). */
   href?: string;
-  /** Stagger delay in ms for the topic-card-in entrance animation. */
-  animationDelayMs?: number;
   /** Published quiz-question count for the category; chip is hidden when 0/undefined. */
   questionCount?: number;
 }
@@ -37,14 +35,13 @@ interface CategoryCardProps {
 // card shape. app/oyrenme/page.tsx renders the same accent styling for its
 // lesson cards but with different content (progress bar, CTA), so it uses
 // ACCENT_STYLES directly rather than this component.
-export function CategoryCard({ category, index, href, animationDelayMs, questionCount }: CategoryCardProps) {
+export function CategoryCard({ category, index, href, questionCount }: CategoryCardProps) {
   const { icon: Icon, title, description, citation } = category;
   const accent = ACCENT_STYLES[index % ACCENT_STYLES.length];
 
   const card = (
     <Card
-      className={`topic-card-in motion-reduce:animate-none glass-card group h-full border border-transparent border-l-4 ${accent.border} transition duration-200 hover:-translate-y-1 hover:shadow-lg`}
-      style={animationDelayMs !== undefined ? { animationDelay: `${animationDelayMs}ms` } : undefined}
+      className={`glass-card group h-full border border-transparent border-l-4 ${accent.border} transition duration-200 hover:-translate-y-1 hover:shadow-lg`}
     >
       <Card.Header>
         <div

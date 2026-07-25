@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Modal, Button } from '@heroui/react';
-import { formatMsUntilReset } from '@/lib/format/coins';
+import { useResetCountdown } from '@/components/useResetCountdown';
 
 interface CoinState {
   balance: number;
@@ -30,6 +30,9 @@ export default function CoinBadge() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const prevBalanceRef = useRef<number | null>(null);
   const badgeRef = useRef<HTMLButtonElement>(null);
+  // Ticks toward the next Baku 00:00 only while the modal is open (matches the
+  // server's Baku-midnight quota reset); supersedes the static state.msUntilReset.
+  const resetCountdown = useResetCountdown(isModalOpen);
 
   useEffect(() => {
     let cancelled = false;
@@ -135,8 +138,8 @@ export default function CoinBadge() {
                 </div>
                 <div className="flex items-center justify-between gap-4">
                   <dt className="text-sm text-on-surface-variant">Sıfırlanmaya qalan vaxt</dt>
-                  <dd className="mono-label text-on-surface">
-                    {state.msUntilReset != null ? formatMsUntilReset(state.msUntilReset) : '—'}
+                  <dd className="mono-label tabular-nums text-on-surface">
+                    {resetCountdown ?? '—'}
                   </dd>
                 </div>
               </dl>

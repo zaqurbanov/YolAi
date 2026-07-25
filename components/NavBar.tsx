@@ -76,14 +76,16 @@ export default function NavBar() {
           <span aria-hidden className="h-8 w-16 rounded-full bg-surface-hover/40 sm:w-40" />
         ) : (
           <>
+            {/* Desktop only — on mobile this moves into the 3-dot menu
+                (NavBarMenu) to keep the navbar from getting crowded. */}
             {nav.user && !nav.isAdmin && (
               <Link
                 href="/coin-qazan"
                 data-tour="coin-qazan-link"
-                className="glass-card mono-label flex items-center gap-1.5 rounded-full px-3 py-1.5 text-on-surface transition-colors hover:bg-surface-tertiary/60"
+                className="glass-card mono-label hidden items-center gap-1.5 rounded-full px-3 py-1.5 text-on-surface transition-colors hover:bg-surface-tertiary/60 sm:flex"
               >
                 <CoinIcon width={14} height={14} />
-                <span className="hidden sm:inline">Coin qazan</span>
+                <span>Coin qazan</span>
               </Link>
             )}
             {nav.user && !nav.isAdmin && <CoinBadge />}
@@ -95,7 +97,10 @@ export default function NavBar() {
             )}
           </>
         )}
-        <ThemeToggle />
+        {/* Desktop only — on mobile the theme switch lives in the 3-dot menu. */}
+        <span className="hidden sm:inline-flex">
+          <ThemeToggle />
+        </span>
         {nav?.user && (
           <Link
             href="/account"

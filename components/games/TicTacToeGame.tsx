@@ -1,15 +1,16 @@
 'use client';
 
-import { useState, useTransition } from 'react';
-import { playTicTacToeAction, type TicTacToePlayState } from '@/app/coin-qazan/actions';
-import { prefersReducedMotion, outcomeToneClass, type GameChildProps } from './GamesSection';
+import { useCallback, useMemo, useState } from 'react';
+import { Button } from '@heroui/react';
+import { useResetCountdown } from '@/components/useResetCountdown';
+import { playTicTacToeAction } from '@/app/coin-qazan/actions';
 
-// Local mirror of the server's optimal AI (lib/coins/games.ts): user is X and
-// moves first, AI is O, minimax with a first-empty-cell (0..8) tie-break, so
-// the local board matches the server's re-simulation move-for-move. This is a
-// UX responsiveness mirror ONLY — the shown outcome/payout/balance is ALWAYS
-// the server's returned value, and if the server board ever differs we adopt
-// the server's board. The client never scores the game.
+// The board opponent is a DETERMINISTIC computer algorithm, mirrored EXACTLY
+// from lib/coins/games.ts so the local game the user plays matches the server's
+// re-simulation (which is the authority on the outcome + reward). "easy" (first
+// empty cell) is used for the user's first game of the day; "hard" (unbeatable
+// minimax) for every game after.
+
 type Cell = 'X' | 'O' | null;
 
 const WIN_LINES: readonly [number, number, number][] = [
@@ -23,11 +24,17 @@ const WIN_LINES: readonly [number, number, number][] = [
   [2, 4, 6],
 ];
 
-function winnerOf(board: Cell[]): 'X' | 'O' | null {
-  for (const [a, b, c] of WIN_LINES) {
-    if (board[a] && board[a] === board[b] && board[a] === board[c]) return board[a] as 'X' | 'O';
+function winningLine(board: Cell[]): [number, number, number] | null {
+  for (const line of WIN_LINES) {
+    const [a, b, c] = line;
+    if (board[a] && board[a] === board[b] && board[a] === board[c]) return line;
   }
   return null;
+}
+
+function winnerOf(board: Cell[]): 'X' | 'O' | null {
+  const line = winningLine(board);
+  return line ? (board[line[0]] as 'X' | 'O') : null;
 }
 
 function isFull(board: Cell[]): boolean {
@@ -35,9 +42,9 @@ function isFull(board: Cell[]): boolean {
 }
 
 function minimax(board: Cell[], turn: 'X' | 'O', depth: number): number {
-  const w = winnerOf(board);
-  if (w === 'O') return 10 - depth;
-  if (w === 'X') return depth - 10;
+  const winner = winnerOf(board);
+  if (winner === 'O') return 10 - depth;
+  if (winner === 'X') return depth - 10;
   if (isFull(board)) return 0;
 
   if (turn === 'O') {
@@ -60,7 +67,7 @@ function minimax(board: Cell[], turn: 'X' | 'O', depth: number): number {
   return best;
 }
 
-function bestAiMove(board: Cell[]): number {
+function hardAiMove(board: Cell[]): number {
   let bestScore = -Infinity;
   let bestMove = -1;
   for (let i = 0; i < 9; i++) {
@@ -76,125 +83,178 @@ function bestAiMove(board: Cell[]): number {
   return bestMove;
 }
 
+function easyAiMove(board: Cell[]): number {
+  for (let i = 0; i < 9; i++) if (board[i] === null) return i;
+  return -1;
+}
+
+function aiMove(board: Cell[], difficulty: 'easy' | 'hard'): number {
+  return difficulty === 'easy' ? easyAiMove(board) : hardAiMove(board);
+}
+
+interface TicTacToeGameProps {
+  energy: number;
+  difficulty: 'easy' | 'hard';
+  onSettled: (balance: number, energy: number) => void;
+  onUnavailable: () => void;
+}
+
+type Outcome = 'win' | 'draw' | 'loss';
+
 const EMPTY: Cell[] = Array(9).fill(null);
 
-type Phase = 'idle' | 'thinking' | 'submitting' | 'done';
-
-export default function TicTacToeGame({ balance, bet, multiplier, locked, onSettled }: GameChildProps) {
+export default function TicTacToeGame({
+  energy,
+  difficulty,
+  onSettled,
+  onUnavailable,
+}: TicTacToeGameProps) {
   const [board, setBoard] = useState<Cell[]>(EMPTY);
   const [userMoves, setUserMoves] = useState<number[]>([]);
-  const [phase, setPhase] = useState<Phase>('idle');
-  const [result, setResult] = useState<TicTacToePlayState | null>(null);
-  const [, startTransition] = useTransition();
+  const [pending, setPending] = useState(false);
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const [reward, setReward] = useState(0);
+  const [note, setNote] = useState<string | null>(null);
 
-  const insufficient = balance < bet;
-  const blocked = locked || insufficient;
-  const disabledReason = locked
-    ? 'Bugünkü oyun limitinə çatmısınız'
-    : insufficient
-      ? 'Kifayət qədər coininiz yoxdur'
-      : null;
+  const noEnergy = energy < 1;
+  const gameOver = outcome !== null;
+  const winLine = useMemo(() => winningLine(board), [board]);
+  // Energy resets at the next Baku 00:00 (grant_daily_energy keys off that date).
+  const countdown = useResetCountdown(noEnergy);
 
-  const canTap = phase === 'idle' && !blocked && result == null;
+  const submit = useCallback(
+    async (moves: number[]) => {
+      setPending(true);
+      setNote(null);
+      const res = await playTicTacToeAction(moves);
+      setPending(false);
 
-  function submit(moves: number[], localBoard: Cell[]) {
-    setPhase('submitting');
-    startTransition(async () => {
-      const state = await playTicTacToeAction(moves);
-      onSettled(state.status, state.message, state.balance);
-      // Adopt the server's authoritative board when it returns one; otherwise
-      // keep the local terminal board.
-      if (state.status === 'success' && Array.isArray(state.board)) {
-        setBoard(state.board as Cell[]);
-      } else {
-        setBoard(localBoard);
+      if (res.status === 'success' && res.outcome) {
+        setOutcome(res.outcome);
+        setReward(res.reward ?? 0);
+        if (typeof res.balance === 'number' && typeof res.energy === 'number') {
+          onSettled(res.balance, res.energy);
+        }
+        return;
       }
-      setResult(state);
-      setPhase('done');
-    });
-  }
-
-  function handleTap(i: number) {
-    if (!canTap || board[i] !== null) return;
-    const afterUser = board.slice();
-    afterUser[i] = 'X';
-    const moves = [...userMoves, i];
-    setBoard(afterUser);
-    setUserMoves(moves);
-
-    if (winnerOf(afterUser) === 'X' || isFull(afterUser)) {
-      submit(moves, afterUser);
-      return;
-    }
-
-    setPhase('thinking');
-    const delay = prefersReducedMotion() ? 0 : 350;
-    window.setTimeout(() => {
-      const aiMove = bestAiMove(afterUser);
-      const afterAi = afterUser.slice();
-      if (aiMove >= 0) afterAi[aiMove] = 'O';
-      setBoard(afterAi);
-      if (winnerOf(afterAi) === 'O' || isFull(afterAi)) {
-        submit(moves, afterAi);
-      } else {
-        setPhase('idle');
+      if (res.status === 'unavailable') {
+        onUnavailable();
+        return;
       }
-    }, delay);
-  }
+      // no_energy / invalid_input / error — surface the message and reset the
+      // board so the user can start over (the play was not settled).
+      setNote(res.message);
+      setBoard(EMPTY);
+      setUserMoves([]);
+    },
+    [onSettled, onUnavailable]
+  );
 
-  function reset() {
+  const handleCell = useCallback(
+    (i: number) => {
+      if (pending || gameOver || noEnergy || board[i] !== null) return;
+
+      const next = board.slice();
+      next[i] = 'X';
+      const moves = [...userMoves, i];
+      setUserMoves(moves);
+
+      if (winnerOf(next) === 'X' || isFull(next)) {
+        setBoard(next);
+        void submit(moves);
+        return;
+      }
+
+      const ai = aiMove(next, difficulty);
+      if (ai >= 0) next[ai] = 'O';
+
+      setBoard(next);
+
+      if (winnerOf(next) === 'O' || isFull(next)) {
+        void submit(moves);
+      }
+    },
+    [board, userMoves, pending, gameOver, noEnergy, difficulty, submit]
+  );
+
+  const reset = useCallback(() => {
     setBoard(EMPTY);
     setUserMoves([]);
-    setResult(null);
-    setPhase('idle');
-  }
+    setOutcome(null);
+    setReward(0);
+    setNote(null);
+  }, []);
 
-  const status =
-    phase === 'thinking' || phase === 'submitting'
-      ? 'Rəqib düşünür...'
-      : result?.message ?? (disabledReason ?? 'Sən X-sən, ilk gedişi et');
+  const statusLine = (() => {
+    if (noEnergy && !gameOver) return 'Enerjin bitib';
+    if (outcome === 'win') return reward > 0 ? `Qazandın! +${reward} coin 🎉` : 'Qazandın! 🎉';
+    if (outcome === 'draw') return 'Heç-heçə 🤝';
+    if (outcome === 'loss') return 'Uduzdun. Növbəti dəfə!';
+    if (difficulty === 'easy') return 'Günün ilk oyunu — udmaq asandır 🎯';
+    return 'Sənin növbən (X)';
+  })();
+
+  const statusTone =
+    outcome === 'win'
+      ? 'text-go-green'
+      : outcome === 'loss'
+        ? 'text-error'
+        : difficulty === 'easy' && !gameOver && !noEnergy
+          ? 'text-go-green'
+          : 'text-on-surface-variant';
+
+  const boardDisabled = pending || gameOver || noEnergy;
 
   return (
-    <div className="flex flex-col rounded-xl border border-outline-variant/30 bg-surface-container-low/40 p-4">
-      <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-body-lg font-semibold text-on-surface">XO (Xaç-Sıfır)</h3>
-        <span className="text-legal-citation text-on-surface-variant">Qazanc {Math.round(bet * multiplier)}</span>
-      </div>
-
-      <div className="mx-auto grid grid-cols-3 gap-1.5">
-        {board.map((cell, i) => (
-          <button
-            key={i}
-            type="button"
-            onClick={() => handleTap(i)}
-            disabled={!canTap || cell !== null}
-            aria-label={`Xana ${i + 1}${cell ? `: ${cell}` : ''}`}
-            className="flex size-12 items-center justify-center rounded-lg border border-outline-variant/40 bg-surface-container/40 text-2xl font-bold transition enabled:hover:border-primary/60 enabled:hover:bg-primary/10 disabled:cursor-default"
-          >
-            {cell && (
-              <span
-                className={`game-mark-in motion-reduce:animate-none ${cell === 'X' ? 'text-primary' : 'text-caution-orange'}`}
-              >
-                {cell}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
-
-      <p className={`mt-3 min-h-[1.25rem] text-center text-body-md ${outcomeToneClass(result?.outcome ?? undefined)}`}>
-        {status}
+    <div className="flex flex-col items-center gap-4">
+      <p className={`text-body-md font-medium ${statusTone}`} aria-live="polite">
+        {statusLine}
       </p>
 
-      {phase === 'done' && (
-        <button
-          type="button"
-          onClick={reset}
-          disabled={blocked}
-          className="mt-2 rounded-lg border border-primary/40 bg-primary/10 py-2 text-body-md font-medium text-primary transition hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          Yenidən oyna
-        </button>
+      <div
+        className={`grid grid-cols-3 gap-2 transition-opacity ${boardDisabled && !gameOver ? 'opacity-60' : ''}`}
+      >
+        {board.map((cell, i) => {
+          const inWin = winLine?.includes(i);
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={() => handleCell(i)}
+              disabled={boardDisabled || cell !== null}
+              aria-label={`Xana ${i + 1}${cell ? `: ${cell}` : ''}`}
+              className={`flex size-20 items-center justify-center rounded-xl border text-3xl font-bold transition
+                ${inWin ? 'border-go-green/60 bg-go-green/15' : 'border-outline-variant/40 bg-surface-tertiary/40'}
+                ${cell === null && !boardDisabled ? 'hover:border-primary/50 hover:bg-primary/5' : ''}
+                ${cell === 'X' ? 'text-primary' : cell === 'O' ? 'text-caution-orange' : 'text-on-surface-variant'}`}
+            >
+              <span className={cell ? 'xo-mark-in motion-reduce:animate-none' : ''}>{cell ?? ''}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {note && <p className="text-label-sm text-caution-orange">{note}</p>}
+
+      {noEnergy ? (
+        <div className="flex flex-col items-center gap-1">
+          <p className="text-label-sm text-on-surface-variant">Enerji yenilənməsinə qalıb:</p>
+          <p className="text-body-md font-semibold tabular-nums text-caution-orange">
+            {countdown ?? '—'}
+          </p>
+        </div>
+      ) : (
+        gameOver && (
+          <Button
+            variant="primary"
+            size="sm"
+            isDisabled={pending}
+            onPress={reset}
+            className="glow-primary"
+          >
+            Yenidən oyna (1 ⚡)
+          </Button>
+        )
       )}
     </div>
   );

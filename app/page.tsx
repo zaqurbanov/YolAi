@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { buttonVariants } from '@heroui/styles';
 import { Card } from '@heroui/react';
 import { CategoryCard } from '@/components/CategoryCard';
+import ScrollReveal from '@/components/ScrollReveal';
 import Footer from '@/components/Footer';
 import { CheckIcon, FineIcon, SparkleIcon } from '@/components/icons';
 import { getCategoryContent, getCategoryQuestionCounts } from '@/lib/content/categoryContent';
@@ -117,13 +118,13 @@ export default async function Home() {
               Suala başla
             </Link>
             <Link
-              href="#movzular"
+              href="/oyrenme"
               className={
                 buttonVariants({ variant: 'ghost', size: 'lg' }) +
                 ' transition-transform hover:scale-[1.03] active:scale-[0.98]'
               }
             >
-              Mövzulara bax
+              Sürücülük vəsiqəsi üçün dərslərə başla
             </Link>
           </div>
 
@@ -183,15 +184,18 @@ export default async function Home() {
 
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {topics.map((topic, i) => (
-              <div key={topic.title} className={FEATURED_TOPIC_INDEXES.has(i) ? 'sm:col-span-2' : ''}>
+              <ScrollReveal
+                key={topic.title}
+                className={FEATURED_TOPIC_INDEXES.has(i) ? 'sm:col-span-2' : ''}
+                delayMs={i * 80}
+              >
                 <CategoryCard
                   category={topic}
                   index={i}
-                  animationDelayMs={i * 80}
                   href={`/chat?q=${encodeURIComponent(topic.question)}`}
                   questionCount={questionCounts[topic.title]}
                 />
-              </div>
+              </ScrollReveal>
             ))}
           </div>
         </div>

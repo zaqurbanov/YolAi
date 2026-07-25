@@ -86,7 +86,11 @@ export default function DailyQuizCard({ question, options, alreadyClaimed, rewar
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
             <div className="flex size-9 items-center justify-center rounded-lg bg-caution-orange/15 text-caution-orange">
-              <FlameIcon width={20} height={20} />
+              <FlameIcon
+                width={20}
+                height={20}
+                className={liveStreak > 0 ? 'streak-flame motion-reduce:animate-none' : undefined}
+              />
             </div>
             <div>
               <p className="text-body-md font-medium text-on-surface">{streakLabel}</p>
