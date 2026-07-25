@@ -601,6 +601,77 @@ html:not(.dark) .tour-spotlight {
   animation: coin-badge-pulse 550ms ease-out;
 }
 
+/* Coin mini-games (components/games/*). All looping/transform animations get
+   motion-reduce:animate-none in markup per prefers-reduced-motion, matching the
+   home-page motion polish above — reduced-motion users see the (server-
+   authoritative) result immediately with no reveal. */
+
+/* Sikkə atma: a 3D coin spinning on its Y axis while the flip is in flight. */
+@keyframes game-coin-spin {
+  from {
+    transform: perspective(400px) rotateY(0deg);
+  }
+  to {
+    transform: perspective(400px) rotateY(1800deg);
+  }
+}
+
+.game-coin-spin {
+  animation: game-coin-spin 900ms cubic-bezier(0.3, 0.1, 0.2, 1) infinite;
+}
+
+/* RPS / coin result reveal: a quick scale + fade-in so the revealed server
+   choice / landed side reads as "landing" rather than popping. */
+@keyframes game-reveal {
+  from {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.game-reveal {
+  animation: game-reveal 320ms ease-out;
+}
+
+/* XO: a placed mark eases in so the local board feels live before the server
+   returns its authoritative outcome. */
+@keyframes game-mark-in {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.game-mark-in {
+  animation: game-mark-in 180ms ease-out;
+}
+
+/* RPS "thinking" placeholder: a gentle pulse on the ❓ while the action is in
+   flight. */
+@keyframes game-thinking {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(0.94);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+}
+
+.game-thinking {
+  animation: game-thinking 700ms ease-in-out infinite;
+}
+
 /* Chat "PDF kimi ixrac et" export (app/chat/page.tsx): print:hidden on the
    normal chrome + a print:block transcript section print the transcript
    plainly via the browser's print dialog ("Save as PDF") — no PDF library
