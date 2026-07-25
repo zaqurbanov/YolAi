@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { buttonVariants } from '@heroui/styles';
 import { createClient } from '@/lib/supabase/server';
-import { getQuizRewardAmount, hasClaimedToday, getQuizStreak } from '@/lib/coins/quiz';
+import { getQuizRewardAmount, hasClaimedToday, getStreakStatus } from '@/lib/coins/quiz';
 import { getOrCreateReferralCode, getReferralBonusAmount } from '@/lib/coins/referrals';
 import {
   getAdWatchRewardAmount,
@@ -12,9 +12,11 @@ import {
   getAdViewDurationSeconds,
 } from '@/lib/coins/adWatch';
 import { getDailyQuestionForUser } from '@/lib/quiz/questions';
+import { getWeeklyLeaderboard } from '@/lib/coins/leaderboard';
 import DailyQuizCard from '@/components/account/DailyQuizCard';
 import ReferralCard from '@/components/account/ReferralCard';
 import AdWatchCard from '@/components/account/AdWatchCard';
+import WeeklyLeaderboardCard from '@/components/account/WeeklyLeaderboardCard';
 import Footer from '@/components/Footer';
 import { ArrowLeftIcon, RulesIcon, CoinIcon } from '@/components/icons';
 
@@ -39,23 +41,25 @@ export default async function CoinQazanPage() {
   const [
     quizReward,
     quizAlreadyClaimed,
-    quizStreak,
+    streakStatus,
     referralCode,
     referralBonusAmount,
     adWatchReward,
     adWatchDailyMax,
     adWatchClaimsToday,
     adViewDurationSeconds,
+    weeklyLeaderboard,
   ] = await Promise.all([
     getQuizRewardAmount(),
     hasClaimedToday(user.id),
-    getQuizStreak(user.id),
+    getStreakStatus(user.id),
     getOrCreateReferralCode(user.id),
     getReferralBonusAmount(),
     getAdWatchRewardAmount(),
     getAdWatchDailyMax(),
     getAdWatchClaimsToday(user.id),
     getAdViewDurationSeconds(),
+    getWeeklyLeaderboard(user.id),
   ]);
 
   // Strip correctIndex before it ever reaches the client component's props —
@@ -84,12 +88,14 @@ export default async function CoinQazanPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <WeeklyLeaderboardCard leaderboard={weeklyLeaderboard} />
+
         <DailyQuizCard
           question={dailyQuestion.question}
           options={dailyQuestion.options}
           alreadyClaimed={quizAlreadyClaimed}
           reward={quizReward}
-          streak={quizStreak}
+          streakStatus={streakStatus}
         />
 
         <ReferralCard code={referralCode} bonusAmount={referralBonusAmount} />

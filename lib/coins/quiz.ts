@@ -1,5 +1,6 @@
 import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { isMissingRelationError } from '@/lib/supabase/missingRelation';
 
 // Phase 1 coin-earning mechanic (docs/coin-roadmap.md): a daily
 // traffic-law mini-quiz, one question per user per day
@@ -10,7 +11,58 @@ import { createAdminClient } from '@/lib/supabase/admin';
 const QUIZ_REWARD_KEY = 'daily_quiz_reward';
 const DEFAULT_QUIZ_REWARD = 3;
 
-export { QUIZ_REWARD_KEY, DEFAULT_QUIZ_REWARD };
+// Streak milestone bonuses: consecutive-correct-day -> extra coins credited on
+// exactly that day. Resolved server-side (never client-supplied). The RPC
+// (0064_daily_streak.sql) only APPLIES the map it is handed; this is the
+// authoritative default, overridable via app_settings.streak_milestone_bonuses.
+const STREAK_MILESTONE_KEY = 'streak_milestone_bonuses';
+const DEFAULT_STREAK_MILESTONE_BONUSES: Record<number, number> = {
+  3: 5,
+  7: 15,
+  14: 30,
+  30: 75,
+};
+
+export {
+  QUIZ_REWARD_KEY,
+  DEFAULT_QUIZ_REWARD,
+  STREAK_MILESTONE_KEY,
+  DEFAULT_STREAK_MILESTONE_BONUSES,
+};
+
+export interface StreakStatus {
+  current: number;
+  longest: number;
+  nextMilestone: number | null;
+  nextMilestoneBonus: number | null;
+}
+
+// Reads the app_settings override for the milestone map, failing OPEN to the
+// hardcoded TS default. Malformed entries (non-numeric day or bonus, <= 0) are
+// ignored individually rather than discarding the whole override.
+export async function getStreakMilestoneBonuses(): Promise<Record<number, number>> {
+  const { data, error } = await createAdminClient()
+    .from('app_settings')
+    .select('value')
+    .eq('key', STREAK_MILESTONE_KEY)
+    .maybeSingle();
+
+  if (error || !data || data.value == null) return DEFAULT_STREAK_MILESTONE_BONUSES;
+
+  const raw = data.value;
+  if (typeof raw !== 'object' || Array.isArray(raw)) return DEFAULT_STREAK_MILESTONE_BONUSES;
+
+  const parsed: Record<number, number> = {};
+  for (const [dayKey, bonusValue] of Object.entries(raw as Record<string, unknown>)) {
+    const day = Number(dayKey);
+    const bonus = typeof bonusValue === 'number' ? bonusValue : Number(bonusValue);
+    if (!Number.isInteger(day) || day <= 0) continue;
+    if (!Number.isFinite(bonus) || bonus <= 0) continue;
+    parsed[day] = bonus;
+  }
+
+  return Object.keys(parsed).length > 0 ? parsed : DEFAULT_STREAK_MILESTONE_BONUSES;
+}
 
 // Mirrors getGlobalMessagePrice's shape (lib/chat/coins.ts).
 export async function getQuizRewardAmount(): Promise<number> {
@@ -52,7 +104,14 @@ export async function hasClaimedToday(userId: string): Promise<boolean> {
 }
 
 type ClaimResult =
-  | { ok: true; balance: number; reward: number }
+  | {
+      ok: true;
+      balance: number;
+      reward: number;
+      currentStreak: number;
+      longestStreak: number;
+      milestoneBonus: number;
+    }
   | { ok: false; error: 'already_claimed' | 'incorrect' | 'error' };
 
 // WAS: returned immediately on a wrong answer without touching the DB at
@@ -72,7 +131,70 @@ export async function claimDailyQuizReward(
 ): Promise<ClaimResult> {
   const isCorrect = selectedIndex === correctIndex;
   const reward = await getQuizRewardAmount();
+  const bonuses = await getStreakMilestoneBonuses();
 
+  // Primary path: the streak-aware RPC (0064) does the claim AND the streak
+  // advance + milestone bonus in one transaction. Bonuses are passed from here
+  // (trusted server code), never from the client.
+  const { data, error } = await createAdminClient().rpc('claim_daily_quiz_with_streak', {
+    p_user_id: userId,
+    p_reward: reward,
+    p_is_correct: isCorrect,
+    p_streak_bonuses: bonuses,
+  });
+
+  if (error) {
+    const message = error.message ?? '';
+    if (message.includes('already_claimed')) {
+      return { ok: false, error: 'already_claimed' };
+    }
+    // Graceful degradation: the migration is applied by hand, so until it runs
+    // the new RPC does not exist. Fall back to the old claim RPC so the base
+    // reward is still credited (streak fields default to 0). Any OTHER error
+    // stays fail-closed.
+    if (isMissingRelationError(error)) {
+      return claimViaLegacyRpc(userId, isCorrect, reward);
+    }
+    console.error('[coins] claim_daily_quiz_with_streak RPC failed:', {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+    });
+    return { ok: false, error: 'error' };
+  }
+
+  if (typeof data !== 'object' || data === null) return { ok: false, error: 'error' };
+
+  // Reported only after the attempt is durably recorded, so a wrong answer
+  // can't be retried by simply ignoring this result.
+  if (!isCorrect) return { ok: false, error: 'incorrect' };
+
+  const result = data as {
+    balance?: number;
+    current_streak?: number;
+    longest_streak?: number;
+    milestone_bonus?: number;
+  };
+
+  return {
+    ok: true,
+    balance: Number(result.balance ?? 0),
+    reward,
+    currentStreak: Number(result.current_streak ?? 0),
+    longestStreak: Number(result.longest_streak ?? 0),
+    milestoneBonus: Number(result.milestone_bonus ?? 0),
+  };
+}
+
+// Pre-0064 fallback: credits the base reward via the still-present
+// claim_daily_quiz_reward RPC (returns numeric balance). No streak state, so
+// the streak fields report 0 until the migration is applied.
+async function claimViaLegacyRpc(
+  userId: string,
+  isCorrect: boolean,
+  reward: number
+): Promise<ClaimResult> {
   const { data, error } = await createAdminClient().rpc('claim_daily_quiz_reward', {
     p_user_id: userId,
     p_reward: reward,
@@ -84,7 +206,7 @@ export async function claimDailyQuizReward(
     if (message.includes('already_claimed')) {
       return { ok: false, error: 'already_claimed' };
     }
-    console.error('[coins] claim_daily_quiz_reward RPC failed:', {
+    console.error('[coins] claim_daily_quiz_reward (legacy) RPC failed:', {
       message: error.message,
       code: error.code,
       details: error.details,
@@ -94,12 +216,80 @@ export async function claimDailyQuizReward(
   }
 
   if (typeof data !== 'number') return { ok: false, error: 'error' };
-
-  // Reported only after the attempt is durably recorded, so a wrong answer
-  // can't be retried by simply ignoring this result.
   if (!isCorrect) return { ok: false, error: 'incorrect' };
 
-  return { ok: true, balance: data, reward };
+  return {
+    ok: true,
+    balance: data,
+    reward,
+    currentStreak: 0,
+    longestStreak: 0,
+    milestoneBonus: 0,
+  };
+}
+
+// Read-only display helper for the streak card. FAILS OPEN: a missing table,
+// any error, or no row all yield a zeroed streak whose nextMilestone points at
+// the smallest configured milestone — the display never blocks on infra.
+export async function getStreakStatus(userId: string): Promise<StreakStatus> {
+  const bonuses = await getStreakMilestoneBonuses();
+
+  const emptyStatus = (): StreakStatus => {
+    const { day, bonus } = smallestMilestone(bonuses);
+    return { current: 0, longest: 0, nextMilestone: day, nextMilestoneBonus: bonus };
+  };
+
+  const { data, error } = await createAdminClient()
+    .from('user_streaks')
+    .select('current_streak, longest_streak')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (error) {
+    if (!isMissingRelationError(error)) {
+      console.error('[coins] getStreakStatus read failed:', error);
+    }
+    return emptyStatus();
+  }
+
+  if (!data) return emptyStatus();
+
+  const current = Number(data.current_streak ?? 0);
+  const longest = Number(data.longest_streak ?? 0);
+  const next = nextMilestoneAfter(bonuses, current);
+
+  return {
+    current,
+    longest,
+    nextMilestone: next.day,
+    nextMilestoneBonus: next.bonus,
+  };
+}
+
+function smallestMilestone(bonuses: Record<number, number>): {
+  day: number | null;
+  bonus: number | null;
+} {
+  const days = Object.keys(bonuses)
+    .map(Number)
+    .sort((a, b) => a - b);
+  if (days.length === 0) return { day: null, bonus: null };
+  return { day: days[0], bonus: bonuses[days[0]] };
+}
+
+// Smallest milestone day strictly greater than `current`; null once the user
+// is at or past the largest configured milestone.
+function nextMilestoneAfter(
+  bonuses: Record<number, number>,
+  current: number
+): { day: number | null; bonus: number | null } {
+  const days = Object.keys(bonuses)
+    .map(Number)
+    .sort((a, b) => a - b);
+  for (const day of days) {
+    if (day > current) return { day, bonus: bonuses[day] };
+  }
+  return { day: null, bonus: null };
 }
 
 // All-time claim count for a motivational "you've done this N times" display

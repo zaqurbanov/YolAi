@@ -3,14 +3,14 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Avatar, Chip, Button } from '@heroui/react';
 import { buttonVariants } from '@heroui/styles';
-import { SparkleIcon, CoinIcon, TrashIcon, LogoutIcon, CheckIcon } from '@/components/icons';
+import { SparkleIcon, CoinIcon, TrashIcon, LogoutIcon, CheckIcon, FlameIcon } from '@/components/icons';
 import Footer from '@/components/Footer';
 import { createClient } from '@/lib/supabase/server';
 import { logout } from '@/app/(auth)/actions';
 import { getAccountStats } from '@/lib/account/getAccountStats';
 import { getCoinBalanceStatus } from '@/lib/chat/coins';
 import { getTransferMinAmount, getTransferHistory } from '@/lib/coins/transfers';
-import { getQuizClaimsCount } from '@/lib/coins/quiz';
+import { getQuizClaimsCount, getStreakStatus } from '@/lib/coins/quiz';
 import { formatAzDate } from '@/lib/format/date';
 import { formatMsUntilReset } from '@/lib/format/coins';
 import AdSlot from '@/components/AdSlot';
@@ -60,9 +60,14 @@ export default async function AccountPage() {
 
   const coins = isAdmin ? null : await getCoinBalanceStatus(user.id);
 
-  const [transferMinAmount, transferHistory, quizClaimsCount] = isAdmin
-    ? [null, null, null]
-    : await Promise.all([getTransferMinAmount(), getTransferHistory(user.id), getQuizClaimsCount(user.id)]);
+  const [transferMinAmount, transferHistory, quizClaimsCount, streakStatus] = isAdmin
+    ? [null, null, null, null]
+    : await Promise.all([
+        getTransferMinAmount(),
+        getTransferHistory(user.id),
+        getQuizClaimsCount(user.id),
+        getStreakStatus(user.id),
+      ]);
 
   const totalSpent = isAdmin
     ? 0
@@ -181,6 +186,12 @@ export default async function AccountPage() {
           <div className="mt-1 text-body-md text-on-surface-variant">
             Sıfırlanmaya qalan vaxt: {formatMsUntilReset(coins.msUntilReset)}
           </div>
+          {streakStatus && streakStatus.current > 0 && (
+            <div className="mt-2 flex items-center gap-1.5 text-body-md text-caution-orange">
+              <FlameIcon width={16} height={16} />
+              <span>{streakStatus.current} gün ardıcıl seriya</span>
+            </div>
+          )}
           <div className="mt-4 flex flex-wrap gap-2">
             <Link
               href="/qiymetler"

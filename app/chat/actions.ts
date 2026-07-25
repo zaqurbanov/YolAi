@@ -19,6 +19,8 @@ export interface QuizClaimState {
   message: string;
   balance?: number;
   reward?: number;
+  streak?: number;
+  milestoneBonus?: number;
 }
 
 // Server action for the daily quiz's answer submission. Looks the day's
@@ -57,10 +59,18 @@ export async function claimDailyQuizReward(selectedIndex: number): Promise<QuizC
 
   revalidatePath('/account');
   revalidatePath('/chat');
+
+  const message =
+    result.milestoneBonus > 0
+      ? `Düz cavab! ${result.reward} coin qazandınız — ${result.currentStreak} günlük seriya! +${result.milestoneBonus} bonus coin`
+      : `Düz cavab! ${result.reward} coin qazandınız`;
+
   return {
     status: 'correct',
-    message: `Düz cavab! ${result.reward} coin qazandınız`,
+    message,
     balance: result.balance,
     reward: result.reward,
+    streak: result.currentStreak,
+    milestoneBonus: result.milestoneBonus,
   };
 }
