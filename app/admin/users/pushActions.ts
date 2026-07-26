@@ -2,6 +2,7 @@
 
 import { requireAdmin } from '@/lib/auth/requireAdmin';
 import { broadcastDailyReminder } from '@/lib/push/broadcast';
+import { broadcastNotificationToAllUsers } from '@/lib/notifications/notifications';
 import { logError } from '@/lib/logging/logError';
 
 export interface SendPushReminderResult {
@@ -32,6 +33,32 @@ export async function sendPushReminderToAll(): Promise<SendPushReminderResult> {
   } catch (err) {
     void logError('actions.admin.push.broadcast', err);
     console.error('[sendPushReminderToAll] broadcast failed', err);
+    return { error: 'Bildirişlər göndərilə bilmədi' };
+  }
+}
+
+export interface SendBroadcastNotificationResult {
+  error?: string;
+  sent?: number;
+  failed?: number;
+}
+
+const MAX_MESSAGE_LENGTH = 500;
+
+export async function sendBroadcastNotification(message: string): Promise<SendBroadcastNotificationResult> {
+  const check = await requireAdmin();
+  if (!check.ok) return { error: check.message };
+
+  const trimmed = message?.trim() ?? '';
+  if (!trimmed) return { error: 'Mesaj boş ola bilməz' };
+  if (trimmed.length > MAX_MESSAGE_LENGTH) return { error: `Mesaj ${MAX_MESSAGE_LENGTH} simvoldan uzun ola bilməz` };
+
+  try {
+    const { sent, failed } = await broadcastNotificationToAllUsers(trimmed);
+    return { sent, failed };
+  } catch (err) {
+    void logError('actions.admin.notifications.broadcast', err);
+    console.error('[sendBroadcastNotification] broadcast failed', err);
     return { error: 'Bildirişlər göndərilə bilmədi' };
   }
 }

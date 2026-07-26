@@ -21,9 +21,11 @@ import {
   getEnergyPurchaseConfig,
 } from '@/lib/coins/games';
 import { getWheelStatus } from '@/lib/coins/wheel';
+import { getDailyQuestStatus } from '@/lib/coins/dailyQuests';
 import GamesSection from '@/components/games/GamesSection';
 import WheelGame from '@/components/games/WheelGame';
 import DailyQuizCard from '@/components/account/DailyQuizCard';
+import DailyQuestCard from '@/components/coins/DailyQuestCard';
 import ReferralCard from '@/components/account/ReferralCard';
 import AdWatchCard from '@/components/account/AdWatchCard';
 import WeeklyLeaderboardCard from '@/components/account/WeeklyLeaderboardCard';
@@ -65,6 +67,7 @@ export default async function CoinQazanPage() {
     ticTacToeWinReward,
     wheelStatus,
     energyPurchaseConfig,
+    dailyQuestStatus,
   ] = await Promise.all([
     getQuizRewardAmount(),
     hasClaimedToday(user.id),
@@ -82,6 +85,7 @@ export default async function CoinQazanPage() {
     getTicTacToeWinReward(),
     getWheelStatus(user.id),
     getEnergyPurchaseConfig(),
+    getDailyQuestStatus(user.id),
   ]);
 
   // Strip correctIndex before it ever reaches the client component's props —
@@ -110,6 +114,8 @@ export default async function CoinQazanPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <DailyQuestCard status={dailyQuestStatus} />
+
         <WeeklyLeaderboardCard leaderboard={weeklyLeaderboard} />
 
         <DailyQuizCard

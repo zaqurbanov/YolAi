@@ -308,6 +308,33 @@ export function CoinIcon(props: IconProps) {
   );
 }
 
+export function ChestIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4 12a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6Z" />
+      <path d="M3 9a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v1H3V9Z" />
+      <path d="M12 10v3" />
+      <circle cx="12" cy="14.5" r="1.1" />
+    </svg>
+  );
+}
+
+export function ChestOpenIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4 12a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6Z" />
+      <path d="M3.5 10 5 4.5A2 2 0 0 1 6.9 3H11" />
+      <path d="M8 10 9 5" />
+      <path d="M9 14.5v2.5" />
+      <path d="M12 13.5v3.5" />
+      <path d="M15 14.5v2.5" />
+      <path d="M12 3v2" />
+      <path d="M9.3 3.9 9.9 5.8" />
+      <path d="M14.7 3.9 14.1 5.8" />
+    </svg>
+  );
+}
+
 export function TrophyIcon(props: IconProps) {
   return (
     <svg {...base(props)}>

@@ -29,6 +29,7 @@ import {
   DEFAULT_DAILY_LIMIT,
 } from '@/lib/chat/coins';
 import { claimPendingReferral } from '@/lib/coins/referrals';
+import { recordQuestChatActivity } from '@/lib/coins/dailyQuests';
 
 // Conversation history / quota used to live at app/api/chat/history/route.ts.
 // Folded in here behind `?type=history` (`?type=quota` for the balance probe)
@@ -334,6 +335,8 @@ export async function POST(request: Request) {
       });
 
       if (userMessageError) throw userMessageError;
+
+      void recordQuestChatActivity(user.id);
 
       const { data: placeholder, error: placeholderError } = await supabase
         .from('messages')

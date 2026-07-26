@@ -82,6 +82,7 @@ function sampleWithoutReplacement<T>(items: T[], count: number): T[] {
 export interface SignSpeedQuestion {
   code: string;
   options: string[];
+  imageUrl?: string;
 }
 
 export type SignSpeedStartError = 'no_energy' | 'unavailable' | 'pool_too_small' | 'error';
@@ -117,6 +118,7 @@ export async function startSignSpeedRound(userId: string): Promise<SignSpeedStar
     questions.push({
       code: entry.code,
       options: optionEntries.map((o) => o.description),
+      imageUrl: entry.imageUrl,
     });
   }
 

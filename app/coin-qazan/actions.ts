@@ -6,6 +6,7 @@ import { claimAdWatchReward, issueAdViewToken } from '@/lib/coins/adWatch';
 import { playTicTacToe, purchaseEnergy } from '@/lib/coins/games';
 import { spinWheel } from '@/lib/coins/wheel';
 import { startSignSpeedRound, submitSignSpeedRound, type SignSpeedQuestion } from '@/lib/coins/signSpeed';
+import { claimDailyChest } from '@/lib/coins/dailyQuests';
 
 export interface AdWatchClaimState {
   status: 'success' | 'daily_limit_reached' | 'invalid_token' | 'too_early' | 'error';
@@ -382,6 +383,51 @@ export async function submitSignSpeedRoundAction(
     correctCount: result.correctCount,
     reward: result.reward,
     energy: result.energy,
+    balance: result.balance,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Gündəlik Missiyalar + Günün Sandığı — daily quests + daily chest
+// (0081_daily_quests.sql, lib/coins/dailyQuests.ts). No input: which quests
+// are complete and the reward amount are both resolved entirely server-side.
+// ---------------------------------------------------------------------------
+export interface DailyChestClaimState {
+  status: 'success' | 'already_claimed' | 'quests_incomplete' | 'unavailable' | 'error';
+  message: string;
+  reward?: number;
+  balance?: number;
+}
+
+export async function claimDailyChestAction(): Promise<DailyChestClaimState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { status: 'error', message: 'Giriş tələb olunur' };
+  }
+
+  const result = await claimDailyChest(user.id);
+  if (!result.ok) {
+    if (result.error === 'already_claimed') {
+      return { status: 'already_claimed', message: 'Bugünkü sandığı artıq açmısan' };
+    }
+    if (result.error === 'quests_incomplete') {
+      return { status: 'quests_incomplete', message: 'Bütün missiyaları tamamlamalısan' };
+    }
+    if (result.error === 'unavailable') {
+      return { status: 'unavailable', message: 'Sandıq hazırda əlçatan deyil' };
+    }
+    return { status: 'error', message: 'Xəta baş verdi. Bir az sonra yenidən cəhd edin' };
+  }
+
+  revalidatePath('/coin-qazan');
+  return {
+    status: 'success',
+    message: `Sandıq açıldı! +${result.reward} coin`,
+    reward: result.reward,
     balance: result.balance,
   };
 }

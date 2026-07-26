@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="az">
+<head>
+<meta charset="utf-8">
+<title>YOL — Layihə Təqdimatı</title>
+<style>
+  @page { size: A4; margin: 22mm 20mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    color: #1b1f27;
+    line-height: 1.55;
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 40px 24px;
+    background: #fff;
+  }
+  .cover {
+    text-align: center;
+    padding: 60px 0 40px;
+    border-bottom: 3px solid #3e63dd;
+    margin-bottom: 36px;
+  }
+  .cover .badge {
+    display: inline-block;
+    background: #3e63dd;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    padding: 6px 16px;
+    border-radius: 999px;
+    margin-bottom: 18px;
+  }
+  .cover h1 {
+    font-size: 34px;
+    margin: 0 0 8px;
+    color: #12141a;
+  }
+  .cover .sub {
+    font-size: 16px;
+    color: #5b6472;
+    font-weight: 400;
+  }
+  h2 {
+    font-size: 20px;
+    color: #3e63dd;
+    border-left: 4px solid #3e63dd;
+    padding-left: 12px;
+    margin-top: 40px;
+    margin-bottom: 14px;
+  }
+  h3 {
+    font-size: 16px;
+    color: #12141a;
+    margin-top: 22px;
+    margin-bottom: 8px;
+  }
+  p { margin: 8px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  strong { color: #12141a; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0;
+    font-size: 14px;
+  }
+  th, td {
+    border: 1px solid #e0e4ea;
+    padding: 8px 12px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: #f3f5f9; font-weight: 600; }
+  .footer-note {
+    margin-top: 48px;
+    padding-top: 18px;
+    border-top: 1px solid #e0e4ea;
+    font-size: 13px;
+    color: #7a8290;
+    font-style: italic;
+    text-align: center;
+  }
+  .print-hint {
+    text-align: center;
+    background: #fef9e7;
+    border: 1px solid #f0d97a;
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 13px;
+    color: #6b5900;
+    margin-bottom: 24px;
+  }
+  @media print {
+    .print-hint { display: none; }
+    body { padding: 0; }
+  }
+</style>
+</head>
+<body>
+
+<div class="print-hint">PDF olaraq saxlamaq üçün: <b>Ctrl+P</b> → Təyinat: "PDF kimi saxla" (Save as PDF)</div>
+
+<div class="cover">
+  <span class="badge">LAYİHƏ TƏQDİMATI</span>
+  <h1>YOL</h1>
+  <div class="sub">Yol Hərəkəti Qaydaları üzrə Süni İntellekt Platforması</div>
+</div>
+
+<h2>1. Qısa xülasə</h2>
+<p><b>YOL</b>, Azərbaycan Yol Hərəkəti Qaydaları üzrə suallara rəsmi sənədlərə əsaslanan, mənbəyə istinad edən dəqiq cavablar verən süni intellekt platformasıdır. Sadə bir chat-botdan fərqli olaraq, YOL yalnız yüklənmiş rəsmi qanunvericilik sənədlərindən çıxan məlumatla cavab verir və uydurma məlumat yaymır — hər cavab konkret maddəyə, sənədə istinad edir.</p>
+<p>Platforma tək bir alət deyil, tam bir ekosistemdir: <b>sual-cavab köməkçisi</b>, <b>sürücülük vəsiqəsi hazırlıq kursları</b>, <b>maarifləndirici oyunlar</b> və <b>istifadəçi aktivləşdirmə sistemi</b> bir yerdə birləşdirilib — məqsəd istifadəçini bir dəfəlik ziyarətçidən müntəzəm istifadəçiyə çevirməkdir.</p>
+
+<h2>2. Həll etdiyi problem</h2>
+<ul>
+  <li>Yol hərəkəti qaydaları mürəkkəb, uzun hüquqi mətndir — adi sürücü üçün lazım olan cavabı tapmaq vaxt aparır.</li>
+  <li>Sürücülük vəsiqəsi imtahanına hazırlaşan namizədlər üçün strukturlaşdırılmış, addım-addım material azdır.</li>
+  <li>Yol nişanlarının mənasını unutmaq və ya qarışdırmaq geniş yayılmış problemdir.</li>
+  <li>İstifadəçiləri platformada saxlamaq (retention) ənənəvi məlumat saytları üçün ən böyük çətinlikdir — bir dəfə cavab alan istifadəçi geri qayıtmır.</li>
+</ul>
+<p>YOL bunların hamısına bir platformada cavab verir.</p>
+
+<h2>3. Əsas funksiyalar</h2>
+
+<h3>3.1 AI Sual-Cavab Köməkçisi</h3>
+<p>İstifadəçi Azərbaycan dilində sualını yazır və ya vəziyyətin fotosunu göndərir. Sistem yüklənmiş rəsmi sənədlər arasından ən uyğun məlumatı tapır, cavabı yalnız bu məlumata əsaslanaraq qurur, hər cavabın yanında konkret maddə/sənəd istinadını göstərir, uyğun məlumat tapılmadıqda bunu açıq bildirir — heç vaxt uydurmur. Bu, hüquqi/rəsmi məzmun üçün etibarlılığın əsasıdır və platformanın ən böyük fərqləndirici üstünlüyüdür.</p>
+
+<h3>3.2 Sürücülük Vəsiqəsi Hazırlıq Kursları</h3>
+<p>Kateqoriyalara bölünmüş dərslər, hər mövzunun sonunda test. İstifadəçi öz sürətində irəliləyir, irəliləyişi izlənilir. Süni intellekt yeni mövzu məzmununu da avtomatik generasiya edə bilir.</p>
+
+<h3>3.3 Yol Nişanları Kataloqu (vizual)</h3>
+<p>Rəsmi sənədin daxilində olan 200-dən çox yol nişanının şəkli sistem tərəfindən avtomatik çıxarılıb kod nömrəsi ilə uyğunlaşdırılır — həm sual-cavab bölməsində, həm oyun bölməsində istifadə üçün.</p>
+
+<h3>3.4 Maarifləndirici Oyunlar</h3>
+<ul>
+  <li><b>XO (Tic-Tac-Toe)</b> — sadə əyləncə, gündəlik aktivlik üçün.</li>
+  <li><b>Bəxt Çarxı</b> — gündəlik pulsuz mükafat.</li>
+  <li><b>Nişan Sürəti</b> — real yol nişanı məlumatlarına əsaslanan sürətli bilik testi.</li>
+</ul>
+<p>Oyunlar sadəcə əyləncə deyil — istifadəçinin gündəlik geri qayıtması üçün strukturlaşdırılmış səbəbdir.</p>
+
+<h3>3.5 Aktivləşdirmə və Mükafat Sistemi</h3>
+<p>Daxili "sikkə" (coin) iqtisadiyyatı: istifadəçi gündəlik sual həll edərək, ardıcıl gün seriyası saxlayaraq, dost dəvət edərək və ya oyun oynayaraq sikkə qazanır. Bu sikkələr pulsuz gündəlik AI sual limitindən sonra əlavə sual hüququ almaq üçün istifadə olunur — həm aktivliyi artırır, həm gələcək monetizasiya üçün əsas yaradır.</p>
+
+<h3>3.6 Həftəlik Reytinq Lövhəsi</h3>
+<p>İstifadəçilər aktivliyə görə həftəlik sıralanır — sosial rəqabət elementi əlavə edir, geri qayıtma tezliyini artırır.</p>
+
+<h3>3.7 Admin İdarəetmə Paneli</h3>
+<p>Sənəd yükləmə, məzmun idarəetməsi, istifadəçi idarəetməsi, statistikalar, sistem sağlamlığının izlənməsi — hamısı ayrıca texniki dəstək olmadan idarə oluna bilən bir panel daxilində.</p>
+
+<h2>4. Etibarlılıq və Təhlükəsizlik</h2>
+<ul>
+  <li><b>Uydurma qarşısının alınması</b> — sistem yalnız yüklənmiş rəsmi sənədlərdən çıxan məlumatla cavab verir.</li>
+  <li><b>Mükafat sistemlərinin sui-istifadəyə qarşı qorunması</b> — bütün sikkə qazanma yolları server tərəfində təsdiqlənir.</li>
+  <li><b>Rol əsaslı giriş nəzarəti</b> — adi istifadəçi/admin səlahiyyətləri aydın ayrılıb, hər həssas əməliyyat neçə qat yoxlamadan keçir.</li>
+  <li><b>Xəta izləmə sistemi</b> — platformada baş verən istənilən texniki problem avtomatik qeydə alınır və admin panelindən izlənilə bilir.</li>
+</ul>
+
+<h2>5. Texnoloji üstünlüklər</h2>
+<ul>
+  <li>Müasir, sürətli, bulud əsaslı, genişlənə bilən infrastruktur.</li>
+  <li>İki AI provayder dəstəyi — tək xidmətdən asılılıq yoxdur, kəsilmə riski azaldılıb.</li>
+  <li>Yerli və bulud əsaslı axtarış texnologiyası eyni vaxtda dəstəklənir — xərc/performans balansı seçilə bilir.</li>
+  <li>Mobil uyğun dizayn — kamera ilə şəkil göndərmə, bildirişlər, ana ekrana quraşdırma (PWA).</li>
+</ul>
+
+<h2>6. Biznes modeli və gəlir potensialı</h2>
+<ul>
+  <li><b>Freemium struktur</b> — pulsuz gündəlik limit + sikkə/abunəlik ilə əlavə istifadə.</li>
+  <li><b>Abunəlik infrastrukturu</b> sxem səviyyəsində hazırdır — biznes qərarı veriləndə tez tətbiq edilə bilər.</li>
+  <li><b>Reklam inteqrasiyası</b> infrastrukturu hazırdır — aktivləşdirmə yalnız konfiqurasiya dəyişikliyi tələb edir.</li>
+  <li><b>Genişlənmə potensialı</b> — eyni model başqa ölkələrin yol qaydalarına və ya başqa hüquqi sahələrə tətbiq oluna bilər.</li>
+</ul>
+
+<h2>7. Nəyə hazırıq, nəyə hazır deyilik</h2>
+
+<table>
+  <tr><th>Vəziyyət</th><th>Nə daxildir</th></tr>
+  <tr>
+    <td><b>Tam işlək</b></td>
+    <td>AI sual-cavab, sənəd yükləmə/idarəetmə, sürücülük dərsləri, üç oyun, sikkə iqtisadiyyatı, dost dəvəti, həftəlik reytinq, push bildirişlər, admin panel, xəta izləmə sistemi.</td>
+  </tr>
+  <tr>
+    <td><b>Hazır infrastruktur</b></td>
+    <td>Abunəlik/ödəniş, reklam göstərilməsi — əsas qurulub, aktivləşdirmək üçün biznes qərarı və konfiqurasiya kifayətdir.</td>
+  </tr>
+  <tr>
+    <td><b>Planlaşdırılan</b></td>
+    <td>E-poçt təsdiqi, IP əsaslı qeydiyyat məhdudlaşdırılması, yol nişanlarının vizual axtarışının tam inteqrasiyası.</td>
+  </tr>
+</table>
+
+<h2>8. Nəticə</h2>
+<p>YOL sadəcə bir "sual-cavab botu" deyil — istifadəçini məlumatlandıran, öyrədən, əyləndirən və platformada saxlayan tam bir ekosistemdir. Əsası tam işlək vəziyyətdədir; gəlir modelinə keçid texniki maneə deyil, sırf biznes qərarı məsələsidir.</p>
+
+<div class="footer-note">Bu sənəd YOL platformasının funksional imkanlarını ümumi xətlərlə təqdim edir. Texniki spesifikasiya, demo görüş və ya fərdiləşdirilmiş təklif üçün əlaqə saxlayın.</div>
+
+</body>
+</html>

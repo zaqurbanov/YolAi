@@ -792,6 +792,158 @@ html:not(.dark) .tour-spotlight {
   }
 }
 
+/* Daily chest reveal (components/coins/ChestOpenOverlay.tsx): shake→pop-open
+   chest + a staggered coin burst + AnimatedNumber counting up the reward.
+   Same convention as every other animation block above: keyframes are NOT
+   reduced-motion-gated here — motion-reduce:animate-none is applied at each
+   usage site in the component markup, so reduced-motion users see the final
+   resting state (open chest, coins not bursting) immediately with no motion. */
+@keyframes chest-shake-open {
+  0%,
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+  10% {
+    transform: scale(1) rotate(-5deg);
+  }
+  20% {
+    transform: scale(1) rotate(5deg);
+  }
+  30% {
+    transform: scale(1) rotate(-4deg);
+  }
+  40% {
+    transform: scale(1) rotate(4deg);
+  }
+  55% {
+    transform: scale(1.05) rotate(-2deg);
+  }
+  70% {
+    transform: scale(1.12) rotate(0deg);
+  }
+  100% {
+    transform: scale(1.1) rotate(0deg);
+  }
+}
+
+.chest-shake-open {
+  animation: chest-shake-open 900ms cubic-bezier(0.36, 0.07, 0.19, 0.97) forwards;
+}
+
+/* Closed-chest layer fades out right as the shake finishes "popping". */
+@keyframes chest-lid-hide {
+  0%,
+  65% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Notification bell (components/NotificationBell.tsx): "lub-dub" heartbeat
+   rhythm while unreadCount > 0 — two short pulses close together, then a
+   pause, matching a real heartbeat instead of a single continuous pulse.
+   motion-reduce:animate-none is applied at the usage site per this repo's
+   reduced-motion convention. */
+@keyframes bell-heartbeat {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  10% {
+    transform: scale(1.18);
+  }
+  20% {
+    transform: scale(1);
+  }
+  30% {
+    transform: scale(1.12);
+  }
+  40% {
+    transform: scale(1);
+  }
+}
+
+.bell-heartbeat {
+  animation: bell-heartbeat 2.4s ease-in-out infinite;
+}
+
+.chest-lid-hide {
+  animation: chest-lid-hide 900ms ease-out forwards;
+}
+
+/* Open-chest layer crossfades in at the same moment, slightly scaling up. */
+@keyframes chest-lid-reveal {
+  0%,
+  65% {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.chest-lid-reveal {
+  animation: chest-lid-reveal 900ms ease-out forwards;
+}
+
+/* Coin burst: 6 coin glyphs translating outward from the chest with fading
+   opacity, staggered via nth-child delays off one shared base class — no
+   per-element inline animation, no JS particle loop. --burst-x/--burst-y
+   vary the angle/distance per coin so the burst reads as a spray, not a
+   uniform ring. */
+@keyframes coin-burst {
+  0% {
+    transform: translate(-50%, -50%) translate(0, 0) scale(0.5);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) translate(var(--burst-x), var(--burst-y)) scale(1);
+    opacity: 0;
+  }
+}
+
+.chest-coin-burst {
+  animation: coin-burst 700ms ease-out forwards;
+  animation-delay: 550ms;
+}
+
+.chest-coin-burst:nth-child(1) {
+  --burst-x: -46px;
+  --burst-y: -34px;
+}
+.chest-coin-burst:nth-child(2) {
+  --burst-x: 44px;
+  --burst-y: -38px;
+  animation-delay: 600ms;
+}
+.chest-coin-burst:nth-child(3) {
+  --burst-x: -54px;
+  --burst-y: 14px;
+  animation-delay: 640ms;
+}
+.chest-coin-burst:nth-child(4) {
+  --burst-x: 52px;
+  --burst-y: 18px;
+  animation-delay: 580ms;
+}
+.chest-coin-burst:nth-child(5) {
+  --burst-x: -18px;
+  --burst-y: -52px;
+  animation-delay: 670ms;
+}
+.chest-coin-burst:nth-child(6) {
+  --burst-x: 20px;
+  --burst-y: 50px;
+  animation-delay: 620ms;
+}
+
 /* Chat "PDF kimi ixrac et" export (app/chat/page.tsx): print:hidden on the
    normal chrome + a print:block transcript section print the transcript
    plainly via the browser's print dialog ("Save as PDF") — no PDF library

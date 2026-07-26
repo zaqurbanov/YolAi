@@ -157,6 +157,14 @@ export default function SignSpeedGame({ energy, onSettled }: SignSpeedGameProps)
         </div>
 
         <p className="text-legal-citation uppercase text-on-surface-variant">Nişan</p>
+        {question.imageUrl && (
+          // eslint-disable-next-line @next/next/no-img-element -- dynamic Supabase Storage URL, small size, no next/image optimization needed
+          <img
+            src={question.imageUrl}
+            alt={`Nişan ${question.code}`}
+            className="size-24 rounded-xl border border-outline-variant/40 bg-surface-tertiary/40 object-contain"
+          />
+        )}
         <p className="text-headline-md text-[22px] text-primary">{question.code}</p>
 
         <div className="grid w-full grid-cols-1 gap-2">

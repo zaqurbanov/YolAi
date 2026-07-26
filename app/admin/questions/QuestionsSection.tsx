@@ -3,6 +3,7 @@ import { Chip } from '@heroui/react';
 import { requireAdmin } from '@/lib/auth/requireAdmin';
 import { getAllQuestions } from '@/lib/admin/questions';
 import { formatAzDateTime } from '@/lib/format/date';
+import { createClient } from '@/lib/supabase/server';
 import AnswerQuestionForm from './AnswerQuestionForm';
 
 export default async function QuestionsSection() {
@@ -11,6 +12,22 @@ export default async function QuestionsSection() {
 
   const questions = await getAllQuestions();
   const unansweredCount = questions.filter((q) => !q.answer).length;
+
+  // getAllQuestions() already returns userId per question (lib/admin/questions.ts),
+  // but the sender was never resolved to something readable — same email-lookup
+  // pattern as app/admin/logs/LogsSection.tsx's error log rows.
+  const userIds = Array.from(new Set(questions.map((q) => q.userId)));
+  const emailsByUserId = new Map<string, string>();
+  if (userIds.length > 0) {
+    const supabase = await createClient();
+    const { data: profileRows } = await supabase
+      .from('profiles')
+      .select('id, email')
+      .in('id', userIds);
+    for (const p of profileRows ?? []) {
+      if (p.email) emailsByUserId.set(p.id, p.email);
+    }
+  }
 
   return (
     <div className="pt-6 space-y-6">
@@ -36,7 +53,7 @@ export default async function QuestionsSection() {
                 </Chip>
               </div>
               <p className="mono-label mt-2 text-xs text-on-surface-variant">
-                {formatAzDateTime(q.createdAt)}
+                {emailsByUserId.get(q.userId) ?? q.userId.slice(0, 8)} · {formatAzDateTime(q.createdAt)}
               </p>
 
               {q.answer ? (

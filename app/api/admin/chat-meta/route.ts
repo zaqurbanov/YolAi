@@ -10,7 +10,11 @@ import { deleteDocuments } from '@/lib/documents/deleteDocuments';
 import { isStaleProcessing } from '@/lib/ingestion/staleness';
 import { generateQuestionsFromPdf } from '@/lib/quiz/generateQuestionsFromPdf';
 import { createDraftQuestions } from '@/lib/admin/quizQuestions';
-import { getUnreadCount, getRecentNotifications } from '@/lib/notifications/notifications';
+import {
+  getUnreadCount,
+  getRecentNotifications,
+  ensureDailyQuestReminderNotification,
+} from '@/lib/notifications/notifications';
 import { GLOBAL_DEFAULT_SETTING_KEY, ENV_DEFAULT_MAX_PER_WINDOW } from '@/lib/chat/rateLimit';
 import {
   COIN_PRICE_SETTING_KEY,
@@ -53,6 +57,7 @@ import {
   ENERGY_PURCHASE_MAX_BALANCE_KEY,
   DEFAULT_ENERGY_PURCHASE_MAX_BALANCE,
 } from '@/lib/coins/games';
+import { DAILY_CHEST_REWARD_KEY, DEFAULT_DAILY_CHEST_REWARD } from '@/lib/coins/dailyQuests';
 
 // Inherited from the folded-in documents/quiz-questions routes: PDF ingestion
 // and LLM question extraction over a full PDF are both slow. This applies to
@@ -108,6 +113,10 @@ const ASSIGNABLE_ROLES = new Set(['admin', 'user']);
 // (e.g. 0.5 grant) — bounds chosen only to reject fat-fingered input.
 const MAX_ALLOWED_DAILY_COIN_LIMIT = 100000;
 const MAX_ALLOWED_COIN_GRANT = 100000;
+
+// Daily chest reward is a per-quest-completion coin amount, not a daily
+// aggregate limit — a much lower sane ceiling than MAX_ALLOWED applies.
+const MAX_ALLOWED_CHEST_REWARD = 1000;
 
 // The lesson/ad economy tunables, exposed through one `?type=lesson-economy`
 // branch rather than one type discriminator each — the Vercel Hobby
@@ -356,6 +365,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ user: null, isAdmin: false, logoUrl, unreadCount: 0, notifications: [] });
     }
 
+    await ensureDailyQuestReminderNotification(user.id);
+
     const [{ data: profile }, unreadCount, notifications] = await Promise.all([
       supabase.from('profiles').select('role, full_name, avatar_url').eq('id', user.id).single(),
       getUnreadCount(user.id),
@@ -575,6 +586,24 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       dailyCoinGrant: isTableConfigured ? tableValue : DEFAULT_DAILY_LIMIT,
+      source: isTableConfigured ? 'table' : 'default',
+    });
+  }
+
+  if (type === 'daily-chest-reward') {
+    const { data, error } = await createAdminClient()
+      .from('app_settings')
+      .select('value')
+      .eq('key', DAILY_CHEST_REWARD_KEY)
+      .maybeSingle();
+
+    if (error) return serverError(error, 'Ayarları oxumaq uğursuz oldu');
+
+    const tableValue = data ? Number(data.value) : null;
+    const isTableConfigured = tableValue !== null && Number.isFinite(tableValue) && tableValue > 0;
+
+    return NextResponse.json({
+      dailyChestReward: isTableConfigured ? tableValue : DEFAULT_DAILY_CHEST_REWARD,
       source: isTableConfigured ? 'table' : 'default',
     });
   }
@@ -994,6 +1023,38 @@ export async function PATCH(request: NextRequest) {
     if (error) return serverError(error, 'Ayarı yeniləmək uğursuz oldu');
 
     return NextResponse.json({ dailyCoinGrant, source: 'table' });
+  }
+
+  if (type === 'daily-chest-reward') {
+    const body = await request.json().catch(() => null);
+    const dailyChestReward = body?.dailyChestReward;
+
+    if (
+      dailyChestReward !== null &&
+      dailyChestReward !== undefined &&
+      (typeof dailyChestReward !== 'number' ||
+        !Number.isInteger(dailyChestReward) ||
+        dailyChestReward <= 0 ||
+        dailyChestReward > MAX_ALLOWED_CHEST_REWARD)
+    ) {
+      return apiError(400, `dailyChestReward null və ya 1-${MAX_ALLOWED_CHEST_REWARD} arasında tam ədəd olmalıdır`);
+    }
+
+    const admin = createAdminClient();
+
+    if (dailyChestReward === null || dailyChestReward === undefined) {
+      const { error } = await admin.from('app_settings').delete().eq('key', DAILY_CHEST_REWARD_KEY);
+      if (error) return serverError(error, 'Ayarı sıfırlamaq uğursuz oldu');
+      return NextResponse.json({ dailyChestReward: DEFAULT_DAILY_CHEST_REWARD, source: 'default' });
+    }
+
+    const { error } = await admin
+      .from('app_settings')
+      .upsert({ key: DAILY_CHEST_REWARD_KEY, value: dailyChestReward, updated_at: new Date().toISOString() });
+
+    if (error) return serverError(error, 'Ayarı yeniləmək uğursuz oldu');
+
+    return NextResponse.json({ dailyChestReward, source: 'table' });
   }
 
   if (type === 'lesson-economy') {

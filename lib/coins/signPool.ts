@@ -20,8 +20,9 @@ const CODE_PATTERN = /^Kod\s+\d+(\.\d+)?$/i;
 export interface SignPoolEntry {
   code: string;
   description: string;
-  // Reserved for a future per-sign image (docs/sign-speed-game-plan.md's
-  // "Future extension" section) — deliberately unpopulated and unused today.
+  // Public URL of the primary (position = 0) image for this code in
+  // sign_images, when one exists. Not every code has an extracted image, so
+  // this is never a hard requirement — the game must still work without it.
   imageUrl?: string;
 }
 
@@ -52,22 +53,57 @@ async function fetchSignPool(): Promise<SignPoolEntry[]> {
   if (chunksError) void logError('coins.signPool.chunksRead', chunksError, { details: { documentId: doc.id } });
   if (chunksError || !chunks) return [];
 
+  const { data: images, error: imagesError } = await supabase
+    .from('sign_images')
+    .select('code, storage_path')
+    .eq('document_id', doc.id)
+    .eq('position', 0);
+
+  if (imagesError) void logError('coins.signPool.imagesRead', imagesError, { details: { documentId: doc.id } });
+
+  const imageByCode = new Map<string, string>();
+  if (images) {
+    for (const row of images) {
+      if (typeof row.code === 'string' && typeof row.storage_path === 'string') {
+        imageByCode.set(row.code.trim(), row.storage_path);
+      }
+    }
+  }
+
   const seen = new Set<string>();
   const pool: SignPoolEntry[] = [];
 
   for (const row of chunks) {
     const code = typeof row.article_label === 'string' ? row.article_label.trim() : '';
-    const description = typeof row.content === 'string' ? row.content.trim() : '';
+    let description = typeof row.content === 'string' ? row.content.trim() : '';
 
     if (!code || !description) continue;
     if (!CODE_PATTERN.test(code)) continue;
+
+    // content chunks for this catalog are produced by chunkText.ts's
+    // splitCodeCatalogEntries(), which (deliberately, for retrieval reasons —
+    // see that file) slices from the START of the code number, so `content`
+    // always begins with the same digits as `code` (e.g. code="Kod 5.24",
+    // content="5.24 Piyada keçidi..."). Strip that leading duplicate here —
+    // the game already shows `code` separately, showing it twice in an answer
+    // option is confusing and was a real reported bug.
+    const codeDigits = code.replace(/^Kod\s+/i, '');
+    const leadingCodePattern = new RegExp(`^${codeDigits.replace(/\./g, '\\.')}\\s+`);
+    description = description.replace(leadingCodePattern, '').trim();
+
+    if (!description) continue;
     if (description.length > MAX_DESCRIPTION_LENGTH) continue;
 
     const dedupeKey = description.toLowerCase();
     if (seen.has(dedupeKey)) continue;
     seen.add(dedupeKey);
 
-    pool.push({ code, description });
+    const storagePath = imageByCode.get(codeDigits);
+    const imageUrl = storagePath
+      ? supabase.storage.from('sign-images').getPublicUrl(storagePath).data.publicUrl
+      : undefined;
+
+    pool.push({ code, description, imageUrl });
   }
 
   return pool;

@@ -48,7 +48,9 @@ export default function NotificationBell({
         aria-label="Bildirişlər"
         className="glass-card relative flex size-9 items-center justify-center rounded-full text-on-surface transition-colors hover:bg-surface-tertiary/60"
       >
-        <BellIcon />
+        <BellIcon
+          className={unreadCount > 0 ? 'bell-heartbeat motion-reduce:animate-none' : undefined}
+        />
         {unreadCount > 0 && (
           <span className="mono-label absolute -right-1 -top-1 flex min-w-[18px] items-center justify-center rounded-full bg-error px-1 text-[10px] text-on-error">
             {unreadCount > 9 ? '9+' : unreadCount}

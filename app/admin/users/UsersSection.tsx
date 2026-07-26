@@ -8,9 +8,11 @@ import { formatCoinBalance } from '@/lib/format/coins';
 import GlobalRateLimitControl from './GlobalRateLimitControl';
 import GlobalCoinPriceControl from './GlobalCoinPriceControl';
 import GlobalDailyCoinGrantControl from './GlobalDailyCoinGrantControl';
+import DailyChestRewardControl from './DailyChestRewardControl';
 import BackgroundImageControl from './BackgroundImageControl';
 import LogoControl from './LogoControl';
 import SendPushReminderControl from './SendPushReminderControl';
+import SendBroadcastNotificationControl from './SendBroadcastNotificationControl';
 import EmbeddingModelControl from './EmbeddingModelControl';
 import LessonEconomyControl from './LessonEconomyControl';
 import CategoryContentControl from './CategoryContentControl';
@@ -31,10 +33,12 @@ export default async function UsersSection() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <GlobalRateLimitControl />
         <GlobalDailyCoinGrantControl />
+        <DailyChestRewardControl />
         <GlobalCoinPriceControl />
         <BackgroundImageControl />
         <LogoControl />
         <SendPushReminderControl />
+        <SendBroadcastNotificationControl />
         <EmbeddingModelControl />
         <LessonEconomyControl />
         <CategoryContentControl />
