@@ -1,4 +1,5 @@
 import 'server-only';
+import { logError } from '@/lib/logging/logError';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 
@@ -135,7 +136,10 @@ export async function getAdminUserDetail(userId: string): Promise<AdminUserDetai
     .eq('id', userId)
     .maybeSingle();
 
-  if (profileError) throw profileError;
+  if (profileError) {
+    await logError('admin.getUserDetail.profileRead', profileError, { details: { userId } });
+    throw profileError;
+  }
   if (!profile) return null;
 
   // user_coins has no admin-read RLS policy (only self-SELECT, per
@@ -169,7 +173,10 @@ export async function getAdminUserDetail(userId: string): Promise<AdminUserDetai
     .select('id')
     .eq('user_id', userId);
 
-  if (conversationsError) throw conversationsError;
+  if (conversationsError) {
+    await logError('admin.getUserDetail.conversationsRead', conversationsError, { details: { userId } });
+    throw conversationsError;
+  }
 
   const conversationIds = (conversationRows ?? []).map((c) => c.id);
   const totalConversations = conversationIds.length;
@@ -199,7 +206,10 @@ export async function getAdminUserDetail(userId: string): Promise<AdminUserDetai
     .in('conversation_id', conversationIds)
     .order('created_at', { ascending: true });
 
-  if (messagesError) throw messagesError;
+  if (messagesError) {
+    await logError('admin.getUserDetail.messagesRead', messagesError, { details: { userId } });
+    throw messagesError;
+  }
 
   const messages = allMessages ?? [];
   const totalUserMessages = messages.filter((m) => m.role === 'user').length;
@@ -260,7 +270,10 @@ export async function getAdminUserConversations(
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1);
 
-  if (conversationsError) throw conversationsError;
+  if (conversationsError) {
+    await logError('admin.getUserDetail.conversationsRead', conversationsError, { details: { userId } });
+    throw conversationsError;
+  }
 
   const conversations = conversationRows ?? [];
   const total = count ?? 0;
@@ -277,7 +290,10 @@ export async function getAdminUserConversations(
     .in('conversation_id', conversationIds)
     .order('created_at', { ascending: true });
 
-  if (messagesError) throw messagesError;
+  if (messagesError) {
+    await logError('admin.getUserDetail.messagesRead', messagesError, { details: { userId } });
+    throw messagesError;
+  }
 
   const messagesByConversation = new Map<string, AdminUserMessage[]>();
   for (const row of messageRows ?? []) {

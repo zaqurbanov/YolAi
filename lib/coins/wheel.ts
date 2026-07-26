@@ -2,6 +2,8 @@ import 'server-only';
 import { randomInt } from 'node:crypto';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isMissingRelationError } from '@/lib/supabase/missingRelation';
+import { bakuTodayDate } from '@/lib/date/baku';
+import { logError } from '@/lib/logging/logError';
 
 // ÇARX — daily free prize wheel (0068_wheel_of_fortune.sql). One free spin per
 // UTC day; the SERVER picks the winning segment with crypto RNG and credits its
@@ -54,16 +56,17 @@ export async function getWheelStatus(userId: string): Promise<WheelStatus> {
   const prizes = await getWheelPrizes();
 
   try {
-    const todayUtc = new Date().toISOString().slice(0, 10);
+    const today = bakuTodayDate();
     const { data, error } = await createAdminClient()
       .from('wheel_spins')
       .select('id')
       .eq('user_id', userId)
-      .eq('spin_date', todayUtc)
+      .eq('spin_date', today)
       .maybeSingle();
 
     if (error) {
       if (isMissingRelationError(error)) return { prizes, status: 'unavailable' };
+      void logError('coins.wheel.status', error, { userId });
       console.error('[coins] getWheelStatus read failed:', error);
       return { prizes, status: 'unavailable' };
     }
@@ -97,6 +100,7 @@ export async function spinWheel(userId: string): Promise<SpinResult> {
     const message = error.message ?? '';
     if (message.includes('already_spun')) return { ok: false, error: 'already_spun' };
     if (isMissingRelationError(error)) return { ok: false, error: 'unavailable' };
+    void logError('coins.wheel.spin', error, { userId });
     console.error('[coins] claim_wheel_spin RPC failed:', {
       message: error.message,
       code: error.code,

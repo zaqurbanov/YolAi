@@ -10,6 +10,7 @@ import {
 import { getChatModel, getChatModelFallback, getChatModelId, getChatModelFallbackId, getProviderCallOptions, isVisionAvailable, chatModelSupportsVision } from '@/lib/llm';
 import { streamTextWithFallback } from '@/lib/llm/streamWithFallback';
 import { identifySignFromImage } from '@/lib/rag/identifySignFromImage';
+import { logError } from '@/lib/logging/logError';
 import { retrieveCombinedChunks, retrieveChunksByArticle, embedQueryWithActiveModel, type RetrievedChunk } from '@/lib/retrieval/search';
 import { extractArticleReferences, articleLabelPrefixes, isPureArticleReferenceQuery } from '@/lib/retrieval/articleQuery';
 import { buildSystemPrompt, buildContextBlock, buildCitations, filterCitedChunks } from '@/lib/rag/buildPrompt';
@@ -209,7 +210,11 @@ export async function POST(request: Request) {
   try {
     ({ messages, documentId, conversationId } = await request.json());
   } catch (err) {
-    return apiError(400, 'Yanlış sorğu formatı', { cause: err });
+    return apiError(400, 'Yanlış sorğu formatı', {
+      cause: err,
+      context: 'chat.parseRequestBody',
+      userId: user.id,
+    });
   }
 
   const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user');
@@ -220,6 +225,13 @@ export async function POST(request: Request) {
   // before any DB call (user/profile lookup, coin reservation, conversation
   // creation) or retrieval, so an unsupported-config request costs nothing.
   if (imagePart && !isVisionAvailable()) {
+    // A config problem, not a user mistake — surfaced in the logs dashboard so
+    // "AI şəkli oxumur" reports have a server-side trace instead of only a 422.
+    void logError('chat.visionUnavailable', 'Vision model not configured', {
+      userId: user.id,
+      requestId,
+      details: { mediaType: imagePart.mediaType },
+    });
     return apiError(422, 'Şəkil analizi hazırda əlçatan deyil. Zəhmət olmasa sualınızı mətn kimi yazın.', {
       code: 'vision_unavailable',
     });
@@ -348,12 +360,20 @@ export async function POST(request: Request) {
         .from('conversations')
         .update(conversationUpdate)
         .eq('id', conversation.id);
-      if (touchError) console.error('[chat] failed to touch conversation:', touchError);
+      if (touchError) {
+        console.error('[chat] failed to touch conversation:', touchError);
+        void logError('chat.touchConversation', touchError, {
+          userId: user?.id,
+          requestId,
+          details: { conversationId: conversation.id },
+        });
+      }
     } catch (err) {
       if (err instanceof ConversationNotFoundError) {
         return apiError(404, 'Söhbət tapılmadı', { code: 'not_found' });
       }
-      return serverError(err, 'Söhbəti yaratmaq uğursuz oldu');
+      void logError('chat.ensureConversation', err, { userId: user?.id, requestId });
+      return serverError(err, 'Söhbəti yaratmaq uğursuz oldu', 'chat.ensureConversation');
     }
   }
 
@@ -376,6 +396,11 @@ export async function POST(request: Request) {
       retrievalSourceText = imageIdentification;
     } catch (err) {
       console.error('[chat] identifySignFromImage failed, falling back to raw query text:', err);
+      void logError('chat.identifySign', err, {
+        userId: user?.id,
+        requestId,
+        details: { mediaType: imagePart.mediaType, hasCaption: query.trim().length > 0 },
+      });
     }
   }
 
@@ -566,6 +591,7 @@ export async function POST(request: Request) {
           );
         } catch (err) {
           console.error('[chat] failed to emit timing log:', err);
+          void logError('chat.timingLog.emit', err, { userId: user?.id, requestId });
         }
 
         createAdminClient()
@@ -588,7 +614,10 @@ export async function POST(request: Request) {
             total_tokens: totalTokens,
           })
           .then(({ error }) => {
-            if (error) console.error('[chat] failed to persist request timing log:', error);
+            if (error) {
+              console.error('[chat] failed to persist request timing log:', error);
+              void logError('chat.timingLog.persist', error, { userId: user?.id, requestId });
+            }
           });
 
         if (!conversation) return;
@@ -602,7 +631,14 @@ export async function POST(request: Request) {
             .from('messages')
             .update({ content: text, citations })
             .eq('id', assistantMessageId);
-          if (updateError) console.error('[chat] failed to persist assistant message:', updateError);
+          if (updateError) {
+            console.error('[chat] failed to persist assistant message:', updateError);
+            void logError('chat.persistAssistantMessage', updateError, {
+              userId: user?.id,
+              requestId,
+              details: { conversationId, messageId: assistantMessageId },
+            });
+          }
         } else {
           // Should not happen (assistantMessageId is only null when `conversation` is
           // also null, and we already returned above in that case) — kept as a safety
@@ -647,10 +683,20 @@ export async function POST(request: Request) {
           }
         } catch (err) {
           console.error('[chat] failed to update context summary:', err);
+          void logError('chat.contextSummary.update', err, {
+            userId: user?.id,
+            requestId,
+            details: { conversationId },
+          });
         }
       },
       onError: ({ error }) => {
         console.error('[chat] streamText error:', error);
+        void logError('chat.stream', error, {
+          userId: user?.id,
+          requestId,
+          details: { hasImage: imagePart !== null },
+        });
       },
     },
   );
@@ -690,6 +736,7 @@ export async function POST(request: Request) {
         if (part.type === 'finish' && user) {
           void claimPendingReferral(user.id).catch((err) => {
             console.error('[chat] pending referral credit failed:', err);
+            void logError('chat.claimPendingReferral', err, { userId: user.id, requestId });
           });
         }
         controller.enqueue(part);
@@ -724,7 +771,14 @@ export async function POST(request: Request) {
             .delete()
             .eq('id', assistantMessageId)
             .then(({ error: delError }) => {
-              if (delError) console.error('[chat] failed to clean up placeholder message:', delError);
+              if (delError) {
+                console.error('[chat] failed to clean up placeholder message:', delError);
+                void logError('chat.cleanupPlaceholderMessage', delError, {
+                  userId: user?.id,
+                  requestId,
+                  details: { messageId: assistantMessageId },
+                });
+              }
             });
         }
         return toClientErrorMessage(error);
@@ -753,7 +807,7 @@ export async function GET(request: Request) {
       .eq('id', user.id)
       .single();
 
-    if (error) return serverError(error, 'Profil məlumatı alınmadı');
+    if (error) return serverError(error, 'Profil məlumatı alınmadı', 'chat.quota.profileRead');
 
     if (profile.role === 'admin') {
       return Response.json({ exempt: true });
@@ -789,7 +843,7 @@ export async function GET(request: Request) {
       .not('title', 'is', null)
       .order('updated_at', { ascending: false });
 
-    if (error) return serverError(error, 'Söhbətlər siyahısını yükləmək uğursuz oldu');
+    if (error) return serverError(error, 'Söhbətlər siyahısını yükləmək uğursuz oldu', 'chat.history.listConversations');
 
     return Response.json({ conversations: conversations ?? [] });
   }
@@ -803,7 +857,7 @@ export async function GET(request: Request) {
     .eq('user_id', user.id)
     .maybeSingle();
 
-  if (conversationError) return serverError(conversationError, 'Söhbəti yükləmək uğursuz oldu');
+  if (conversationError) return serverError(conversationError, 'Söhbəti yükləmək uğursuz oldu', 'chat.history.loadConversation');
   if (!conversation) return notFound('Söhbət tapılmadı');
 
   const { data: messages, error } = await supabase
@@ -812,7 +866,7 @@ export async function GET(request: Request) {
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: true });
 
-  if (error) return serverError(error, 'Söhbət tarixçəsini yükləmək uğursuz oldu');
+  if (error) return serverError(error, 'Söhbət tarixçəsini yükləmək uğursuz oldu', 'chat.history.loadMessages');
 
   // Unnamed conversations are always meant to be temporary — a
   // "+ Yeni söhbət" click that's never actually used (no message ever sent,
@@ -846,7 +900,7 @@ async function historyPost(request: Request, supabase: ServerSupabase, userId: s
       .eq('id', conversationId)
       .maybeSingle();
 
-    if (fetchError) return serverError(fetchError, 'Söhbəti paylaşmaq uğursuz oldu');
+    if (fetchError) return serverError(fetchError, 'Söhbəti paylaşmaq uğursuz oldu', 'chat.history.shareLookup');
 
     let token = existing?.share_token ?? null;
 
@@ -861,7 +915,7 @@ async function historyPost(request: Request, supabase: ServerSupabase, userId: s
         .eq('id', conversationId)
         .eq('user_id', userId);
 
-      if (updateError) return serverError(updateError, 'Söhbəti paylaşmaq uğursuz oldu');
+      if (updateError) return serverError(updateError, 'Söhbəti paylaşmaq uğursuz oldu', 'chat.history.shareTokenWrite');
     }
 
     return Response.json({ url: `/share/${token}` });
@@ -884,7 +938,7 @@ async function historyPost(request: Request, supabase: ServerSupabase, userId: s
     .select('id')
     .single();
 
-  if (error) return serverError(error, 'Yeni söhbət yaratmaq uğursuz oldu');
+  if (error) return serverError(error, 'Yeni söhbət yaratmaq uğursuz oldu', 'chat.history.createConversation');
 
   return Response.json({ id: created.id }, { status: 201 });
 }
@@ -926,7 +980,7 @@ export async function PATCH(request: Request) {
     .eq('id', conversationId)
     .eq('user_id', user.id);
 
-  if (error) return serverError(error, 'Söhbətin adını dəyişmək uğursuz oldu');
+  if (error) return serverError(error, 'Söhbətin adını dəyişmək uğursuz oldu', 'chat.history.renameConversation');
   if (!count) {
     return apiError(403, 'Söhbətin adını dəyişmək mümkün olmadı', { code: 'forbidden' });
   }
@@ -962,7 +1016,7 @@ export async function DELETE(request: Request) {
     .eq('id', conversationId)
     .eq('user_id', user.id);
 
-  if (error) return serverError(error, 'Söhbəti silmək uğursuz oldu');
+  if (error) return serverError(error, 'Söhbəti silmək uğursuz oldu', 'chat.history.deleteConversation');
   if (!count) {
     return apiError(403, 'Söhbəti silmək mümkün olmadı', { code: 'forbidden' });
   }

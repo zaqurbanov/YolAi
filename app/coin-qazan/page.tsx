@@ -18,6 +18,7 @@ import {
   getEnergyStatus,
   getTicTacToeTodayCount,
   getTicTacToeWinReward,
+  getEnergyPurchaseConfig,
 } from '@/lib/coins/games';
 import { getWheelStatus } from '@/lib/coins/wheel';
 import GamesSection from '@/components/games/GamesSection';
@@ -63,6 +64,7 @@ export default async function CoinQazanPage() {
     ticTacToeTodayCount,
     ticTacToeWinReward,
     wheelStatus,
+    energyPurchaseConfig,
   ] = await Promise.all([
     getQuizRewardAmount(),
     hasClaimedToday(user.id),
@@ -79,6 +81,7 @@ export default async function CoinQazanPage() {
     getTicTacToeTodayCount(user.id),
     getTicTacToeWinReward(),
     getWheelStatus(user.id),
+    getEnergyPurchaseConfig(),
   ]);
 
   // Strip correctIndex before it ever reaches the client component's props —
@@ -133,6 +136,8 @@ export default async function CoinQazanPage() {
           maxEnergy={energyStatus.max}
           initialTodayCount={ticTacToeTodayCount}
           winReward={ticTacToeWinReward}
+          energyPurchaseCoinCost={energyPurchaseConfig.coinCost}
+          energyPurchaseEnergyAmount={energyPurchaseConfig.energyAmount}
         />
 
         <WheelGame prizes={wheelStatus.prizes} initialStatus={wheelStatus.status} />

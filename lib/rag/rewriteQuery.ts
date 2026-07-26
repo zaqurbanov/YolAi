@@ -1,6 +1,7 @@
 import 'server-only';
 import { getRewriteModel, getRewriteModelFallback, getProviderCallOptions } from '@/lib/llm';
 import { generateTextWithFallback } from '@/lib/llm/fallback';
+import { logError } from '@/lib/logging/logError';
 
 const MAX_REWRITTEN_LENGTH = 400;
 
@@ -82,6 +83,7 @@ export async function rewriteQuery(query: string, contextSummary?: object): Prom
     if (!isUsableRewrite(text)) return query;
     return text.trim();
   } catch (err) {
+    void logError('rag.rewriteQuery', err);
     console.error('[rewriteQuery] failed to rewrite query, falling back to raw query:', err);
     return query;
   }

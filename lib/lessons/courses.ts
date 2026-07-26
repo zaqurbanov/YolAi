@@ -10,6 +10,7 @@ import {
   type TopicCitation,
   type TopicSourceChunk,
 } from '@/lib/lessons/generateTopicContent';
+import { logError } from '@/lib/logging/logError';
 
 // Admin data layer for lesson courses and topics. Same posture as
 // lib/admin/quizQuestions.ts: service-role client throughout, every function
@@ -106,6 +107,7 @@ export async function listCourses(): Promise<LessonCourseRow[]> {
     // Pre-migration state: the admin screen renders an empty list rather than
     // erroring, same rationale as lib/quiz/lessons.ts.
     if (isMissingRelationError(error)) return [];
+    void logError('lessons.courses.listCourses', error);
     console.error('[lessons/courses] listCourses failed:', error);
     return [];
   }
@@ -120,6 +122,7 @@ export async function listCourses(): Promise<LessonCourseRow[]> {
       .in('course_id', courseIds);
 
     if (topicsError && !isMissingRelationError(topicsError)) {
+      void logError('lessons.courses.listCoursesTopicCounts', topicsError);
       console.error('[lessons/courses] listCourses topic counts failed:', topicsError);
     }
 
@@ -179,6 +182,7 @@ export async function assertDocumentHasChunks(
     .eq('document_id', documentId);
 
   if (error) {
+    void logError('lessons.courses.chunkCount', error, { details: { documentId } });
     console.error('[lessons/courses] chunk count failed:', error);
     return { ok: false, error: 'Sənədin mətn hissələrini yoxlamaq uğursuz oldu' };
   }
@@ -217,6 +221,7 @@ export async function createCourse(
     .single<CourseSelectRow>();
 
   if (error || !data) {
+    void logError('lessons.courses.createCourse', error);
     console.error('[lessons/courses] createCourse failed:', error);
     if (isMissingRelationError(error)) {
       return { ok: false, error: 'Kurs cədvəlləri hələ yaradılmayıb (0060 migrasiyası icra edilməyib)' };
@@ -275,6 +280,7 @@ export async function updateCourse(
       .eq('status', 'published');
 
     if (countError) {
+      void logError('lessons.courses.publishTopicCount', countError, { details: { courseId: id } });
       console.error('[lessons/courses] publish topic count failed:', countError);
       return { ok: false, error: 'Kursu yoxlamaq uğursuz oldu' };
     }
@@ -294,6 +300,7 @@ export async function updateCourse(
   const { error } = await admin.from('lesson_courses').update(update).eq('id', id);
 
   if (error) {
+    void logError('lessons.courses.updateCourse', error, { details: { courseId: id } });
     console.error('[lessons/courses] updateCourse failed:', error);
     return { ok: false, error: 'Kursu yeniləmək uğursuz oldu' };
   }
@@ -308,6 +315,7 @@ export async function deleteCourse(id: string): Promise<{ ok: true } | { ok: fal
   const { error } = await createAdminClient().from('lesson_courses').delete().eq('id', id);
 
   if (error) {
+    void logError('lessons.courses.deleteCourse', error, { details: { courseId: id } });
     console.error('[lessons/courses] deleteCourse failed:', error);
     return { ok: false, error: 'Kursu silmək uğursuz oldu' };
   }
@@ -339,6 +347,7 @@ export async function listCourseTopics(courseId: string): Promise<LessonTopicRow
 
   if (error || !data) {
     if (isMissingRelationError(error)) return [];
+    void logError('lessons.courses.listCourseTopics', error, { details: { courseId } });
     console.error('[lessons/courses] listCourseTopics failed:', error);
     return [];
   }
@@ -353,6 +362,7 @@ export async function listCourseTopics(courseId: string): Promise<LessonTopicRow
       .in('topic_id', topicIds);
 
     if (questionsError && !isMissingRelationError(questionsError)) {
+      void logError('lessons.courses.listCourseTopicsQuestionCounts', questionsError, { details: { courseId } });
       console.error('[lessons/courses] listCourseTopics question counts failed:', questionsError);
     }
 
@@ -427,6 +437,9 @@ export async function createTopics(
     .returns<TopicSelectRow[]>();
 
   if (error || !data) {
+    void logError('lessons.courses.createTopics', error, {
+      details: { courseIds: [...new Set(inputs.map((i) => i.courseId))] },
+    });
     console.error('[lessons/courses] createTopics failed:', error);
     if (isMissingRelationError(error)) {
       return { ok: false, error: 'Kurs cədvəlləri hələ yaradılmayıb (0060 migrasiyası icra edilməyib)' };
@@ -475,6 +488,7 @@ export async function updateTopic(
       .eq('status', 'published');
 
     if (countError) {
+      void logError('lessons.courses.publishQuestionCount', countError, { details: { topicId: id } });
       console.error('[lessons/courses] publish question count failed:', countError);
       return { ok: false, error: 'Mövzunu yoxlamaq uğursuz oldu' };
     }
@@ -491,6 +505,7 @@ export async function updateTopic(
   const { error } = await admin.from('lesson_topics').update(update).eq('id', id);
 
   if (error) {
+    void logError('lessons.courses.updateTopic', error, { details: { topicId: id } });
     console.error('[lessons/courses] updateTopic failed:', error);
     return { ok: false, error: 'Mövzunu yeniləmək uğursuz oldu' };
   }
@@ -502,6 +517,7 @@ export async function deleteTopic(id: string): Promise<{ ok: true } | { ok: fals
   const { error } = await createAdminClient().from('lesson_topics').delete().eq('id', id);
 
   if (error) {
+    void logError('lessons.courses.deleteTopic', error, { details: { topicId: id } });
     console.error('[lessons/courses] deleteTopic failed:', error);
     return { ok: false, error: 'Mövzunu silmək uğursuz oldu' };
   }
@@ -524,6 +540,7 @@ export async function reorderTopics(
   });
 
   if (error) {
+    void logError('lessons.courses.reorderTopics', error);
     console.error('[lessons/courses] reorderTopics failed:', error);
     return { ok: false, error: 'Mövzu sırasını dəyişmək uğursuz oldu' };
   }
@@ -582,6 +599,7 @@ async function loadTopicSource(
     }>();
 
   if (topicError || !topic) {
+    void logError('lessons.courses.topicLookup', topicError, { details: { topicId } });
     console.error('[lessons/courses] topic lookup failed:', topicError);
     return { ok: false, error: 'Mövzu tapılmadı' };
   }
@@ -634,6 +652,7 @@ export async function generateTopicContent(
     .eq('id', topicId);
 
   if (contentError) {
+    void logError('lessons.courses.topicContentWrite', contentError, { details: { topicId } });
     console.error('[lessons/courses] topic content write failed:', contentError);
     return { ok: false, error: 'Dərs materialını yadda saxlamaq uğursuz oldu' };
   }
@@ -671,6 +690,7 @@ export async function generateTopicQuestionPool(
     .eq('status', 'draft');
 
   if (deleteError) {
+    void logError('lessons.courses.questionPoolDelete', deleteError, { details: { topicId } });
     console.error('[lessons/courses] old question pool delete failed:', deleteError);
     return { ok: false, error: 'Köhnə sual bankını silmək uğursuz oldu' };
   }
@@ -698,6 +718,7 @@ export async function generateTopicQuestionPool(
     .select('id');
 
   if (insertError) {
+    void logError('lessons.courses.questionInsert', insertError, { details: { topicId } });
     console.error('[lessons/courses] question insert failed:', insertError);
     return { ok: false, error: 'Sualları yadda saxlamaq uğursuz oldu' };
   }
@@ -728,6 +749,7 @@ export async function publishTopicQuestions(
     .select('id');
 
   if (error) {
+    void logError('lessons.courses.publishTopicQuestions', error, { details: { topicId } });
     console.error('[lessons/courses] publishTopicQuestions failed:', error);
     return { ok: false, error: 'Sualları dərc etmək uğursuz oldu' };
   }
@@ -759,6 +781,7 @@ export async function listIngestedDocuments(): Promise<IngestedDocumentOption[]>
     .order('created_at', { ascending: false });
 
   if (error || !data) {
+    void logError('lessons.courses.listIngestedDocuments', error);
     console.error('[lessons/courses] listIngestedDocuments failed:', error);
     return [];
   }

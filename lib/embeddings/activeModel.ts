@@ -1,5 +1,6 @@
 import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { logError } from '@/lib/logging/logError';
 
 export type EmbeddingModel = 'local' | 'gemini';
 
@@ -45,6 +46,7 @@ export async function getActiveEmbeddingModel(): Promise<EmbeddingModel> {
       value = data.value;
     }
   } catch (err) {
+    void logError('embeddings.activeModel.read', err);
     console.error('[embeddings] active model read failed, falling back to local:', err);
   }
 

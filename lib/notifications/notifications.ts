@@ -1,5 +1,6 @@
 import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { logError } from '@/lib/logging/logError';
 
 // Generic per-user notifications feed. Reads/writes always go through the
 // service-role client (bypassing RLS is fine — every call here is already
@@ -30,6 +31,7 @@ export async function getUnreadCount(userId: string): Promise<number> {
     .eq('read', false);
 
   if (error) {
+    void logError('notifications.unreadCount', error, { userId });
     console.error('[notifications] getUnreadCount failed:', error);
     return 0;
   }
@@ -50,6 +52,7 @@ export async function getRecentNotifications(
     .returns<NotificationsSelectRow[]>();
 
   if (error || !data) {
+    void logError('notifications.recentList', error, { userId });
     console.error('[notifications] getRecentNotifications failed:', error);
     return [];
   }
@@ -77,6 +80,7 @@ export async function markNotificationRead(
     .eq('user_id', userId);
 
   if (error) {
+    void logError('notifications.markRead', error, { userId, details: { notificationId } });
     console.error('[notifications] markNotificationRead failed:', error);
     return { ok: false };
   }

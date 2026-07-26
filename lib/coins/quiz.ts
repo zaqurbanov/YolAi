@@ -1,6 +1,8 @@
 import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isMissingRelationError } from '@/lib/supabase/missingRelation';
+import { bakuTodayDate } from '@/lib/date/baku';
+import { logError } from '@/lib/logging/logError';
 
 // Phase 1 coin-earning mechanic (docs/coin-roadmap.md): a daily
 // traffic-law mini-quiz, one question per user per day
@@ -83,7 +85,7 @@ export async function getQuizRewardAmount(): Promise<number> {
 // writes a row, and "already attempted today" is exactly the lock we want —
 // the user gets one attempt per day, not one CORRECT attempt per day.
 export async function hasClaimedToday(userId: string): Promise<boolean> {
-  const todayUtc = new Date().toISOString().slice(0, 10);
+  const todayUtc = bakuTodayDate();
 
   const { data, error } = await createAdminClient()
     .from('daily_quiz_claims')
@@ -93,6 +95,7 @@ export async function hasClaimedToday(userId: string): Promise<boolean> {
     .maybeSingle();
 
   if (error) {
+    void logError('coins.quiz.hasClaimedToday', error, { userId });
     console.error('[coins] hasClaimedToday read failed:', error);
     // Fail closed: if we can't tell, assume already claimed so we never
     // double-credit on an infra hiccup — the user can retry, worst case
@@ -155,6 +158,7 @@ export async function claimDailyQuizReward(
     if (isMissingRelationError(error)) {
       return claimViaLegacyRpc(userId, isCorrect, reward);
     }
+    void logError('coins.quiz.claimWithStreak', error, { userId });
     console.error('[coins] claim_daily_quiz_with_streak RPC failed:', {
       message: error.message,
       code: error.code,
@@ -206,6 +210,7 @@ async function claimViaLegacyRpc(
     if (message.includes('already_claimed')) {
       return { ok: false, error: 'already_claimed' };
     }
+    void logError('coins.quiz.claimLegacy', error, { userId });
     console.error('[coins] claim_daily_quiz_reward (legacy) RPC failed:', {
       message: error.message,
       code: error.code,
@@ -247,6 +252,7 @@ export async function getStreakStatus(userId: string): Promise<StreakStatus> {
 
   if (error) {
     if (!isMissingRelationError(error)) {
+      void logError('coins.quiz.streakStatus', error, { userId });
       console.error('[coins] getStreakStatus read failed:', error);
     }
     return emptyStatus();
@@ -304,6 +310,7 @@ export async function getQuizClaimsCount(userId: string): Promise<number> {
     .gt('reward', 0);
 
   if (error) {
+    void logError('coins.quiz.claimsCount', error, { userId });
     console.error('[coins] getQuizClaimsCount read failed:', error);
     return 0;
   }
@@ -328,6 +335,7 @@ export async function getQuizStreak(userId: string): Promise<number> {
     .limit(400);
 
   if (error) {
+    void logError('coins.quiz.streak', error, { userId });
     console.error('[coins] getQuizStreak read failed:', error);
     return 0;
   }
@@ -335,7 +343,7 @@ export async function getQuizStreak(userId: string): Promise<number> {
   const claimDates = (data ?? []).map((row) => row.claim_date as string);
   if (claimDates.length === 0) return 0;
 
-  const todayUtc = new Date().toISOString().slice(0, 10);
+  const todayUtc = bakuTodayDate();
   const oneDayMs = 24 * 60 * 60 * 1000;
 
   const parseUtcDate = (dateStr: string): number => {

@@ -2,6 +2,7 @@ import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { formatMsUntilReset } from '@/lib/format/coins';
 import { ADMIN_CONTACT_EMAIL } from '@/lib/contact';
+import { logError } from '@/lib/logging/logError';
 
 // Hardcoded TS default (not an env var) — this is a brand-new concept with
 // no prior env var to preserve compatibility with, unlike
@@ -76,6 +77,7 @@ export async function checkAndReserveCoins(
     .single<ReserveCoinsResult>();
 
   if (error) {
+    void logError('chat.coins.reserve', error, { userId });
     console.error('[chat] coin reservation check failed:', {
       message: error.message,
       code: error.code,
@@ -117,6 +119,7 @@ export async function debitCoins(userId: string, price: number): Promise<number 
   });
 
   if (error) {
+    void logError('chat.coins.debit', error, { userId, details: { price } });
     console.error('[chat] coin debit failed:', {
       message: error.message,
       code: error.code,
@@ -150,6 +153,7 @@ export async function getCoinBalanceStatus(
     .maybeSingle();
 
   if (error) {
+    void logError('chat.coins.balanceStatus', error, { userId });
     console.error('[chat] coin balance status read failed:', error);
     // fail open, consistent with checkAndReserveCoins
     return { balance: dailyGrant, dailyLimit: null, price, msUntilReset: RESET_INTERVAL_MS };

@@ -1,6 +1,7 @@
 import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { DEFAULT_DAILY_LIMIT } from '@/lib/chat/coins';
+import { logError } from '@/lib/logging/logError';
 
 // New home for Phase 1 of the coin roadmap (docs/coin-roadmap.md), not
 // lib/chat/coins.ts — that file's fail-open posture is specific to chat
@@ -149,6 +150,7 @@ export async function transferCoins(
     .single<TransferCoinsRpcResult>();
 
   if (error) {
+    void logError('coins.transfers.transfer', error, { userId: senderId });
     console.error('[coins] transfer_coins RPC failed:', {
       message: error.message,
       code: error.code,
@@ -217,6 +219,7 @@ export async function getTransferHistory(
     .returns<CoinTransferSelectRow[]>();
 
   if (error || !data) {
+    void logError('coins.transfers.history', error, { userId });
     console.error('[coins] getTransferHistory read failed:', error);
     return { sent: [], received: [] };
   }

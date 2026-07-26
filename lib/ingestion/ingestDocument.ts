@@ -4,6 +4,7 @@ import { parsePdf } from './parsePdf';
 import { chunkPages } from './chunkText';
 import { embedBatch } from '@/lib/embeddings/embed';
 import { embedBatchGemini } from '@/lib/embeddings/gemini';
+import { logError } from '@/lib/logging/logError';
 
 // Supabase's PostgrestError/StorageError are plain objects with a `message`
 // field, not `instanceof Error` — a bare `err instanceof Error` check (as
@@ -61,6 +62,9 @@ export async function ingestDocument(documentId: string) {
         geminiEmbeddings = await embedBatchGemini(contents);
       } catch (err) {
         geminiFailedBatches += 1;
+        void logError('ingest.geminiEmbedBatch', err, {
+          details: { documentId, batchStartChunk: i },
+        });
         console.error(
           `[ingest] gemini embedding failed for document ${documentId} batch starting at chunk ${i} — continuing with local embeddings only; run scripts/backfill-gemini-embeddings.mjs to repair:`,
           err,
@@ -91,6 +95,9 @@ export async function ingestDocument(documentId: string) {
         ? `Gemini embedding-lərinin ${geminiFailedBatches} paketi alınmadı — sənəd yerli model ilə tam işlək vəziyyətdədir, lakin Gemini-yə keçmək üçün backfill skripti işə salınmalıdır.`
         : null;
     if (geminiWarning) {
+      void logError('ingest.geminiIncomplete', 'Document ingested with incomplete gemini embeddings', {
+        details: { documentId, geminiFailedBatches },
+      });
       console.error(
         `[ingest] document ${documentId} ingested with INCOMPLETE gemini embeddings (${geminiFailedBatches} batch(es) failed)`,
       );
@@ -102,6 +109,9 @@ export async function ingestDocument(documentId: string) {
       .eq('id', documentId);
   } catch (err) {
     const message = extractErrorMessage(err);
+    // The documents row already carries error_message for the admin UI; this
+    // keeps the full stack/cause, which that column doesn't hold.
+    await logError('ingest.document', err, { details: { documentId } });
     await supabase.from('documents').update({ status: 'failed', error_message: message }).eq('id', documentId);
     throw err;
   }

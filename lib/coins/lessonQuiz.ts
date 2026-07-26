@@ -1,5 +1,6 @@
 import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { logError } from '@/lib/logging/logError';
 
 // Per-lesson-question answering path (distinct from the Phase 1 daily quiz in
 // lib/coins/quiz.ts): the correct index is always looked up server-side, never
@@ -48,6 +49,7 @@ export async function getQuestionCategory(questionId: string): Promise<string | 
     .maybeSingle();
 
   if (error) {
+    void logError('coins.lessonQuiz.getQuestionCategory', error);
     console.error('[coins/lessonQuiz] getQuestionCategory failed:', error);
     return null;
   }
@@ -81,6 +83,7 @@ export async function submitLessonAnswer(
     .single<QuizQuestionAnswerRow>();
 
   if (fetchError || !question) {
+    void logError('coins.lessonQuiz.questionLookup', fetchError, { userId, details: { questionId } });
     console.error('[coins/lessonQuiz] question lookup failed:', fetchError);
     return { correct: false, error: 'not_found' };
   }
@@ -103,6 +106,7 @@ export async function submitLessonAnswer(
         ? { correct: true, alreadyAnswered: true, explanation: question.explanation }
         : { correct: false, alreadyAnswered: true, explanation: question.explanation };
     }
+    void logError('coins.lessonQuiz.awardReward', error, { userId, details: { questionId } });
     console.error('[coins/lessonQuiz] award_quiz_question_reward RPC failed:', {
       message: error.message,
       code: error.code,

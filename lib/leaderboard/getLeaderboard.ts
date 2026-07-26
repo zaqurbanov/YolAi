@@ -1,5 +1,6 @@
 import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { logError } from '@/lib/logging/logError';
 
 // Phase 2 of the coin roadmap (docs/coin-roadmap.md): a "top spenders"
 // leaderboard. Uses the service-role client for the same reason
@@ -77,6 +78,7 @@ export async function getTopSpenders(limit = 10): Promise<LeaderboardEntry[]> {
     .returns<UserCoinsRow[]>();
 
   if (coinsError || !coinsRows || coinsRows.length === 0) {
+    void logError('leaderboard.topSpenders.coinsRead', coinsError);
     if (coinsError) console.error('[leaderboard] getTopSpenders read failed:', coinsError);
     return [];
   }
@@ -90,6 +92,7 @@ export async function getTopSpenders(limit = 10): Promise<LeaderboardEntry[]> {
     .returns<ProfileRow[]>();
 
   if (profilesError) {
+    void logError('leaderboard.topSpenders.profileRead', profilesError);
     console.error('[leaderboard] getTopSpenders profile read failed:', profilesError);
     return [];
   }

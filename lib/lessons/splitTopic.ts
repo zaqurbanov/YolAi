@@ -11,6 +11,7 @@ import {
 } from '@/lib/lessons/generateTopicContent';
 import { listCourseTopics, type LessonTopicRow } from '@/lib/lessons/courses';
 import { truncateTitle } from '@/lib/lessons/proposeTopics';
+import { logError } from '@/lib/logging/logError';
 
 // Splitting one topic into N parts.
 //
@@ -132,6 +133,7 @@ async function loadTopic(
     .maybeSingle<TopicRow>();
 
   if (error || !data) {
+    void logError('lessons.splitTopic.topicLookup', error, { details: { topicId } });
     console.error('[lessons/splitTopic] topic lookup failed:', error);
     return { ok: false, error: 'Mövzu tapılmadı' };
   }
@@ -264,6 +266,7 @@ export async function suggestTopicSplit(
     titles = object.titles.length === advised ? object.titles : [];
     reason = object.reason.replace(/\s+/g, ' ').trim() || reason;
   } catch (error) {
+    void logError('lessons.splitTopic.advice', error, { details: { topicId } });
     console.error('[lessons/splitTopic] split advice failed:', error);
     const message = error instanceof Error ? error.message : String(error);
     const clean = message.replace(/\s+/g, ' ').trim().slice(0, 300);
@@ -366,6 +369,7 @@ export async function splitTopic(
     .returns<{ id: string; order_index: number }[]>();
 
   if (listError || !courseTopics) {
+    void logError('lessons.splitTopic.courseTopicList', listError, { details: { topicId } });
     console.error('[lessons/splitTopic] course topic list failed:', listError);
     return { ok: false, error: 'Kursun mövzuları oxunmadı' };
   }
@@ -396,6 +400,7 @@ export async function splitTopic(
     .returns<{ id: string }[]>();
 
   if (insertError || !inserted) {
+    void logError('lessons.splitTopic.partInsert', insertError, { details: { topicId } });
     console.error('[lessons/splitTopic] part insert failed:', insertError);
     return { ok: false, error: 'Yeni hissələri yaratmaq uğursuz oldu' };
   }
@@ -403,6 +408,7 @@ export async function splitTopic(
   const { error: deleteError } = await admin.from('lesson_topics').delete().eq('id', topicId);
 
   if (deleteError) {
+    void logError('lessons.splitTopic.parentDelete', deleteError, { details: { topicId } });
     console.error('[lessons/splitTopic] parent delete failed:', deleteError);
     return { ok: false, error: 'Köhnə mövzunu silmək uğursuz oldu' };
   }
@@ -422,6 +428,7 @@ export async function splitTopic(
   });
 
   if (reorderError) {
+    void logError('lessons.splitTopic.reorder', reorderError, { details: { topicId } });
     console.error('[lessons/splitTopic] reorder failed:', reorderError);
     return { ok: false, error: 'Mövzu sırasını yeniləmək uğursuz oldu' };
   }

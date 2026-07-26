@@ -5,7 +5,7 @@ import { Card } from '@heroui/react';
 import { CategoryCard } from '@/components/CategoryCard';
 import ScrollReveal from '@/components/ScrollReveal';
 import Footer from '@/components/Footer';
-import { CheckIcon, FineIcon, SparkleIcon } from '@/components/icons';
+import { CheckIcon, FineIcon, SparkleIcon, ChatIcon, RulesIcon, CoinIcon, TrophyIcon } from '@/components/icons';
 import { getCategoryContent, getCategoryQuestionCounts } from '@/lib/content/categoryContent';
 import { getHomeBackgroundImageUrl } from '@/lib/content/homeBackground';
 import { getRegisteredDriverCount, getRecentDriverInitials } from '@/lib/content/getRegisteredDriverCount';
@@ -52,6 +52,58 @@ const PROMO_FEATURES = [
 const MOCK_STATS_TAIL = [
   { value: '98%', label: 'Düzgün cavab nisbəti', accent: 'text-go-green' },
   { value: '24/7', label: 'Hüquqi dəstək', accent: 'text-regulatory-blue' },
+];
+
+// "What you can do here" — the app's four pillars, linking to each. Accent
+// colours cycle through the same traffic-signal palette the category cards use,
+// so the landing page reads as one system.
+const FEATURES = [
+  {
+    icon: ChatIcon,
+    title: 'AI Söhbət',
+    desc: 'Yol qaydaları ilə bağlı istənilən sualı yaz — rəsmi sənədlərə əsaslanan, mənbəyə istinad edən cavab al. Vəziyyətin şəklini də göndərə bilərsən.',
+    href: '/chat',
+    cta: 'Suala başla',
+    chip: 'bg-primary/15 text-primary',
+    border: 'border-l-primary',
+  },
+  {
+    icon: RulesIcon,
+    title: 'Sürücülük dərsləri',
+    desc: 'Kateqoriyalar üzrə dərsləri oxu, hər mövzunun sonundakı testi keç və irəliləyişini izlə — sürücülük vəsiqəsi imtahanına addım-addım hazırlaş.',
+    href: '/oyrenme',
+    cta: 'Dərslərə başla',
+    chip: 'bg-regulatory-blue/15 text-regulatory-blue',
+    border: 'border-l-regulatory-blue',
+  },
+  {
+    icon: CoinIcon,
+    title: 'Coin qazan',
+    desc: 'Gündəlik sual, ardıcıllıq seriyası, dostları dəvət və reklam izləmə ilə coin topla. Coinlərlə pulsuz gündəlik limitdən sonra da AI söhbətini davam etdir.',
+    href: '/coin-qazan',
+    cta: 'Coin qazan',
+    chip: 'bg-safety-yellow/15 text-safety-yellow',
+    border: 'border-l-safety-yellow',
+  },
+  {
+    icon: TrophyIcon,
+    title: 'Oyunlar və Çarx',
+    desc: 'Kompüterə qarşı XO oyna, gündəlik pulsuz çarxı fırlat və həftəlik reytinqdə yerini tut — əylənərək coin qazan.',
+    href: '/coin-qazan',
+    cta: 'Oynamağa başla',
+    chip: 'bg-go-green/15 text-go-green',
+    border: 'border-l-go-green',
+  },
+];
+
+// How coins are earned (shown in the coin-explainer section). These mirror the
+// real earning mechanics on /coin-qazan.
+const COIN_EARN = [
+  'Gündəlik sualı düzgün cavabla',
+  'Ardıcıl günlərdə seriyanı qoru (streak bonusu)',
+  'XO oyna və gündəlik çarxı fırlat',
+  'Dostlarını dəvət et',
+  'Reklam izlə',
 ];
 
 export default async function Home() {
@@ -106,6 +158,10 @@ export default async function Home() {
           <p className="max-w-md text-body-lg text-on-surface-variant">
             Yol hərəkəti qaydaları ilə bağlı sualını yaz, rəsmi sənədlərə əsaslanan, mənbəyə istinad edən
             cavab al.
+          </p>
+          <p className="max-w-md text-body-md text-on-surface-variant">
+            Üstəlik: sürücülük vəsiqəsi üçün dərsləri keç, testləri həll et, gündəlik oyunlarla coin
+            qazan və həftəlik reytinqdə yerini tut — hamısı bir platformada.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3">
             <Link
@@ -211,6 +267,83 @@ export default async function Home() {
                   <span className="text-label-sm text-on-surface-variant">{stat.label}</span>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="px-6 py-16">
+        <div className="mx-auto max-w-5xl">
+          <div className="mb-8 max-w-2xl">
+            <h2 className="text-headline-md">YOL ilə nələr edə bilərsiniz?</h2>
+            <p className="mt-1 text-body-md text-on-surface-variant">
+              Bu platforma yalnız sual-cavab deyil — yol qaydalarını öyrənmək, vəsiqə imtahanına
+              hazırlaşmaq və əylənərək irəliləmək üçün tam bir dəstdir.
+            </p>
+          </div>
+
+          <div className="grid gap-6 sm:grid-cols-2">
+            {FEATURES.map((feature, i) => {
+              const Icon = feature.icon;
+              return (
+                <ScrollReveal key={feature.title} delayMs={i * 80}>
+                  <div
+                    className={`glass-card group flex h-full flex-col gap-3 rounded-2xl border border-transparent border-l-4 ${feature.border} p-6 transition duration-200 hover:-translate-y-1 hover:shadow-lg`}
+                  >
+                    <div
+                      className={`flex size-12 items-center justify-center rounded-xl transition duration-200 group-hover:scale-110 ${feature.chip}`}
+                    >
+                      <Icon />
+                    </div>
+                    <h3 className="text-headline-md text-[20px]">{feature.title}</h3>
+                    <p className="flex-1 text-body-md text-on-surface-variant">{feature.desc}</p>
+                    <Link
+                      href={feature.href}
+                      className={buttonVariants({ variant: 'ghost', size: 'sm' }) + ' w-fit'}
+                    >
+                      {feature.cta}
+                    </Link>
+                  </div>
+                </ScrollReveal>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      <section className="px-6 pb-16">
+        <div className="mx-auto max-w-5xl">
+          <div className="glass-card rounded-3xl border-safety-yellow/20 bg-safety-yellow/5 p-8 md:p-10">
+            <div className="grid gap-8 md:grid-cols-2">
+              <div className="flex flex-col gap-3">
+                <span className="inline-flex w-fit items-center gap-2 rounded-full bg-safety-yellow/15 px-3 py-1 text-label-sm text-safety-yellow">
+                  <CoinIcon className="size-4" />
+                  Coin sistemi
+                </span>
+                <h2 className="text-headline-md">Öyrən, oyna, coin qazan</h2>
+                <p className="text-body-md text-on-surface-variant">
+                  Coinlər platformanın daxili mükafat vahididir — real pulla alınmır. AI ilə hər
+                  gün müəyyən sayda pulsuz söhbət edə bilərsən; bu limit bitəndə topladığın coinlərlə
+                  davam edirsən. Coin qazanmağın bir neçə yolu var:
+                </p>
+                <Link
+                  href="/coin-qazan"
+                  className={
+                    buttonVariants({ variant: 'primary', size: 'md' }) +
+                    ' glow-primary mt-1 w-fit transition-transform hover:scale-[1.03] active:scale-[0.98]'
+                  }
+                >
+                  Coin qazanmağa başla
+                </Link>
+              </div>
+              <ul className="flex flex-col justify-center gap-3">
+                {COIN_EARN.map((item) => (
+                  <li key={item} className="flex items-start gap-3 text-body-md text-on-surface">
+                    <CoinIcon width={18} height={18} className="mt-0.5 shrink-0 text-safety-yellow" />
+                    {item}
+                  </li>
+                ))}
+              </ul>
             </div>
           </div>
         </div>

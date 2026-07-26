@@ -1,5 +1,6 @@
 import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { logError } from '@/lib/logging/logError';
 
 // Topic-boundary proposal: turn one already-ingested document's chunks into an
 // ordered list of PROPOSED topics for an admin to adjust before anything is
@@ -193,6 +194,7 @@ export async function buildDocumentUnits(documentId: string): Promise<DocumentUn
     .maybeSingle();
 
   if (documentError || !document) {
+    void logError('lessons.proposeTopics.documentLookup', documentError, { details: { documentId } });
     console.error('[lessons/proposeTopics] document lookup failed:', documentError);
     return null;
   }
@@ -208,6 +210,7 @@ export async function buildDocumentUnits(documentId: string): Promise<DocumentUn
     .returns<UnitChunk[]>();
 
   if (chunksError) {
+    void logError('lessons.proposeTopics.chunksRead', chunksError, { details: { documentId } });
     console.error('[lessons/proposeTopics] chunks read failed:', chunksError);
     return null;
   }

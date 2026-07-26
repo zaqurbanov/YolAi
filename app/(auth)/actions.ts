@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { logError } from '@/lib/logging/logError';
 
 export interface AuthFormState {
   error?: string;
@@ -71,7 +72,7 @@ export async function login(_prevState: AuthFormState, formData: FormData): Prom
     return { error: 'Email və ya şifrə yanlışdır' };
   }
 
-  redirect('/chat');
+  redirect('/');
 }
 
 export async function signInWithGoogle(formData?: FormData) {
@@ -100,7 +101,10 @@ export async function signInWithGoogle(formData?: FormData) {
     options: { redirectTo: callbackUrl },
   });
 
-  if (error) redirect('/login?error=' + encodeURIComponent(error.message));
+  if (error) {
+    await logError('actions.auth.signInWithGoogle', error);
+    redirect('/login?error=' + encodeURIComponent(error.message));
+  }
 
   redirect(data.url);
 }

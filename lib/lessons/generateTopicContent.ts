@@ -9,6 +9,7 @@ import {
   getProviderCallOptions,
 } from '@/lib/llm';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { logError } from '@/lib/logging/logError';
 
 // Per-TOPIC content generation: reading material + a question pool, drafted
 // from the chunks that topic covers.
@@ -191,6 +192,7 @@ export async function generateTopicReadingContent(
 
     return { ok: true, content: object };
   } catch (error) {
+    void logError('lessons.generateTopicContent.reading', error);
     console.error('[lessons/generateTopicContent] reading content generation failed:', error);
     return { ok: false, error: `Dərs materialı yaradılmadı — ${describeLlmError(getChatModelId(), error)}` };
   }
@@ -274,6 +276,7 @@ export async function generateTopicQuestions(
 
     return { ok: true, questions };
   } catch (error) {
+    void logError('lessons.generateTopicContent.questions', error);
     console.error('[lessons/generateTopicContent] question generation failed:', error);
     return { ok: false, error: `Suallar yaradılmadı — ${describeLlmError(getRewriteModelId(), error)}` };
   }
@@ -295,6 +298,7 @@ export async function loadChunksByIds(chunkIds: string[]): Promise<TopicSourceCh
     .in('id', chunkIds);
 
   if (error || !data) {
+    void logError('lessons.generateTopicContent.loadChunks', error);
     console.error('[lessons/generateTopicContent] loadChunksByIds failed:', error);
     return [];
   }

@@ -1,6 +1,7 @@
 import 'server-only';
 import { getChatModel, getChatModelFallback } from '@/lib/llm';
 import { generateTextWithFallback } from '@/lib/llm/fallback';
+import { logError } from '@/lib/logging/logError';
 
 export interface ConversationContextSummary {
   topics: string[];
@@ -81,6 +82,7 @@ export async function updateContextSummary(
       message_count_at_summary: messageCountAtSummary,
     };
   } catch (err) {
+    void logError('rag.contextSummary.update', err);
     console.error('[contextSummary] failed to update summary:', err);
     return fallback;
   }

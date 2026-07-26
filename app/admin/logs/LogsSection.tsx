@@ -16,6 +16,16 @@ interface LogRow {
   created_at: string;
 }
 
+interface ErrorLogRow {
+  id: string;
+  context: string;
+  message: string;
+  details: Record<string, unknown> | null;
+  user_id: string | null;
+  request_id: string | null;
+  created_at: string;
+}
+
 const STAGE_METRICS = [
   { key: 'rewrite_ms', label: 'Rewrite' },
   { key: 'embed_ms', label: 'Embed' },
@@ -50,15 +60,26 @@ export default async function LogsSection() {
   if (!auth.ok) redirect(auth.status === 401 ? '/login' : '/chat');
 
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from('chat_request_logs')
-    .select(
-      'id, request_id, query, rewrite_ms, embed_ms, db_search_ms, llm_first_token_ms, llm_total_ms, model_used, created_at'
-    )
-    .order('created_at', { ascending: false })
-    .limit(100);
+  const [{ data, error }, { data: errorData, error: errorLogsError }] = await Promise.all([
+    supabase
+      .from('chat_request_logs')
+      .select(
+        'id, request_id, query, rewrite_ms, embed_ms, db_search_ms, llm_first_token_ms, llm_total_ms, model_used, created_at'
+      )
+      .order('created_at', { ascending: false })
+      .limit(100),
+    // error_logs (0073) captures caught server errors. If the migration isn't
+    // applied yet this query errors — handled below as "no errors table" rather
+    // than breaking the whole logs page.
+    supabase
+      .from('error_logs')
+      .select('id, context, message, details, user_id, request_id, created_at')
+      .order('created_at', { ascending: false })
+      .limit(100),
+  ]);
 
   const rows: LogRow[] = data ?? [];
+  const errorRows: ErrorLogRow[] = errorData ?? [];
 
   const stats = STAGE_METRICS.map(({ key, label }) => {
     const values = rows
@@ -76,6 +97,61 @@ export default async function LogsSection() {
 
   return (
     <div className="mx-auto p-6 space-y-8">
+      <div>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-semibold">Xətalar</h1>
+          <span className="mono-label text-on-surface-variant">
+            {errorLogsError ? '—' : `Son ${errorRows.length} xəta`}
+          </span>
+        </div>
+        <div className="mt-3 glass-panel rounded-2xl overflow-hidden overflow-x-auto">
+          {errorLogsError ? (
+            <div className="py-8 px-4 text-sm text-on-surface-variant">
+              Xəta cədvəli hələ yoxdur — Supabase-də <code>0073_error_logs.sql</code> miqrasiyasını
+              işə salın.
+            </div>
+          ) : errorRows.length === 0 ? (
+            <div className="py-16 text-center text-sm text-on-surface-variant">
+              Qeydə alınmış xəta yoxdur 🎉
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-outline-variant/40 text-left">
+                  <th className="px-4 py-3 font-medium text-on-surface-variant">Yer</th>
+                  <th className="px-4 py-3 font-medium text-on-surface-variant">Mesaj</th>
+                  <th className="px-4 py-3 font-medium text-on-surface-variant">İstifadəçi</th>
+                  <th className="px-4 py-3 font-medium text-on-surface-variant text-right">Tarix</th>
+                </tr>
+              </thead>
+              <tbody>
+                {errorRows.map((row) => (
+                  <tr key={row.id} className="border-b border-outline-variant/20 last:border-b-0 align-top">
+                    <td className="px-4 py-3 mono-label text-caution-orange whitespace-nowrap">
+                      {row.context}
+                    </td>
+                    <td className="px-4 py-3 max-w-md">
+                      <div className="text-on-surface">{truncate(row.message, 160)}</div>
+                      {row.details && typeof row.details.mediaType === 'string' && (
+                        <div className="mono-label text-on-surface-variant mt-0.5">
+                          {row.details.mediaType}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 mono-label truncate max-w-[9rem]" title={row.user_id ?? undefined}>
+                      {row.user_id ? row.user_id.slice(0, 8) : '—'}
+                    </td>
+                    <td className="px-4 py-3 mono-label text-right text-on-surface-variant whitespace-nowrap">
+                      {formatAzDateTime(row.created_at, { seconds: true })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Sorğu latensiyası</h1>
         <span className="mono-label text-on-surface-variant">Son {rows.length} sorğu</span>

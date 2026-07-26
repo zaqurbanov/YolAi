@@ -1,5 +1,6 @@
 import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { logError } from '@/lib/logging/logError';
 
 // User -> admin "Sual-cavab" (Q&A) feature. Same fail-closed posture as
 // lib/coins/transfers.ts: every write goes through the service-role client
@@ -47,6 +48,7 @@ export async function submitQuestion(
     .single<{ id: string }>();
 
   if (error || !data) {
+    void logError('admin.questions.submit', error, { userId });
     console.error('[admin/questions] submitQuestion failed:', error);
     return { ok: false, error: 'Sual göndərilərkən xəta baş verdi' };
   }
@@ -63,6 +65,7 @@ export async function getUserQuestions(userId: string): Promise<UserQuestionRow[
     .returns<Omit<AdminQuestionsSelectRow, 'user_id' | 'answered_by'>[]>();
 
   if (error || !data) {
+    void logError('admin.questions.listUser', error, { userId });
     console.error('[admin/questions] getUserQuestions failed:', error);
     return [];
   }
@@ -88,6 +91,7 @@ export async function getAllQuestions(): Promise<AdminQuestionRow[]> {
     .returns<AdminQuestionsSelectRow[]>();
 
   if (error || !data) {
+    void logError('admin.questions.listAll', error);
     console.error('[admin/questions] getAllQuestions failed:', error);
     return [];
   }
@@ -127,6 +131,7 @@ export async function answerQuestion(
     .single<{ user_id: string }>();
 
   if (fetchError || !existing) {
+    void logError('admin.questions.answerLookup', fetchError, { details: { questionId } });
     console.error('[admin/questions] answerQuestion lookup failed:', fetchError);
     return { ok: false, error: 'Sual tapılmadı' };
   }
@@ -141,6 +146,7 @@ export async function answerQuestion(
     .eq('id', questionId);
 
   if (updateError) {
+    void logError('admin.questions.answerUpdate', updateError, { details: { questionId } });
     console.error('[admin/questions] answerQuestion update failed:', updateError);
     return { ok: false, error: 'Cavab yadda saxlanılarkən xəta baş verdi' };
   }
@@ -154,6 +160,7 @@ export async function answerQuestion(
   if (notifyError) {
     // Answer itself already saved successfully — a failed notification
     // insert is logged, not surfaced as an overall failure to the admin.
+    void logError('admin.questions.answerNotify', notifyError, { details: { questionId } });
     console.error('[admin/questions] answerQuestion notification insert failed:', notifyError);
   }
 

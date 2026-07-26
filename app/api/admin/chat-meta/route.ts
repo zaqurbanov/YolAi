@@ -45,6 +45,14 @@ import {
   DEFAULT_AD_VIEW_DURATION_SECONDS,
   MAX_AD_VIEW_DURATION_SECONDS,
 } from '@/lib/coins/adWatch';
+import {
+  ENERGY_PURCHASE_COIN_COST_KEY,
+  DEFAULT_ENERGY_PURCHASE_COIN_COST,
+  ENERGY_PURCHASE_ENERGY_AMOUNT_KEY,
+  DEFAULT_ENERGY_PURCHASE_ENERGY_AMOUNT,
+  ENERGY_PURCHASE_MAX_BALANCE_KEY,
+  DEFAULT_ENERGY_PURCHASE_MAX_BALANCE,
+} from '@/lib/coins/games';
 
 // Inherited from the folded-in documents/quiz-questions routes: PDF ingestion
 // and LLM question extraction over a full PDF are both slow. This applies to
@@ -183,15 +191,51 @@ const LESSON_ECONOMY_FIELDS = [
   },
 ] as const;
 
-type LessonEconomyField = (typeof LESSON_ECONOMY_FIELDS)[number];
-
 const LESSON_ECONOMY_KEYS = LESSON_ECONOMY_FIELDS.map((f) => f.key);
 
-function isValidLessonEconomyValue(field: LessonEconomyField, value: number): boolean {
+// Generic over any {integerOnly, min, max} field shape so it also serves
+// ENERGY_ECONOMY_FIELDS below without a near-duplicate validator.
+function isValidLessonEconomyValue(
+  field: { integerOnly: boolean; min: number; max: number },
+  value: number
+): boolean {
   if (!Number.isFinite(value)) return false;
   if (field.integerOnly && !Number.isInteger(value)) return false;
   return value >= field.min && value <= field.max;
 }
+
+// The "buy energy with coins" tunables (0072_energy_purchase.sql), exposed
+// through their own `?type=energy-economy` group — a separate economy family
+// from LESSON_ECONOMY_FIELDS above (energy purchase, not lessons), edited on
+// its own admin screen, but sharing the same field/validation/response shape.
+const ENERGY_ECONOMY_FIELDS = [
+  {
+    param: 'energyPurchaseCoinCost',
+    key: ENERGY_PURCHASE_COIN_COST_KEY,
+    defaultValue: DEFAULT_ENERGY_PURCHASE_COIN_COST,
+    integerOnly: false,
+    min: 0.01,
+    max: MAX_ALLOWED_PRICE,
+  },
+  {
+    param: 'energyPurchaseEnergyAmount',
+    key: ENERGY_PURCHASE_ENERGY_AMOUNT_KEY,
+    defaultValue: DEFAULT_ENERGY_PURCHASE_ENERGY_AMOUNT,
+    integerOnly: true,
+    min: 1,
+    max: 1000,
+  },
+  {
+    param: 'energyPurchaseMaxBalance',
+    key: ENERGY_PURCHASE_MAX_BALANCE_KEY,
+    defaultValue: DEFAULT_ENERGY_PURCHASE_MAX_BALANCE,
+    integerOnly: true,
+    min: 1,
+    max: 100000,
+  },
+] as const;
+
+const ENERGY_ECONOMY_KEYS = ENERGY_ECONOMY_FIELDS.map((f) => f.key);
 
 // Category-card override text fields (`?type=category-content`). 300 chars is
 // a card-copy bound, not a technical one — these render inside fixed-size
@@ -451,7 +495,7 @@ export async function GET(request: NextRequest) {
       const page = await getAdminUserConversations(id, { limit, offset });
       return NextResponse.json(page);
     } catch (error) {
-      return serverError(error, 'Söhbət tarixçəsini yükləmək uğursuz oldu');
+      return serverError(error, 'Söhbət tarixçəsini yükləmək uğursuz oldu', 'admin.chatMeta.userConversations');
     }
   }
 
@@ -566,6 +610,34 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ settings });
   }
 
+  if (type === 'energy-economy') {
+    const { data, error } = await createAdminClient()
+      .from('app_settings')
+      .select('key, value')
+      .in('key', ENERGY_ECONOMY_KEYS);
+
+    if (error) return serverError(error, 'Ayarları oxumaq uğursuz oldu');
+
+    const byKey = new Map((data ?? []).map((row) => [row.key, row.value]));
+
+    const settings = Object.fromEntries(
+      ENERGY_ECONOMY_FIELDS.map((field) => {
+        const raw = byKey.get(field.key);
+        const value = raw === undefined || raw === null ? null : Number(raw);
+        const isConfigured = value !== null && isValidLessonEconomyValue(field, value);
+        return [
+          field.param,
+          {
+            value: isConfigured ? value : field.defaultValue,
+            source: isConfigured ? 'table' : 'default',
+          },
+        ];
+      })
+    );
+
+    return NextResponse.json({ settings });
+  }
+
   if (type === 'category-content') {
     const { data, error } = await createAdminClient()
       .from('app_settings')
@@ -663,7 +735,7 @@ export async function POST(request: NextRequest) {
       try {
         await reprocessDocument(id);
       } catch (err) {
-        return serverError(err, 'Sənədi yenidən emal etmək uğursuz oldu');
+        return serverError(err, 'Sənədi yenidən emal etmək uğursuz oldu', 'admin.chatMeta.reprocessDocument');
       }
 
       return NextResponse.json({ ok: true });
@@ -700,7 +772,7 @@ export async function POST(request: NextRequest) {
     try {
       await ingestDocument(document.id);
     } catch (err) {
-      logApiError(`ingest document=${document.id}`, err);
+      logApiError('admin.chatMeta.ingestDocument', err, { details: { documentId: document.id } });
     }
 
     return NextResponse.json({ document });
@@ -726,8 +798,8 @@ export async function POST(request: NextRequest) {
       const buffer = await file.arrayBuffer();
       generated = await generateQuestionsFromPdf(buffer);
     } catch (err) {
-      logApiError(`generate quiz questions from pdf file=${file.name}`, err);
-      return serverError(err, 'Sənəddən suallar hazırlamaq uğursuz oldu');
+      logApiError('admin.chatMeta.generateQuizQuestions', err, { details: { fileName: file.name, fileSize: file.size } });
+      return serverError(err, 'Sənəddən suallar hazırlamaq uğursuz oldu', 'admin.chatMeta.generateQuizQuestions');
     }
 
     if (generated.length === 0) {
@@ -979,6 +1051,73 @@ export async function PATCH(request: NextRequest) {
 
     const settings = Object.fromEntries(
       LESSON_ECONOMY_FIELDS.map((field) => {
+        const raw = byKey.get(field.key);
+        const numeric = raw === undefined || raw === null ? null : Number(raw);
+        const isConfigured = numeric !== null && isValidLessonEconomyValue(field, numeric);
+        return [
+          field.param,
+          {
+            value: isConfigured ? numeric : field.defaultValue,
+            source: isConfigured ? 'table' : 'default',
+          },
+        ];
+      })
+    );
+
+    return NextResponse.json({ settings });
+  }
+
+  if (type === 'energy-economy') {
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== 'object') return apiError(400, 'Gövdə düzgün deyil');
+
+    // Partial update, all-or-nothing validation, null-resets-to-default — same
+    // convention as lesson-economy above.
+    const present = ENERGY_ECONOMY_FIELDS.filter((f) => body[f.param] !== undefined);
+
+    if (present.length === 0) {
+      return apiError(400, `Yeniləmək üçün heç olmasa bir sahə tələb olunur: ${ENERGY_ECONOMY_FIELDS.map((f) => f.param).join(', ')}`);
+    }
+
+    for (const field of present) {
+      const value = body[field.param];
+      if (value === null) continue;
+      if (typeof value !== 'number' || !isValidLessonEconomyValue(field, value)) {
+        return apiError(
+          400,
+          `${field.param} null və ya ${field.min}-${field.max} arasında ${field.integerOnly ? 'tam ' : ''}ədəd olmalıdır`
+        );
+      }
+    }
+
+    const admin = createAdminClient();
+
+    for (const field of present) {
+      const value = body[field.param];
+
+      if (value === null) {
+        const { error } = await admin.from('app_settings').delete().eq('key', field.key);
+        if (error) return serverError(error, 'Ayarı sıfırlamaq uğursuz oldu');
+        continue;
+      }
+
+      const { error } = await admin
+        .from('app_settings')
+        .upsert({ key: field.key, value, updated_at: new Date().toISOString() });
+      if (error) return serverError(error, 'Ayarı yeniləmək uğursuz oldu');
+    }
+
+    const { data, error } = await admin
+      .from('app_settings')
+      .select('key, value')
+      .in('key', ENERGY_ECONOMY_KEYS);
+
+    if (error) return serverError(error, 'Ayarları oxumaq uğursuz oldu');
+
+    const byKey = new Map((data ?? []).map((row) => [row.key, row.value]));
+
+    const settings = Object.fromEntries(
+      ENERGY_ECONOMY_FIELDS.map((field) => {
         const raw = byKey.get(field.key);
         const numeric = raw === undefined || raw === null ? null : Number(raw);
         const isConfigured = numeric !== null && isValidLessonEconomyValue(field, numeric);
@@ -1274,7 +1413,7 @@ export async function DELETE(request: NextRequest) {
       try {
         await deleteDocuments(supabase, [documentId]);
       } catch (error) {
-        return serverError(error, 'Sənədi silmək uğursuz oldu');
+        return serverError(error, 'Sənədi silmək uğursuz oldu', 'admin.chatMeta.deleteDocument');
       }
 
       return NextResponse.json({ ok: true });
@@ -1291,7 +1430,7 @@ export async function DELETE(request: NextRequest) {
       const { deletedCount } = await deleteDocuments(supabase, ids);
       return NextResponse.json({ ok: true, deleted: deletedCount });
     } catch (error) {
-      return serverError(error, 'Sənədləri silmək uğursuz oldu');
+      return serverError(error, 'Sənədləri silmək uğursuz oldu', 'admin.chatMeta.deleteDocuments');
     }
   }
 

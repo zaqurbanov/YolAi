@@ -6,6 +6,7 @@ import { isMissingRelationError } from '@/lib/supabase/missingRelation';
 import { canAccessCourse, getTopicTestConfig, getLessonRetryCost } from '@/lib/coins/lessonUnlock';
 import { isUserAdmin } from '@/lib/auth/isAdmin';
 import { getCourseTopics, type TopicSummary } from '@/lib/quiz/lessons';
+import { logError } from '@/lib/logging/logError';
 
 // Phase 2 of the lessons feature: reading a topic, drawing a topic test,
 // scoring it, and recording the attempt. Lives beside lib/quiz/lessons.ts
@@ -157,6 +158,7 @@ export async function resolveAccessibleTopic(
 
   if (error) {
     if (!isMissingRelationError(error)) {
+      void logError('quiz.topicTest.topicLookup', error, { details: { topicId } });
       console.error('[quiz/topicTest] topic lookup failed:', error);
     }
     return null;
@@ -208,9 +210,11 @@ export async function getAttemptState(userId: string, topicId: string): Promise<
     ]);
 
   if (attemptsError && !isMissingRelationError(attemptsError)) {
+    void logError('quiz.topicTest.attemptCount', attemptsError, { userId });
     console.error('[quiz/topicTest] daily attempt count failed:', attemptsError);
   }
   if (progressError && !isMissingRelationError(progressError)) {
+    void logError('quiz.topicTest.progressRead', progressError, { userId });
     console.error('[quiz/topicTest] progress read failed:', progressError);
   }
 
@@ -292,6 +296,7 @@ function canonicalIds(questionIds: string[]): string {
 function sign(userId: string, topicId: string, questionIds: string[], issuedAt: number): string | null {
   const secret = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!secret) {
+    void logError('quiz.topicTest.signMissingSecret', 'SUPABASE_SERVICE_ROLE_KEY missing; cannot sign a draw', { userId, details: { topicId } });
     console.error('[quiz/topicTest] SUPABASE_SERVICE_ROLE_KEY missing; cannot sign a draw');
     return null;
   }
@@ -367,6 +372,7 @@ async function readPool(topicId: string): Promise<DrawnQuestion[] | null> {
 
   if (error) {
     if (!isMissingRelationError(error)) {
+      void logError('quiz.topicTest.poolRead', error, { details: { topicId } });
       console.error('[quiz/topicTest] pool read failed:', error);
     }
     return null;
@@ -488,11 +494,13 @@ export async function getTopicForReading(
 
   if (topicError || !topic) {
     if (topicError && !isMissingRelationError(topicError)) {
+      void logError('quiz.topicTest.topicContentRead', topicError, { details: { topicId } });
       console.error('[quiz/topicTest] topic content read failed:', topicError);
     }
     return null;
   }
   if (courseError && !isMissingRelationError(courseError)) {
+    void logError('quiz.topicTest.courseTitleRead', courseError, { details: { topicId } });
     console.error('[quiz/topicTest] course title read failed:', courseError);
   }
 
@@ -549,6 +557,7 @@ export async function scoreAnswers(
     .returns<AnswerRow[]>();
 
   if (error) {
+    void logError('quiz.topicTest.answerKeyRead', error, { details: { topicId } });
     console.error('[quiz/topicTest] answer key read failed:', error);
     return { ok: false, error: 'error' };
   }
@@ -605,6 +614,7 @@ export async function recordTopicAttempt(
     if ((error.message ?? '').includes('daily_limit_reached')) {
       return { ok: false, error: 'daily_limit_reached' };
     }
+    void logError('quiz.topicTest.recordAttempt', error, { userId, details: { topicId } });
     console.error('[quiz/topicTest] record_lesson_attempt RPC failed:', {
       message: error.message,
       code: error.code,

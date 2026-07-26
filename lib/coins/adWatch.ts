@@ -1,6 +1,8 @@
 import 'server-only';
 import { randomBytes } from 'crypto';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { bakuTodayDate } from '@/lib/date/baku';
+import { logError } from '@/lib/logging/logError';
 
 // Repeatable coin reward for watching an ad (reklam izləyib coin qazanmaq),
 // capped at N times per day (0053_ad_watch_reward.sql). Unlike the one-time
@@ -54,15 +56,16 @@ export async function getAdWatchDailyMax(): Promise<number> {
 // not a security gate (the real gate is the RPC's row-locked count), so
 // fail open to 0 on error, same bias as getQuizClaimsCount/hasClaimedToday.
 export async function getAdWatchClaimsToday(userId: string): Promise<number> {
-  const todayUtc = new Date().toISOString().slice(0, 10);
+  const today = bakuTodayDate();
 
   const { count, error } = await createAdminClient()
     .from('ad_watch_claims')
     .select('*', { count: 'exact', head: true })
     .eq('user_id', userId)
-    .eq('claim_date', todayUtc);
+    .eq('claim_date', today);
 
   if (error) {
+    void logError('coins.adWatch.claimsToday', error, { userId });
     console.error('[coins] getAdWatchClaimsToday read failed:', error);
     return 0;
   }
@@ -126,6 +129,7 @@ export async function issueAdViewToken(userId: string): Promise<string | null> {
   const { error } = await admin.from('ad_view_tokens').insert({ user_id: userId, nonce });
 
   if (error) {
+    void logError('coins.adWatch.issueToken', error, { userId });
     console.error('[coins] issueAdViewToken insert failed:', error);
     return null;
   }
@@ -141,6 +145,7 @@ export async function issueAdViewToken(userId: string): Promise<string | null> {
     .eq('user_id', userId)
     .lt('issued_at', staleCutoff);
 
+  void logError('coins.adWatch.tokenSweep', sweepError, { userId });
   if (sweepError) console.error('[coins] issueAdViewToken stale sweep failed:', sweepError);
 
   return nonce;
@@ -166,6 +171,7 @@ async function consumeAdViewToken(
   });
 
   if (error) {
+    void logError('coins.adWatch.consumeToken', error, { userId });
     console.error('[coins] consume_ad_view_token RPC failed:', {
       message: error.message,
       code: error.code,
@@ -226,6 +232,7 @@ export async function claimAdWatchReward(userId: string, nonce: string): Promise
     if (message.includes('daily_limit_reached')) {
       return { ok: false, error: 'daily_limit_reached' };
     }
+    void logError('coins.adWatch.claimReward', error, { userId });
     console.error('[coins] claim_ad_watch_reward RPC failed:', {
       message: error.message,
       code: error.code,

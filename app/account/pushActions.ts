@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { claimPushNotificationReward } from '@/lib/coins/pushNotifications';
 import { isAllowedPushEndpoint } from '@/lib/push/endpointValidation';
 import { sendPushToSubscription } from '@/lib/push/webpush';
+import { logError } from '@/lib/logging/logError';
 
 // Mirrors the browser's PushSubscriptionJSON shape (subscription.toJSON())
 // so the frontend can pass what pushManager.subscribe() already returns
@@ -78,9 +79,11 @@ export async function subscribeToPush(subscription: PushSubscriptionPayload): Pr
     );
     verified = sendResult.ok;
     if (!sendResult.ok) {
+      void logError('actions.account.push.verificationRejected', 'Verification push rejected', { userId: user.id, details: { sendResult } });
       console.error('[push] verification push rejected, reward declined:', sendResult);
     }
   } catch (err) {
+    void logError('actions.account.push.verificationSendFailed', err, { userId: user.id });
     console.error('[push] verification push could not be sent (VAPID misconfigured?):', err);
   }
 

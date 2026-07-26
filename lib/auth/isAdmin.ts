@@ -1,6 +1,7 @@
 import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isMissingRelationError } from '@/lib/supabase/missingRelation';
+import { logError } from '@/lib/logging/logError';
 
 // Role predicate for an ALREADY-AUTHENTICATED user id, used by the lessons
 // access layer (lib/coins/lessonUnlock.ts, lib/quiz/lessons.ts) where the
@@ -29,6 +30,7 @@ export async function isUserAdmin(userId: string): Promise<boolean> {
 
   if (error) {
     if (!isMissingRelationError(error)) {
+      void logError('auth.isAdmin.roleRead', error, { userId });
       console.error('[auth/isAdmin] role read failed:', error);
     }
     return false;

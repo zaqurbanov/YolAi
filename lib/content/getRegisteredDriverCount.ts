@@ -1,5 +1,6 @@
 import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { logError } from '@/lib/logging/logError';
 
 // Real registered-user count for the home page's public social-proof line
 // and stats block. Uses the service-role client rather than the RLS-scoped
@@ -11,6 +12,7 @@ export async function getRegisteredDriverCount(): Promise<number> {
   const { count, error } = await supabase.from('profiles').select('id', { count: 'exact', head: true });
 
   if (error) {
+    void logError('content.driverCount.read', error);
     console.error('[getRegisteredDriverCount] failed:', error);
     return 0;
   }
@@ -33,6 +35,7 @@ export async function getRecentDriverInitials(limit = 3): Promise<string[]> {
     .limit(limit);
 
   if (error || !data) {
+    void logError('content.driverInitials.read', error);
     if (error) console.error('[getRecentDriverInitials] failed:', error);
     return [];
   }

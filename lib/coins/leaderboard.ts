@@ -1,6 +1,7 @@
 import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isMissingRelationError } from '@/lib/supabase/missingRelation';
+import { logError } from '@/lib/logging/logError';
 
 // WEEKLY LEADERBOARD (həftəlik reytinq) read layer — retention feature #3.
 //
@@ -52,6 +53,7 @@ export async function getWeeklyLeaderboard(userId: string): Promise<WeeklyLeader
   if (error) {
     // Pre-migration state is expected and not worth logging on every load.
     if (isMissingRelationError(error)) return empty;
+    void logError('coins.leaderboard.weekly', error, { userId });
     console.error('[coins/leaderboard] weekly_leaderboard rpc failed:', error);
     return empty;
   }

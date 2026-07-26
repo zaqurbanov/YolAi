@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { lookupReferrerByCode, recordPendingReferral } from '@/lib/coins/referrals';
+import { logError } from '@/lib/logging/logError';
 
 // Only credit a referral for an account that this very callback just created.
 // Google is now the sole sign-in path, so this handler runs on every login as
@@ -25,6 +26,7 @@ export async function GET(request: NextRequest) {
   const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {
+    await logError('auth.callback.exchangeCode', error);
     return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(error.message)}`);
   }
 
@@ -46,9 +48,13 @@ export async function GET(request: NextRequest) {
         if (referrer) await recordPendingReferral(referrer.id, user.id);
       } catch (err) {
         console.error('[auth] recording pending referral failed on OAuth callback:', err);
+        await logError('auth.callback.recordPendingReferral', err, {
+          userId: user.id,
+          details: { refCode },
+        });
       }
     }
   }
 
-  return NextResponse.redirect(`${origin}/chat`);
+  return NextResponse.redirect(`${origin}/`);
 }

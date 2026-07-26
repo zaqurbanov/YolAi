@@ -3,8 +3,9 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { claimAdWatchReward, issueAdViewToken } from '@/lib/coins/adWatch';
-import { playTicTacToe } from '@/lib/coins/games';
+import { playTicTacToe, purchaseEnergy } from '@/lib/coins/games';
 import { spinWheel } from '@/lib/coins/wheel';
+import { startSignSpeedRound, submitSignSpeedRound, type SignSpeedQuestion } from '@/lib/coins/signSpeed';
 
 export interface AdWatchClaimState {
   status: 'success' | 'daily_limit_reached' | 'invalid_token' | 'too_early' | 'error';
@@ -177,6 +178,51 @@ export async function playTicTacToeAction(userMoves: number[]): Promise<TicTacTo
 }
 
 // ---------------------------------------------------------------------------
+// Buy energy with coins (0072_energy_purchase.sql, lib/coins/games.ts) — a
+// coin SINK, not a new extraction path. No arguments: the exchange rate is
+// resolved entirely server-side in purchaseEnergy().
+// ---------------------------------------------------------------------------
+export interface PurchaseEnergyState {
+  status: 'success' | 'insufficient_coins' | 'energy_cap_reached' | 'unavailable' | 'error';
+  message: string;
+  coinBalance?: number;
+  energy?: number;
+}
+
+export async function purchaseEnergyAction(): Promise<PurchaseEnergyState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { status: 'error', message: 'Giriş tələb olunur' };
+  }
+
+  const result = await purchaseEnergy(user.id);
+  if (!result.ok) {
+    if (result.error === 'insufficient_coins') {
+      return { status: 'insufficient_coins', message: 'Kifayət qədər coin yoxdur' };
+    }
+    if (result.error === 'energy_cap_reached') {
+      return { status: 'energy_cap_reached', message: 'Maksimum enerjiyə çatmısan' };
+    }
+    if (result.error === 'unavailable') {
+      return { status: 'unavailable', message: 'Bu funksiya hazırda əlçatan deyil' };
+    }
+    return { status: 'error', message: 'Xəta baş verdi. Bir az sonra yenidən cəhd edin' };
+  }
+
+  revalidatePath('/coin-qazan');
+  return {
+    status: 'success',
+    message: 'Enerji alındı!',
+    coinBalance: result.coinBalance,
+    energy: result.energy,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Çarx — daily free prize wheel (0068_wheel_of_fortune.sql, lib/coins/wheel.ts)
 // ---------------------------------------------------------------------------
 export interface WheelSpinState {
@@ -216,6 +262,126 @@ export async function spinWheelAction(): Promise<WheelSpinState> {
     message: `+${result.prize} coin! 🎉`,
     prizeIndex: result.prizeIndex,
     prize: result.prize,
+    balance: result.balance,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Nişan Sürəti — sign speed quiz (0071_sign_speed_game.sql, lib/coins/signSpeed.ts)
+// ---------------------------------------------------------------------------
+// Server picks the 10-question set + correct answers at round-start and
+// spends the round's 1 energy atomically with that pick (see the migration's
+// top comment for why energy is spent at start, not at settle). The client
+// only ever receives { sessionId, questions: [{ code, options }] } — never
+// which option is correct — and submits its 10 answers once at the end.
+
+export interface StartSignSpeedState {
+  status: 'success' | 'no_energy' | 'pool_too_small' | 'unavailable' | 'error';
+  message: string;
+  sessionId?: string;
+  questions?: SignSpeedQuestion[];
+}
+
+export async function startSignSpeedRoundAction(): Promise<StartSignSpeedState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { status: 'error', message: 'Giriş tələb olunur' };
+  }
+
+  const result = await startSignSpeedRound(user.id);
+  if (!result.ok) {
+    if (result.error === 'no_energy') {
+      return { status: 'no_energy', message: 'Enerjin bitib. Sabah yenilənəcək' };
+    }
+    if (result.error === 'pool_too_small') {
+      return { status: 'pool_too_small', message: 'Oyun hazırda əlçatan deyil' };
+    }
+    if (result.error === 'unavailable') {
+      return { status: 'unavailable', message: 'Oyun hazırda əlçatan deyil' };
+    }
+    return { status: 'error', message: 'Xəta baş verdi. Bir az sonra yenidən cəhd edin' };
+  }
+
+  return {
+    status: 'success',
+    message: 'Uğurla başladı',
+    sessionId: result.sessionId,
+    questions: result.questions,
+  };
+}
+
+export interface SubmitSignSpeedState {
+  status:
+    | 'success'
+    | 'session_not_found'
+    | 'already_used'
+    | 'session_expired'
+    | 'invalid_answers'
+    | 'unavailable'
+    | 'error';
+  message: string;
+  correctCount?: number;
+  reward?: number;
+  energy?: number;
+  balance?: number;
+}
+
+export async function submitSignSpeedRoundAction(
+  sessionId: string,
+  answers: number[]
+): Promise<SubmitSignSpeedState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { status: 'error', message: 'Giriş tələb olunur' };
+  }
+
+  if (typeof sessionId !== 'string' || sessionId.length === 0) {
+    return { status: 'invalid_answers', message: 'Yanlış sessiya' };
+  }
+
+  if (
+    !Array.isArray(answers) ||
+    answers.length !== 10 ||
+    !answers.every((a) => Number.isInteger(a) && a >= 0 && a <= 3)
+  ) {
+    return { status: 'invalid_answers', message: 'Yanlış cavablar' };
+  }
+
+  const result = await submitSignSpeedRound(user.id, sessionId, answers);
+  if (!result.ok) {
+    if (result.error === 'session_not_found') {
+      return { status: 'session_not_found', message: 'Sessiya tapılmadı' };
+    }
+    if (result.error === 'already_used') {
+      return { status: 'already_used', message: 'Bu tur artıq təqdim edilib' };
+    }
+    if (result.error === 'session_expired') {
+      return { status: 'session_expired', message: 'Vaxt bitib. Yenidən başlayın' };
+    }
+    if (result.error === 'invalid_answers') {
+      return { status: 'invalid_answers', message: 'Yanlış cavablar' };
+    }
+    if (result.error === 'unavailable') {
+      return { status: 'unavailable', message: 'Oyun hazırda əlçatan deyil' };
+    }
+    return { status: 'error', message: 'Xəta baş verdi. Bir az sonra yenidən cəhd edin' };
+  }
+
+  revalidatePath('/coin-qazan');
+  return {
+    status: 'success',
+    message: `${result.correctCount}/10 doğru! +${result.reward} coin`,
+    correctCount: result.correctCount,
+    reward: result.reward,
+    energy: result.energy,
     balance: result.balance,
   };
 }

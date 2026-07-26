@@ -1,6 +1,7 @@
 import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isMissingRelationError } from '@/lib/supabase/missingRelation';
+import { logError } from '@/lib/logging/logError';
 
 // XO (tic-tac-toe) — NO-WAGER reward model (0067_xo_energy_rewards.sql). The old
 // betting games (rps, coinflip) were removed. Playing costs 1 ENERGY (a daily
@@ -25,6 +26,17 @@ const DEFAULT_TICTACTOE_WIN_REWARD = 2;
 const TICTACTOE_DAILY_WIN_CAP_KEY = 'tictactoe_daily_win_cap';
 const DEFAULT_TICTACTOE_DAILY_WIN_CAP = 3;
 
+// "Buy energy with coins" — a coin SINK (0072_energy_purchase.sql), not a new
+// extraction path. See purchaseEnergy() below for the exchange itself.
+const ENERGY_PURCHASE_COIN_COST_KEY = 'energy_purchase_coin_cost';
+const DEFAULT_ENERGY_PURCHASE_COIN_COST = 5;
+
+const ENERGY_PURCHASE_ENERGY_AMOUNT_KEY = 'energy_purchase_energy_amount';
+const DEFAULT_ENERGY_PURCHASE_ENERGY_AMOUNT = 10;
+
+const ENERGY_PURCHASE_MAX_BALANCE_KEY = 'energy_purchase_max_balance';
+const DEFAULT_ENERGY_PURCHASE_MAX_BALANCE = 50;
+
 export {
   GAME_DAILY_ENERGY_KEY,
   DEFAULT_GAME_DAILY_ENERGY,
@@ -34,6 +46,12 @@ export {
   DEFAULT_TICTACTOE_WIN_REWARD,
   TICTACTOE_DAILY_WIN_CAP_KEY,
   DEFAULT_TICTACTOE_DAILY_WIN_CAP,
+  ENERGY_PURCHASE_COIN_COST_KEY,
+  DEFAULT_ENERGY_PURCHASE_COIN_COST,
+  ENERGY_PURCHASE_ENERGY_AMOUNT_KEY,
+  DEFAULT_ENERGY_PURCHASE_ENERGY_AMOUNT,
+  ENERGY_PURCHASE_MAX_BALANCE_KEY,
+  DEFAULT_ENERGY_PURCHASE_MAX_BALANCE,
 };
 
 export type GameOutcome = 'win' | 'draw' | 'loss';
@@ -295,6 +313,7 @@ export async function playTicTacToe(userId: string, userMoves: number[]): Promis
     const message = error.message ?? '';
     if (message.includes('no_energy')) return { ok: false, error: 'no_energy' };
     if (isMissingRelationError(error)) return { ok: false, error: 'unavailable' };
+    void logError('coins.games.settleTicTacToe', error, { userId });
     console.error('[coins] settle_tictactoe RPC failed:', {
       message: error.message,
       code: error.code,
@@ -317,5 +336,76 @@ export async function playTicTacToe(userId: string, userMoves: number[]): Promis
     reward: Number(result.reward ?? 0),
     energy: Number(result.energy ?? 0),
     balance: Number(result.balance ?? 0),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Buy energy with coins (0072_energy_purchase.sql) — a coin SINK
+// ---------------------------------------------------------------------------
+export interface EnergyPurchaseConfig {
+  coinCost: number;
+  energyAmount: number;
+  maxBalance: number;
+}
+
+// Read-only, admin-configured exchange rate for display. Fails OPEN to the TS
+// defaults like getEnergyStatus/getTicTacToeWinReward — the authoritative gate
+// is purchase_energy itself.
+export async function getEnergyPurchaseConfig(): Promise<EnergyPurchaseConfig> {
+  const [coinCost, energyAmount, maxBalance] = await Promise.all([
+    readNumericSetting(ENERGY_PURCHASE_COIN_COST_KEY, DEFAULT_ENERGY_PURCHASE_COIN_COST),
+    readNumericSetting(ENERGY_PURCHASE_ENERGY_AMOUNT_KEY, DEFAULT_ENERGY_PURCHASE_ENERGY_AMOUNT),
+    readNumericSetting(ENERGY_PURCHASE_MAX_BALANCE_KEY, DEFAULT_ENERGY_PURCHASE_MAX_BALANCE),
+  ]);
+  return { coinCost, energyAmount, maxBalance };
+}
+
+export type EnergyPurchaseError = 'insufficient_coins' | 'energy_cap_reached' | 'unavailable' | 'error';
+
+export type EnergyPurchaseResult =
+  | { ok: true; coinBalance: number; energy: number }
+  | { ok: false; error: EnergyPurchaseError };
+
+// Takes NO client-supplied amounts — every param is resolved server-side from
+// app_settings (fail-open TS defaults) and passed to purchase_energy, which is
+// the sole authority on whether the exchange is allowed.
+export async function purchaseEnergy(userId: string): Promise<EnergyPurchaseResult> {
+  const [dailyEnergyGrant, coinCost, energyAmount, maxBalance] = await Promise.all([
+    readNumericSetting(GAME_DAILY_ENERGY_KEY, DEFAULT_GAME_DAILY_ENERGY),
+    readNumericSetting(ENERGY_PURCHASE_COIN_COST_KEY, DEFAULT_ENERGY_PURCHASE_COIN_COST),
+    readNumericSetting(ENERGY_PURCHASE_ENERGY_AMOUNT_KEY, DEFAULT_ENERGY_PURCHASE_ENERGY_AMOUNT),
+    readNumericSetting(ENERGY_PURCHASE_MAX_BALANCE_KEY, DEFAULT_ENERGY_PURCHASE_MAX_BALANCE),
+  ]);
+
+  const { data, error } = await createAdminClient().rpc('purchase_energy', {
+    p_user_id: userId,
+    p_coin_cost: coinCost,
+    p_energy_amount: Math.round(energyAmount),
+    p_daily_energy_grant: Math.round(dailyEnergyGrant),
+    p_max_energy: Math.round(maxBalance),
+  });
+
+  if (error) {
+    const message = error.message ?? '';
+    if (message.includes('insufficient_coins')) return { ok: false, error: 'insufficient_coins' };
+    if (message.includes('energy_cap_reached')) return { ok: false, error: 'energy_cap_reached' };
+    if (isMissingRelationError(error)) return { ok: false, error: 'unavailable' };
+    void logError('coins.games.purchaseEnergy', error, { userId });
+    console.error('[coins] purchase_energy RPC failed:', {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+    });
+    return { ok: false, error: 'error' };
+  }
+
+  if (typeof data !== 'object' || data === null) return { ok: false, error: 'error' };
+  const result = data as { coinBalance?: number; energy?: number };
+
+  return {
+    ok: true,
+    coinBalance: Number(result.coinBalance ?? 0),
+    energy: Number(result.energy ?? 0),
   };
 }

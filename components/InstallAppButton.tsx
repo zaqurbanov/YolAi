@@ -30,14 +30,28 @@ export default function InstallAppButton() {
   const [isIOS, setIsIOS] = useState(false);
   const [showIOSModal, setShowIOSModal] = useState(false);
   const [showAndroidModal, setShowAndroidModal] = useState(false);
+  // Direct install (beforeinstallprompt) + service workers require a SECURE
+  // context — HTTPS, or localhost on the same device. Over a plain-HTTP LAN
+  // address (e.g. a phone hitting http://192.168.x.x:3000 during dev) the browser
+  // never fires beforeinstallprompt, so the button can only ever fall back to the
+  // manual modal. Detecting it lets that modal say WHY instead of confusing the
+  // user with ⋮-menu steps that also won't offer a real install.
+  const [isInsecure, setIsInsecure] = useState(false);
 
   useEffect(() => {
+    if (typeof window !== 'undefined' && window.isSecureContext === false) {
+      // Post-mount DOM sync (window.isSecureContext isn't available during SSR),
+      // same one-shot pattern as the setIsIOS detection just below.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setIsInsecure(true);
+    }
     if (isStandalone()) return;
 
     if (isIosSafari()) {
       // Syncing UA/standalone-mode detection (not derivable at render time), same
-      // pattern as ThemeToggle's no-FOUC DOM sync.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+      // pattern as ThemeToggle's no-FOUC DOM sync. (The set-state-in-effect rule
+      // is already suppressed once above for the isInsecure sync in this same
+      // effect; it reports at most once per effect, so no second disable here.)
       setIsIOS(true);
       setVisible(true);
       return;
@@ -128,10 +142,19 @@ export default function InstallAppButton() {
               <Modal.Heading>Ana ekrana əlavə et</Modal.Heading>
             </Modal.Header>
             <Modal.Body>
-              <p className="text-sm text-on-surface-variant">
-                Brauzerin yuxarı sağındakı menyu (⋮) düyməsinə basın, sonra &quot;Tətbiqi
-                quraşdır&quot; və ya &quot;Ana ekrana əlavə et&quot; seçin.
-              </p>
+              {isInsecure ? (
+                <p className="text-sm text-on-surface-variant">
+                  Tətbiqi birbaşa quraşdırmaq üçün sayt təhlükəsiz bağlantı (HTTPS) üzərindən
+                  açılmalıdır. Hazırda test (HTTP) ünvanındasınız — bu, brauzerin birbaşa
+                  quraşdırmasına imkan vermir. Saytın rəsmi (HTTPS) ünvanından açanda quraşdır
+                  düyməsi birbaşa işləyəcək.
+                </p>
+              ) : (
+                <p className="text-sm text-on-surface-variant">
+                  Brauzerin yuxarı sağındakı menyu (⋮) düyməsinə basın, sonra &quot;Tətbiqi
+                  quraşdır&quot; və ya &quot;Ana ekrana əlavə et&quot; seçin.
+                </p>
+              )}
             </Modal.Body>
             <Modal.Footer>
               <Button className="w-full" slot="close" variant="secondary">

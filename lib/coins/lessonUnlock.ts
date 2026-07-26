@@ -2,6 +2,7 @@ import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isMissingRelationError } from '@/lib/supabase/missingRelation';
 import { isUserAdmin } from '@/lib/auth/isAdmin';
+import { logError } from '@/lib/logging/logError';
 
 // Coin-facing layer for the COURSE unlock economy (0060_lesson_courses.sql).
 //
@@ -126,6 +127,7 @@ async function getPublishedCourse(courseId: string): Promise<CoursePricingRow | 
 
   if (error) {
     if (!isMissingRelationError(error)) {
+      void logError('coins.lessonUnlock.getPublishedCourse', error, { details: { courseId } });
       console.error('[coins/lessonUnlock] getPublishedCourse read failed:', error);
     }
     return null;
@@ -160,6 +162,7 @@ export async function hasUnlockedCourse(userId: string, courseId: string): Promi
 
   if (error) {
     if (!isMissingRelationError(error)) {
+      void logError('coins.lessonUnlock.hasUnlockedCourse', error, { userId, details: { courseId } });
       console.error('[coins/lessonUnlock] hasUnlockedCourse read failed:', error);
     }
     return false;
@@ -228,6 +231,7 @@ export async function unlockLessonCourse(
 
   // Fail closed: if we can't confirm the course has content, don't charge.
   if (countError) {
+    void logError('coins.lessonUnlock.topicCount', countError, { userId, details: { courseId } });
     console.error('[coins/lessonUnlock] published topic count failed:', countError);
     return { ok: false, error: 'error' };
   }
@@ -241,6 +245,7 @@ export async function unlockLessonCourse(
       : await getDefaultCourseUnlockPrice();
 
   if (!Number.isFinite(price) || price < 0) {
+    void logError('coins.lessonUnlock.invalidPrice', 'Resolved a non-finite course price', { userId, details: { courseId, price } });
     console.error('[coins/lessonUnlock] resolved a non-finite course price:', { courseId, price });
     return { ok: false, error: 'error' };
   }
@@ -255,6 +260,7 @@ export async function unlockLessonCourse(
     const message = error.message ?? '';
     if (message.includes('already_unlocked')) return { ok: false, error: 'already_unlocked' };
     if (message.includes('insufficient_coins')) return { ok: false, error: 'insufficient_coins' };
+    void logError('coins.lessonUnlock.unlockCourse', error, { userId, details: { courseId } });
     console.error('[coins/lessonUnlock] unlock_lesson_course RPC failed:', {
       message: error.message,
       code: error.code,
@@ -297,6 +303,7 @@ export async function purchaseLessonRetry(
 
   if (topicError) {
     if (!isMissingRelationError(topicError)) {
+      void logError('coins.lessonUnlock.retryTopicLookup', topicError, { userId, details: { topicId } });
       console.error('[coins/lessonUnlock] retry topic lookup failed:', topicError);
     }
     return { ok: false, error: 'invalid_topic' };
@@ -314,6 +321,7 @@ export async function purchaseLessonRetry(
   if (error) {
     const message = error.message ?? '';
     if (message.includes('insufficient_coins')) return { ok: false, error: 'insufficient_coins' };
+    void logError('coins.lessonUnlock.purchaseRetry', error, { userId, details: { topicId } });
     console.error('[coins/lessonUnlock] purchase_lesson_retry RPC failed:', {
       message: error.message,
       code: error.code,

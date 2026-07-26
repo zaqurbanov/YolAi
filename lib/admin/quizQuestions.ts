@@ -1,5 +1,6 @@
 import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { logError } from '@/lib/logging/logError';
 
 // Admin CRUD for the LLM-drafted lesson-quiz question bank. Same fail-closed
 // posture as lib/admin/questions.ts: every write goes through the
@@ -63,6 +64,7 @@ export async function listQuestions(status?: 'draft' | 'published'): Promise<Qui
   const { data, error } = await query.returns<QuizQuestionsSelectRow[]>();
 
   if (error || !data) {
+    void logError('admin.quizQuestions.list', error);
     console.error('[admin/quizQuestions] listQuestions failed:', error);
     return [];
   }
@@ -116,6 +118,7 @@ export async function createDraftQuestions(
     .returns<QuizQuestionsSelectRow[]>();
 
   if (error || !data) {
+    void logError('admin.quizQuestions.createDrafts', error);
     console.error('[admin/quizQuestions] createDraftQuestions failed:', error);
     return { ok: false, error: 'Sual layihələrini yaratmaq uğursuz oldu' };
   }
@@ -160,6 +163,7 @@ export async function updateQuestion(
     .single<QuizQuestionsSelectRow>();
 
   if (error || !data) {
+    void logError('admin.quizQuestions.update', error, { details: { questionId: id } });
     console.error('[admin/quizQuestions] updateQuestion failed:', error);
     return { ok: false, error: 'Sualı yeniləmək uğursuz oldu' };
   }
@@ -178,6 +182,7 @@ export async function publishQuestion(
     .single<QuizQuestionsSelectRow>();
 
   if (error || !data) {
+    void logError('admin.quizQuestions.publish', error, { details: { questionId: id } });
     console.error('[admin/quizQuestions] publishQuestion failed:', error);
     return { ok: false, error: 'Sualı dərc etmək uğursuz oldu' };
   }
@@ -191,6 +196,7 @@ export async function deleteQuestion(
   const { error } = await createAdminClient().from('quiz_questions').delete().eq('id', id);
 
   if (error) {
+    void logError('admin.quizQuestions.delete', error, { details: { questionId: id } });
     console.error('[admin/quizQuestions] deleteQuestion failed:', error);
     return { ok: false, error: 'Sualı silmək uğursuz oldu' };
   }

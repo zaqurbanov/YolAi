@@ -1,4 +1,5 @@
 import 'server-only';
+import { logError } from '@/lib/logging/logError';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 
@@ -22,7 +23,10 @@ export async function getAdminUsers(): Promise<AdminUserRow[]> {
     .select('id, email, role, created_at')
     .order('created_at', { ascending: false });
 
-  if (error) throw error;
+  if (error) {
+    await logError('admin.getUsers.profilesRead', error);
+    throw error;
+  }
 
   const users = data ?? [];
 
@@ -53,7 +57,10 @@ export async function getAdminUsers(): Promise<AdminUserRow[]> {
     coinError = fallback.error;
   }
 
-  if (coinError) throw coinError;
+  if (coinError) {
+    await logError('admin.getUsers.coinsRead', coinError);
+    throw coinError;
+  }
 
   const coinsByUserId = new Map<string, { balance: number; total_spent: number | null }>(
     (coinRows ?? []).map((row) => [

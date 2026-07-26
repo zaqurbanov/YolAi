@@ -1,4 +1,5 @@
 import 'server-only';
+import { logError } from '@/lib/logging/logError';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { embedText } from '@/lib/embeddings/embed';
 import { embedTextGemini } from '@/lib/embeddings/gemini';
@@ -27,8 +28,16 @@ export interface QueryEmbedding {
  */
 export async function embedQueryWithActiveModel(text: string): Promise<QueryEmbedding> {
   const model = await getActiveEmbeddingModel();
-  const vector = model === 'gemini' ? await embedTextGemini(text) : await embedText(text);
-  return { model, vector };
+  try {
+    const vector = model === 'gemini' ? await embedTextGemini(text) : await embedText(text);
+    return { model, vector };
+  } catch (err) {
+    // Rethrown unchanged — this is on the chat hot path and the caller decides
+    // how to fail; logged here because nothing upstream catches it (a cold-start
+    // model-load failure otherwise showed up only as an opaque 500).
+    void logError('retrieval.embedQuery', err, { details: { embeddingModel: model } });
+    throw err;
+  }
 }
 
 async function resolveQueryEmbedding(
@@ -161,7 +170,10 @@ export async function retrievePerDocumentChunks(
   });
   const dbSearchMs = performance.now() - dbSearchStart;
 
-  if (error) throw error;
+  if (error) {
+    void logError('retrieval.matchChunksPerDocument', error, { details: { embeddingModel: embedding.model } });
+    throw error;
+  }
   return { chunks: data ?? [], embedMs, dbSearchMs };
 }
 
@@ -192,7 +204,10 @@ export async function retrieveChunksByArticle(
   });
   const dbSearchMs = performance.now() - dbSearchStart;
 
-  if (error) throw error;
+  if (error) {
+    void logError('retrieval.matchChunksByArticle', error, { details: { embeddingModel: embedding.model } });
+    throw error;
+  }
   return { chunks: data ?? [], embedMs, dbSearchMs };
 }
 
@@ -216,7 +231,10 @@ export async function retrieveRelevantChunks({
   });
   const dbSearchMs = performance.now() - dbSearchStart;
 
-  if (error) throw error;
+  if (error) {
+    void logError('retrieval.matchChunks', error, { details: { embeddingModel: embedding.model } });
+    throw error;
+  }
   return { chunks: data ?? [], embedMs, dbSearchMs };
 }
 
@@ -327,7 +345,10 @@ export async function retrieveCombinedChunks(
         usedCombinedRpc: true,
       };
     }
-    if (!isMissingRelationError(error)) throw error;
+    if (!isMissingRelationError(error)) {
+      void logError('retrieval.matchChunksCombined', error, { details: { embeddingModel: embedding.model } });
+      throw error;
+    }
     // Migration 0063 not applied yet (PGRST202/42P01) — deployed code must
     // keep working until the user runs it by hand (see CLAUDE.md), so fall
     // through to the legacy three-call path.

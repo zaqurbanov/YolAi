@@ -1,5 +1,6 @@
 import 'server-only';
 import { generateText, APICallError, RetryError, type LanguageModel } from 'ai';
+import { logError } from '@/lib/logging/logError';
 
 // Same unwrap logic as `toClientErrorMessage` in app/api/chat/route.ts — kept in
 // one place so the "what counts as a provider failure worth falling back on"
@@ -21,6 +22,10 @@ export async function generateTextWithFallback(
     return await generateText({ model: primaryModel, ...params });
   } catch (error) {
     if (fallbackModel && isFallbackTrigger(error)) {
+      // The request still succeeds, so nothing surfaces to the caller — but a
+      // primary-provider failure (quota, 429, outage) is exactly what should be
+      // visible in the logs dashboard rather than only inferable from latency.
+      void logError('llm.fallback.generateText', error);
       return await generateText({ model: fallbackModel, ...params });
     }
     throw error;

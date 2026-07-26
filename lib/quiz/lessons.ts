@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { isMissingRelationError } from '@/lib/supabase/missingRelation';
 import { getDefaultCourseUnlockPrice } from '@/lib/coins/lessonUnlock';
 import { isUserAdmin } from '@/lib/auth/isAdmin';
+import { logError } from '@/lib/logging/logError';
 
 // User-facing reads for the restructured lessons feature (/oyrenme).
 //
@@ -85,6 +86,7 @@ export async function getCourses(userId: string): Promise<CourseSummary[]> {
   if (coursesError) {
     // The pre-migration state. Not an error worth logging on every page load.
     if (isMissingRelationError(coursesError)) return [];
+    void logError('quiz.lessons.coursesRead', coursesError, { userId });
     console.error('[quiz/lessons] getCourses courses read failed:', coursesError);
     return [];
   }
@@ -134,14 +136,17 @@ export async function getCourses(userId: string): Promise<CourseSummary[]> {
   // Each of the three below degrades to "no rows" independently: a partially
   // applied migration should still render the list, just with zeroed counts.
   if (topicsError && !isMissingRelationError(topicsError)) {
+    void logError('quiz.lessons.topicsRead', topicsError, { userId });
     console.error('[quiz/lessons] getCourses topics read failed:', topicsError);
   }
   // Display-path read: a failure renders paid courses as LOCKED, which is the
   // safe direction (the real gate is canAccessCourse, server-side).
   if (unlocksError && !isMissingRelationError(unlocksError)) {
+    void logError('quiz.lessons.unlocksRead', unlocksError, { userId });
     console.error('[quiz/lessons] getCourses unlocks read failed:', unlocksError);
   }
   if (progressError && !isMissingRelationError(progressError)) {
+    void logError('quiz.lessons.progressRead', progressError, { userId });
     console.error('[quiz/lessons] getCourses progress read failed:', progressError);
   }
 
@@ -241,11 +246,13 @@ export async function getCourseTopics(courseId: string, userId: string): Promise
 
   if (topicsError) {
     if (isMissingRelationError(topicsError)) return [];
+    void logError('quiz.lessons.courseTopicsRead', topicsError, { userId });
     console.error('[quiz/lessons] getCourseTopics topics read failed:', topicsError);
     return [];
   }
 
   if (progressError && !isMissingRelationError(progressError)) {
+    void logError('quiz.lessons.courseTopicsProgressRead', progressError, { userId });
     console.error('[quiz/lessons] getCourseTopics progress read failed:', progressError);
   }
 

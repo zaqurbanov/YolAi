@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { broadcastDailyReminder } from '@/lib/push/broadcast';
+import { logError } from '@/lib/logging/logError';
 
 // Deliberate NEW serverless function. The app is already over the Hobby
 // 12-function budget (see CLAUDE.md) — flagged, not avoidable: Vercel Cron
@@ -26,6 +27,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(result);
   } catch (err) {
     console.error('[cron/daily-reminder] broadcast failed', err);
+    await logError('cron.dailyReminder.broadcast', err);
     return NextResponse.json({ error: 'Broadcast failed' }, { status: 500 });
   }
 }

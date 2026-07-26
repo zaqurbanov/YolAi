@@ -1,6 +1,8 @@
 import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { sendPushToSubscription, type PushPayload } from '@/lib/push/webpush';
+import { bakuTodayDate } from '@/lib/date/baku';
+import { logError } from '@/lib/logging/logError';
 
 export interface BroadcastResult {
   sent: number;
@@ -31,6 +33,7 @@ export async function broadcastDailyReminder(options: BroadcastOptions): Promise
     .select('id, user_id, endpoint, p256dh, auth');
 
   if (error) {
+    void logError('push.broadcast.loadSubscriptions', error);
     console.error('[broadcastDailyReminder] failed to load subscriptions', error);
     throw new Error('Abunəliklər yüklənə bilmədi');
   }
@@ -43,9 +46,10 @@ export async function broadcastDailyReminder(options: BroadcastOptions): Promise
     const { data: claims, error: claimsError } = await admin
       .from('daily_quiz_claims')
       .select('user_id')
-      .eq('claim_date', new Date().toISOString().slice(0, 10));
+      .eq('claim_date', bakuTodayDate());
 
     if (claimsError) {
+      void logError('push.broadcast.loadClaims', claimsError);
       console.error('[broadcastDailyReminder] failed to load today\'s claims', claimsError);
       throw new Error('Bugünkü cavablar yüklənə bilmədi');
     }
@@ -77,11 +81,13 @@ export async function broadcastDailyReminder(options: BroadcastOptions): Promise
 
       if (result.expired) {
         const { error: deleteError } = await admin.from('push_subscriptions').delete().eq('id', row.id);
+        void logError('push.broadcast.cleanupExpired', deleteError, { details: { subscriptionId: row.id } });
         if (deleteError) console.error('[broadcastDailyReminder] failed to clean up expired subscription', deleteError);
         cleaned += 1;
         return;
       }
 
+      void logError('push.broadcast.send', result.error, { userId: row.user_id, details: { subscriptionId: row.id } });
       console.error('[broadcastDailyReminder] send failed', row.id, result.error);
       failed += 1;
     })
@@ -93,6 +99,7 @@ export async function broadcastDailyReminder(options: BroadcastOptions): Promise
   // losing the count silently.
   for (const result of results) {
     if (result.status === 'rejected') {
+      void logError('push.broadcast.unexpectedRejection', result.reason);
       console.error('[broadcastDailyReminder] unexpected rejection', result.reason);
       failed += 1;
     }

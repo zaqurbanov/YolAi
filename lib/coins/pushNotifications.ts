@@ -1,5 +1,6 @@
 import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { logError } from '@/lib/logging/logError';
 
 // One-time coin reward for enabling push notifications (0052_push_notification_reward.sql).
 // Fail-closed like lib/coins/quiz.ts's claimDailyQuizReward — a claim is a
@@ -47,6 +48,7 @@ export async function claimPushNotificationReward(userId: string): Promise<Claim
     if (message.includes('already_claimed')) {
       return { ok: false, error: 'already_claimed' };
     }
+    void logError('coins.push.grantReward', error, { userId });
     console.error('[coins] grant_push_notification_reward RPC failed:', {
       message: error.message,
       code: error.code,

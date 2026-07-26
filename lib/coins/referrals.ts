@@ -1,6 +1,7 @@
 import 'server-only';
 import { randomBytes } from 'crypto';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { logError } from '@/lib/logging/logError';
 
 // Phase 2 of the coin roadmap (docs/coin-roadmap.md): referral bonus.
 // Kept alongside lib/coins/transfers.ts and lib/coins/quiz.ts (not a
@@ -93,6 +94,7 @@ export async function getOrCreateReferralCode(userId: string): Promise<string> {
     .maybeSingle();
 
   if (readError) {
+    void logError('coins.referrals.codeRead', readError, { userId });
     console.error('[coins] getOrCreateReferralCode read failed:', readError);
     throw new Error('referral_code_read_failed');
   }
@@ -127,6 +129,7 @@ export async function getOrCreateReferralCode(userId: string): Promise<string> {
     if (reread?.referral_code) return reread.referral_code;
   }
 
+  void logError('coins.referrals.codeGeneration', 'Exhausted unique referral code retries', { userId });
   console.error('[coins] getOrCreateReferralCode exhausted retries for user', userId);
   throw new Error('referral_code_generation_failed');
 }
@@ -186,6 +189,7 @@ export async function recordPendingReferral(
   });
 
   if (error) {
+    void logError('coins.referrals.recordPending', error, { userId: referredId, details: { referrerId } });
     console.error('[coins] record_pending_referral RPC failed:', {
       message: error.message,
       code: error.code,
@@ -229,6 +233,7 @@ export async function claimPendingReferral(referredId: string): Promise<Referral
     .single<ClaimPendingReferralRpcResult>();
 
   if (error) {
+    void logError('coins.referrals.claimPending', error, { userId: referredId });
     console.error('[coins] claim_pending_referral RPC failed:', {
       message: error.message,
       code: error.code,

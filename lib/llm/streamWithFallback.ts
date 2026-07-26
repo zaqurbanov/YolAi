@@ -1,6 +1,7 @@
 import 'server-only';
 import { streamText, type LanguageModel, type TextStreamPart, type ToolSet } from 'ai';
 import { isFallbackTrigger } from './fallback';
+import { logError } from '@/lib/logging/logError';
 
 // No caller in this codebase passes `tools` to streamText — keep this untyped over
 // TOOLS to avoid fighting streamText's tool-context-dependent conditional types for
@@ -56,6 +57,12 @@ export async function streamTextWithFallback(
 
   if (decisionChunk?.type === 'error' && fallback && isFallbackTrigger(decisionChunk.error)) {
     reader.cancel().catch(() => {});
+    // Invisible to the user (the fallback answers) and invisible to
+    // chat.stream's onError (that only fires on a terminal failure) — logged
+    // here so primary-provider outages/quota exhaustion are still observable.
+    void logError('llm.fallback.stream', decisionChunk.error, {
+      details: { primaryModel: primary.modelId, fallbackModel: fallback.modelId },
+    });
     const fallbackResult = streamText({ model: fallback.model, ...params });
     return {
       stream: fallbackResult.stream as unknown as ReadableStream<StreamPart>,
@@ -82,6 +89,7 @@ export async function streamTextWithFallback(
             controller.enqueue(value);
           }
         } catch (err) {
+          void logError('llm.stream.readFailed', err, { details: { model: primary.modelId } });
           controller.error(err);
         }
       })();

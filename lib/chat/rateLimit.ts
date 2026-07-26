@@ -1,5 +1,6 @@
 import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { logError } from '@/lib/logging/logError';
 
 const ENV_DEFAULT_MAX_PER_WINDOW = Number(process.env.CHAT_RATE_LIMIT_MAX_PER_DAY ?? 20);
 // Exported so app/api/chat/route.ts (GET ?type=quota) can replicate the window-expiry
@@ -65,6 +66,7 @@ export async function checkChatRateLimit(
     .single<RateLimitCheckResult>();
 
   if (error) {
+    void logError('chat.rateLimit.check', error, { userId });
     console.error('[chat] rate limit check failed:', {
       message: error.message,
       code: error.code,
@@ -80,6 +82,7 @@ export async function checkChatRateLimit(
     // 3-out-column version of check_chat_rate_limit) — window_count comes
     // back undefined, not null, so it must be caught explicitly here rather
     // than relying on callers' `used !== null` checks downstream.
+    void logError('chat.rateLimit.unexpectedShape', 'check_chat_rate_limit returned no window_count', { userId, details: { data } });
     console.error('[chat] rate limit check returned unexpected shape (missing window_count):', data);
     return { allowed: true, message: null, used: null, max: effectiveMax };
   }

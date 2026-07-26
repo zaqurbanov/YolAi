@@ -2,6 +2,7 @@ import 'server-only';
 import { getRewriteModel, getRewriteModelFallback, getProviderCallOptions } from '@/lib/llm';
 import { generateTextWithFallback } from '@/lib/llm/fallback';
 import type { RetrievedChunk } from '@/lib/retrieval/search';
+import { logError } from '@/lib/logging/logError';
 
 export interface RerankResult {
   keptIds: string[] | null; // null = rerank unavailable/failed, caller falls back
@@ -95,6 +96,7 @@ export async function rerankChunks(
 
     return { keptIds, rerankMs };
   } catch (err) {
+    void logError('rag.rerank', err);
     console.error('[rerankChunks] failed to rerank candidates, falling back to unranked order:', err);
     return { keptIds: null, rerankMs: performance.now() - start };
   }

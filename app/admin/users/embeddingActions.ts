@@ -9,6 +9,7 @@ import {
   invalidateActiveEmbeddingModelCache,
   type EmbeddingModel,
 } from '@/lib/embeddings/activeModel';
+import { logError } from '@/lib/logging/logError';
 
 export interface EmbeddingStatus {
   activeModel: EmbeddingModel;
@@ -42,6 +43,7 @@ async function readCoverage(): Promise<{ total: number; gemini: number } | null>
   // itself is still truthy (which is what the guard relies on), but don't
   // trust the message here, hence the explicit hint below.
   if (totalError || geminiError) {
+    void logError('actions.admin.embedding.coverageRead', totalError ?? geminiError);
     console.error(
       '[embeddingActions] coverage read failed (most likely 0058_gemini_embeddings.sql has not been applied yet — column chunks.embedding_gemini missing)',
       totalError ?? geminiError,
@@ -131,6 +133,7 @@ export async function setActiveEmbeddingModel(model: EmbeddingModel): Promise<Se
     .upsert({ key: ACTIVE_EMBEDDING_MODEL_SETTING_KEY, value: model, updated_at: new Date().toISOString() });
 
   if (error) {
+    void logError('actions.admin.embedding.writeActiveModel', error, { details: { model } });
     console.error('[embeddingActions] failed to write active embedding model', error);
     return { ok: false, activeModel: await getActiveEmbeddingModel(), error: 'Ayar yadda saxlanıla bilmədi' };
   }

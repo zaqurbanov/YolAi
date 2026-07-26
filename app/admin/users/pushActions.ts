@@ -2,6 +2,7 @@
 
 import { requireAdmin } from '@/lib/auth/requireAdmin';
 import { broadcastDailyReminder } from '@/lib/push/broadcast';
+import { logError } from '@/lib/logging/logError';
 
 export interface SendPushReminderResult {
   error?: string;
@@ -29,6 +30,7 @@ export async function sendPushReminderToAll(): Promise<SendPushReminderResult> {
     });
     return { sent, cleaned, failed };
   } catch (err) {
+    void logError('actions.admin.push.broadcast', err);
     console.error('[sendPushReminderToAll] broadcast failed', err);
     return { error: 'Bildirişlər göndərilə bilmədi' };
   }

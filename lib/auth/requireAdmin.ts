@@ -1,5 +1,6 @@
 import 'server-only';
 import { createClient } from '@/lib/supabase/server';
+import { logError } from '@/lib/logging/logError';
 
 export async function requireAdmin() {
   const supabase = await createClient();
@@ -16,6 +17,7 @@ export async function requireAdmin() {
     .single();
 
   if (error) {
+    void logError('auth.requireAdmin.profileRead', error, { userId: user.id });
     console.error('[requireAdmin] profiles query failed', error);
     return { ok: false as const, status: 500 as const, message: 'Server xətası' };
   }

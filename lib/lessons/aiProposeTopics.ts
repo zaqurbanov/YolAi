@@ -11,6 +11,7 @@ import {
   type TopicProposal,
   type TopicUnit,
 } from '@/lib/lessons/proposeTopics';
+import { logError } from '@/lib/logging/logError';
 
 // AI topic breakdown: let the model decide where a document's topics begin and
 // end, instead of packing chunks to a fixed character target.
@@ -196,6 +197,7 @@ async function groupBatch(
 
     return { ok: true, groups: object.topics };
   } catch (error) {
+    void logError('lessons.aiProposeTopics.outlineBatch', error);
     console.error('[lessons/aiProposeTopics] outline batch failed:', error);
     return { ok: false, error: `${getRewriteModelId()}: ${describeError(error)}` };
   }

@@ -1,4 +1,5 @@
 import 'server-only';
+import { logError } from '@/lib/logging/logError';
 import { createClient } from '@/lib/supabase/server';
 
 export interface AdminStats {
@@ -20,7 +21,10 @@ export interface AdminStats {
 const DOCUMENT_STATUSES = ['pending', 'processing', 'ready', 'failed'] as const;
 
 function count(result: { count: number | null; error: unknown }): number {
-  if (result.error) throw result.error;
+  if (result.error) {
+    void logError('admin.getStats', result.error);
+    throw result.error;
+  }
   return result.count ?? 0;
 }
 

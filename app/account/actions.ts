@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getTransferMinAmount, lookupRecipientByEmail, transferCoins as transferCoinsLib } from '@/lib/coins/transfers';
+import { logError } from '@/lib/logging/logError';
 
 export interface AccountFormState {
   error?: string;
@@ -43,7 +44,10 @@ export async function updateProfile(
     })
     .eq('id', user.id);
 
-  if (error) return { error: error.message };
+  if (error) {
+    await logError('actions.account.updateProfile', error, { userId: user.id });
+    return { error: error.message };
+  }
 
   revalidatePath('/account');
   return { success: 'Profil yeniləndi' };
@@ -75,7 +79,10 @@ export async function changePassword(
 
   const { error } = await supabase.auth.updateUser({ password });
 
-  if (error) return { error: error.message };
+  if (error) {
+    await logError('actions.account.changePassword', error, { userId: user.id });
+    return { error: error.message };
+  }
 
   return { success: 'Şifrə yeniləndi' };
 }
@@ -161,6 +168,7 @@ export async function deleteAccount(formData: FormData): Promise<void> {
   const { error } = await adminClient.auth.admin.deleteUser(user.id);
 
   if (error) {
+    await logError('actions.account.deleteAccount', error, { userId: user.id });
     redirect('/account?error=' + encodeURIComponent(error.message));
   }
 
