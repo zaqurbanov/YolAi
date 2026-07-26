@@ -26,6 +26,7 @@ import { renderCitationText } from '@/lib/chat/renderCitationText';
 import { formatAzTime } from '@/lib/format/date';
 import { formatCoinBalance } from '@/lib/format/coins';
 import { ADMIN_CONTACT_EMAIL } from '@/lib/contact';
+import { reportClientError } from '@/app/actions/reportClientError';
 
 interface Citation {
   document_id: string;
@@ -395,6 +396,67 @@ function busyPhraseFor(
   return phrases[0];
 }
 
+// Longer side of the resized image (px) — chosen well above what a phone
+// screen needs to read a sign/document photo, but far below what a modern
+// phone camera natively produces (typically 3000-4000px), which is the
+// actual driver of the 3-8MB raw files that were blowing the request-body
+// ceiling below.
+const MAX_IMAGE_SIDE = 1600;
+const IMAGE_JPEG_QUALITY = 0.8;
+// Backstop against the *resized* file, not the raw upload — see MAX_RAW_IMAGE_BYTES
+// below for the pre-decode sanity cap. A 1600px/q0.8 JPEG lands far under this in
+// practice; this constant exists to catch the rare pathological case (e.g. a very
+// tall/wide panorama) rather than to do the real work of getting under Vercel's
+// ~4.5MB function body cap once base64-inflated (~1.37x) for the JSON request.
+const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
+// Pre-decode sanity cap on the *raw* file, checked before attempting canvas
+// decode at all — avoids hanging the main thread trying to decode an
+// absurdly large image (e.g. a mis-tapped multi-photo select or a RAW/TIFF
+// file that happens to report an image/* MIME type).
+const MAX_RAW_IMAGE_BYTES = 30 * 1024 * 1024;
+
+// Decodes via <canvas>, downscales so the longer side is <= MAX_IMAGE_SIDE
+// (never upscales), and re-encodes as JPEG. Throws if the browser can't
+// decode the source format at all — the main real-world case is iPhone HEIC,
+// which reports an image/* MIME type but is not reliably canvas-decodable.
+async function resizeImageForUpload(file: File): Promise<File> {
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      // `Image` here would resolve to the next/image *component* imported at
+      // the top of this file, not the DOM constructor — must go through
+      // window explicitly.
+      const el = new window.Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error('image_decode_failed'));
+      el.src = objectUrl;
+    });
+
+    const { naturalWidth: width, naturalHeight: height } = img;
+    const longSide = Math.max(width, height);
+    const scale = longSide > MAX_IMAGE_SIDE ? MAX_IMAGE_SIDE / longSide : 1;
+    const targetWidth = Math.max(1, Math.round(width * scale));
+    const targetHeight = Math.max(1, Math.round(height * scale));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('canvas_context_unavailable');
+    ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob((b) => resolve(b), 'image/jpeg', IMAGE_JPEG_QUALITY);
+    });
+    if (!blob) throw new Error('canvas_encode_failed');
+
+    const baseName = file.name.replace(/\.[^./\\]+$/, '') || 'image';
+    return new File([blob], `${baseName}.jpg`, { type: 'image/jpeg' });
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
 interface ChatClientProps {
   // null on the id-less /chat landing page (brand new chat, nothing to load
   // yet); set on /chat/[id] (existing conversation). ChatClient is remounted
@@ -424,21 +486,59 @@ export default function ChatClient({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
-  const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+  const [isResizingImage, setIsResizingImage] = useState(false);
 
-  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
     if (!file.type.startsWith('image/')) {
       toast.danger('Yalnız şəkil faylları qəbul olunur');
+      void reportClientError({
+        context: 'chat.attachFile.invalidType',
+        message: 'Rejected non-image file for chat attachment',
+        details: { fileType: file.type, fileSize: file.size, fileName: file.name.slice(0, 200) },
+      });
       return;
     }
-    if (file.size > MAX_IMAGE_BYTES) {
-      toast.danger('Şəkil 5MB-dan böyük ola bilməz');
+    if (file.size > MAX_RAW_IMAGE_BYTES) {
+      toast.danger('Şəkil çox böyükdür, zəhmət olmasa daha kiçik ölçülü şəkil seçin');
+      void reportClientError({
+        context: 'chat.attachFile.overSizeLimit',
+        message: 'Rejected oversized raw file for chat attachment',
+        details: { fileType: file.type, fileSize: file.size, fileName: file.name.slice(0, 200) },
+      });
       return;
     }
-    setAttachedFile(file);
+
+    setIsResizingImage(true);
+    try {
+      const resized = await resizeImageForUpload(file);
+      if (resized.size > MAX_IMAGE_BYTES) {
+        toast.danger('Şəkil 3MB-dan böyük ola bilməz');
+        void reportClientError({
+          context: 'chat.attachFile.overSizeLimit',
+          message: 'Resized file still exceeds upload limit',
+          details: {
+            fileType: resized.type,
+            fileSize: resized.size,
+            fileName: file.name.slice(0, 200),
+            originalFileSize: file.size,
+          },
+        });
+        return;
+      }
+      setAttachedFile(resized);
+    } catch (err) {
+      toast.danger('Bu şəkil formatı dəstəklənmir, JPEG və ya PNG yükləyin');
+      void reportClientError({
+        context: 'chat.imageResize',
+        message: String((err as Error)?.message ?? err),
+        details: { fileType: file.type, fileSize: file.size, fileName: file.name.slice(0, 200) },
+      });
+    } finally {
+      setIsResizingImage(false);
+    }
   }
 
   function clearAttachedFile() {
@@ -556,6 +656,15 @@ export default function ChatClient({
     onError: (err) => {
       console.error('Chat error:', err);
       toast.danger(extractApiErrorMessage(err) ?? 'Cavab alınmadı, yenidən cəhd edin.');
+      void reportClientError({
+        context: 'chat.useChat',
+        message: String(err?.message ?? err),
+        details: {
+          conversationId: conversationIdRef.current,
+          hasAttachedImage: attachedFile !== null,
+          apiErrorCode: extractApiErrorCode(err),
+        },
+      });
     },
   });
 
@@ -1297,10 +1406,11 @@ export default function ChatClient({
               />
               <Dropdown>
                 <Dropdown.Trigger
-                  className="shrink-0 rounded-full p-2 text-on-surface-variant outline-none transition hover:bg-surface-hover hover:text-on-surface"
+                  isDisabled={isResizingImage}
+                  className="shrink-0 rounded-full p-2 text-on-surface-variant outline-none transition hover:bg-surface-hover hover:text-on-surface disabled:pointer-events-none disabled:opacity-40"
                   aria-label="Şəkil əlavə et"
                 >
-                  <CameraIcon width={20} height={20} />
+                  {isResizingImage ? <Spinner size="sm" /> : <CameraIcon width={20} height={20} />}
                 </Dropdown.Trigger>
                 <Dropdown.Popover className="min-w-[200px]">
                   <Dropdown.Menu

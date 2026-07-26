@@ -51,7 +51,12 @@ export async function generateMetadata({
   return title ? { title } : {};
 }
 
-export default async function AdminCatchAllPage({ params }: PageProps<'/admin/[[...slug]]'>) {
+export default async function AdminCatchAllPage({
+  params,
+  searchParams,
+}: PageProps<'/admin/[[...slug]]'> & {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   // Layer 1 of 3. app/admin/layout.tsx guards the shell, each section below
   // re-checks before doing its own data reads, and every server action those
   // sections call checks independently — server actions are plain POST
@@ -72,8 +77,11 @@ export default async function AdminCatchAllPage({ params }: PageProps<'/admin/[[
         return <DocumentsSection />;
       case 'kurslar':
         return <KurslarSection />;
-      case 'logs':
-        return <LogsSection />;
+      case 'logs': {
+        const sp = await searchParams;
+        const context = typeof sp.context === 'string' ? sp.context : undefined;
+        return <LogsSection contextFilter={context} />;
+      }
       case 'questions':
         return <QuestionsSection />;
       case 'quiz':

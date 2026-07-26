@@ -1,10 +1,21 @@
 import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { parsePdf } from './parsePdf';
-import { chunkPages } from './chunkText';
+import { chunkPages, type Chunk } from './chunkText';
 import { embedBatch } from '@/lib/embeddings/embed';
 import { embedBatchGemini } from '@/lib/embeddings/gemini';
 import { logError } from '@/lib/logging/logError';
+import { extractAndPersistSignImages, deleteSignImages } from './persistSignImages';
+
+// A catalog document (e.g. the road-sign PDF) is the only kind that ever
+// produces chunks via chunkText.ts's splitCodeCatalogEntries(), which tags
+// every chunk it emits with an articleLabel of the form `Kod ${code}`. That
+// tag is the signal used here to decide whether to run image extraction —
+// deliberately reading chunkPages()'s output rather than changing its return
+// shape, so this stays a zero-diff addition to chunkText.ts's public contract.
+function isCatalogDocument(chunks: Chunk[]): boolean {
+  return chunks.some((c) => c.articleLabel?.startsWith('Kod '));
+}
 
 // Supabase's PostgrestError/StorageError are plain objects with a `message`
 // field, not `instanceof Error` — a bare `err instanceof Error` check (as
@@ -107,6 +118,16 @@ export async function ingestDocument(documentId: string) {
       .from('documents')
       .update({ status: 'ready', page_count: pages.length, error_message: geminiWarning })
       .eq('id', documentId);
+
+    // Image extraction is additive metadata for catalog documents only
+    // (road-sign PDFs, detected via the `Kod ` articleLabel signal above) —
+    // it must never be able to fail the ingest. extractAndPersistSignImages
+    // already swallows its own errors (logError + console.error) and simply
+    // returns without throwing; text ingestion above has already committed
+    // and the document is already 'ready' by the time this runs.
+    if (isCatalogDocument(chunks)) {
+      await extractAndPersistSignImages(documentId, buffer);
+    }
   } catch (err) {
     const message = extractErrorMessage(err);
     // The documents row already carries error_message for the admin UI; this
@@ -120,5 +141,12 @@ export async function ingestDocument(documentId: string) {
 export async function reprocessDocument(documentId: string) {
   const supabase = createAdminClient();
   await supabase.from('chunks').delete().eq('document_id', documentId);
+  // Clean up unconditionally, not just when the document is still a catalog
+  // document post-reprocess: extractAndPersistSignImages (called from
+  // ingestDocument, below) already does its own delete-first re-extraction
+  // for the still-catalog case, but if a chunking-strategy change means this
+  // document no longer trips the catalog signal, that call never runs and
+  // stale rows/objects from a prior run would otherwise survive untouched.
+  await deleteSignImages(documentId);
   await ingestDocument(documentId);
 }

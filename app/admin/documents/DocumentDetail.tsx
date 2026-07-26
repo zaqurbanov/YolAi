@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Card, Chip, Button, Skeleton, EmptyState, toast, TextField, Input } from '@heroui/react';
 import { Spinner } from '@/components/Spinner';
 import { formatAzDateTime } from '@/lib/format/date';
+import { reextractSignImagesAction } from './actions';
 
 interface DocumentMeta {
   id: string;
@@ -76,6 +77,7 @@ export default function DocumentDetail({ id }: { id: string }) {
   const [page, setPage] = useState(1);
   const [loadingChunks, setLoadingChunks] = useState(true);
   const [reprocessing, setReprocessing] = useState(false);
+  const [reextractingImages, setReextractingImages] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
   const [savingTitle, setSavingTitle] = useState(false);
@@ -133,6 +135,21 @@ export default function DocumentDetail({ id }: { id: string }) {
     toast.success('Sənəd yenidən emala göndərildi');
     await Promise.all([loadMeta(), loadChunks(1)]);
     setReprocessing(false);
+  }
+
+  // Re-runs ONLY sign-image extraction (nişan kataloqu şəkilləri) — does not
+  // touch chunks/embeddings. Safe to call on a non-catalog document; it's a
+  // no-op there (see reextractSignImagesAction's own comment).
+  async function handleReextractImages() {
+    setReextractingImages(true);
+    const result = await reextractSignImagesAction(id);
+    if (!result.ok) {
+      toast.danger(result.error ?? 'Şəkil çıxarışı uğursuz oldu');
+      setReextractingImages(false);
+      return;
+    }
+    toast.success('Nişan şəkilləri yenidən çıxarıldı');
+    setReextractingImages(false);
   }
 
   function startEditingTitle() {
@@ -241,14 +258,24 @@ export default function DocumentDetail({ id }: { id: string }) {
                 </Chip>
               )}
             </div>
-            <Button variant="outline" size="sm" isPending={reprocessing} onPress={handleReprocess}>
-              {({ isPending }) => (
-                <>
-                  {isPending ? <Spinner size="sm" tone="current" /> : null}
-                  Yenidən emal et
-                </>
-              )}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" isPending={reextractingImages} onPress={handleReextractImages}>
+                {({ isPending }) => (
+                  <>
+                    {isPending ? <Spinner size="sm" tone="current" /> : null}
+                    Nişan şəkillərini yenilə
+                  </>
+                )}
+              </Button>
+              <Button variant="outline" size="sm" isPending={reprocessing} onPress={handleReprocess}>
+                {({ isPending }) => (
+                  <>
+                    {isPending ? <Spinner size="sm" tone="current" /> : null}
+                    Yenidən emal et
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
           <div className="flex flex-wrap gap-6 mono-label text-on-surface-variant">
             <span>Səhifə: {document.page_count ?? '—'}</span>

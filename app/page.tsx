@@ -176,8 +176,14 @@ export default async function Home() {
             <Link
               href="/oyrenme"
               className={
-                buttonVariants({ variant: 'ghost', size: 'lg' }) +
-                ' transition-transform hover:scale-[1.03] active:scale-[0.98]'
+                buttonVariants({ variant: 'outline', size: 'lg' }) +
+                // Distinct from the plain ghost/ subtle default so this reads as its own
+                // CTA rather than a low-priority secondary link — regulatory-blue matches
+                // the "Sürücülük dərsləri" pillar card's accent below, so the color itself
+                // signals "this is the lessons path" before the label is even read.
+                ' border-regulatory-blue/50 text-regulatory-blue bg-regulatory-blue/10' +
+                ' shadow-[0_0_16px_rgba(59,130,246,0.18)] transition-all hover:scale-[1.03]' +
+                ' hover:border-regulatory-blue hover:bg-regulatory-blue/15 active:scale-[0.98]'
               }
             >
               Sürücülük vəsiqəsi üçün dərslərə başla

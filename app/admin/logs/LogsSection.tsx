@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { requireAdmin } from '@/lib/auth/requireAdmin';
 import { createClient } from '@/lib/supabase/server';
 import { formatAzDateTime } from '@/lib/format/date';
+import ContextFilter from './ContextFilter';
 
 interface LogRow {
   id: string;
@@ -55,12 +56,26 @@ function truncate(text: string | null, max: number): string {
   return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
-export default async function LogsSection() {
+interface LogsSectionProps {
+  // Selected value of the "Yer" (context) filter dropdown — a query-param
+  // driven filter rather than client-side state, see ContextFilter.tsx.
+  contextFilter?: string;
+}
+
+export default async function LogsSection({ contextFilter }: LogsSectionProps) {
   const auth = await requireAdmin();
   if (!auth.ok) redirect(auth.status === 401 ? '/login' : '/chat');
 
   const supabase = await createClient();
-  const [{ data, error }, { data: errorData, error: errorLogsError }] = await Promise.all([
+
+  let errorLogsQuery = supabase
+    .from('error_logs')
+    .select('id, context, message, details, user_id, request_id, created_at')
+    .order('created_at', { ascending: false })
+    .limit(100);
+  if (contextFilter) errorLogsQuery = errorLogsQuery.eq('context', contextFilter);
+
+  const [{ data, error }, { data: errorData, error: errorLogsError }, { data: contextRows }] = await Promise.all([
     supabase
       .from('chat_request_logs')
       .select(
@@ -71,15 +86,29 @@ export default async function LogsSection() {
     // error_logs (0073) captures caught server errors. If the migration isn't
     // applied yet this query errors — handled below as "no errors table" rather
     // than breaking the whole logs page.
-    supabase
-      .from('error_logs')
-      .select('id, context, message, details, user_id, request_id, created_at')
-      .order('created_at', { ascending: false })
-      .limit(100),
+    errorLogsQuery,
+    // Separate, unfiltered, column-only read to populate the filter dropdown
+    // with every context seen recently — the filtered query above can't also
+    // serve this once a filter is applied. Same "no errors table yet" failure
+    // mode as above; errors here just leave the dropdown showing no options.
+    supabase.from('error_logs').select('context').order('created_at', { ascending: false }).limit(500),
   ]);
 
   const rows: LogRow[] = data ?? [];
   const errorRows: ErrorLogRow[] = errorData ?? [];
+  const distinctContexts = Array.from(new Set((contextRows ?? []).map((r) => r.context as string))).sort();
+
+  const errorUserIds = Array.from(new Set(errorRows.map((r) => r.user_id).filter((id): id is string => id !== null)));
+  const emailsByUserId = new Map<string, string>();
+  if (errorUserIds.length > 0) {
+    const { data: profileRows } = await supabase
+      .from('profiles')
+      .select('id, email')
+      .in('id', errorUserIds);
+    for (const p of profileRows ?? []) {
+      if (p.email) emailsByUserId.set(p.id, p.email);
+    }
+  }
 
   const stats = STAGE_METRICS.map(({ key, label }) => {
     const values = rows
@@ -98,11 +127,16 @@ export default async function LogsSection() {
   return (
     <div className="mx-auto p-6 space-y-8">
       <div>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <h1 className="text-2xl font-semibold">Xətalar</h1>
-          <span className="mono-label text-on-surface-variant">
-            {errorLogsError ? '—' : `Son ${errorRows.length} xəta`}
-          </span>
+          <div className="flex items-center gap-3">
+            {!errorLogsError && distinctContexts.length > 0 && (
+              <ContextFilter contexts={distinctContexts} current={contextFilter} />
+            )}
+            <span className="mono-label text-on-surface-variant">
+              {errorLogsError ? '—' : `Son ${errorRows.length} xəta`}
+            </span>
+          </div>
         </div>
         <div className="mt-3 glass-panel rounded-2xl overflow-hidden overflow-x-auto">
           {errorLogsError ? (
@@ -125,27 +159,38 @@ export default async function LogsSection() {
                 </tr>
               </thead>
               <tbody>
-                {errorRows.map((row) => (
-                  <tr key={row.id} className="border-b border-outline-variant/20 last:border-b-0 align-top">
-                    <td className="px-4 py-3 mono-label text-caution-orange whitespace-nowrap">
-                      {row.context}
-                    </td>
-                    <td className="px-4 py-3 max-w-md">
-                      <div className="text-on-surface">{truncate(row.message, 160)}</div>
-                      {row.details && typeof row.details.mediaType === 'string' && (
-                        <div className="mono-label text-on-surface-variant mt-0.5">
-                          {row.details.mediaType}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 mono-label truncate max-w-[9rem]" title={row.user_id ?? undefined}>
-                      {row.user_id ? row.user_id.slice(0, 8) : '—'}
-                    </td>
-                    <td className="px-4 py-3 mono-label text-right text-on-surface-variant whitespace-nowrap">
-                      {formatAzDateTime(row.created_at, { seconds: true })}
-                    </td>
-                  </tr>
-                ))}
+                {errorRows.map((row) => {
+                  const email = row.user_id ? emailsByUserId.get(row.user_id) : undefined;
+                  return (
+                    <tr key={row.id} className="border-b border-outline-variant/20 last:border-b-0 align-top">
+                      <td className="px-4 py-3 mono-label text-caution-orange whitespace-nowrap">
+                        {row.context}
+                      </td>
+                      <td className="px-4 py-3 max-w-md">
+                        <div className="text-on-surface">{truncate(row.message, 160)}</div>
+                        {row.details && Object.keys(row.details).length > 0 && (
+                          <details className="mt-1">
+                            <summary className="mono-label cursor-pointer text-primary hover:underline">
+                              Detallar
+                            </summary>
+                            <pre className="mono-label mt-1 max-w-md overflow-x-auto whitespace-pre-wrap break-all rounded-lg bg-surface-container-high p-2 text-on-surface-variant">
+                              {JSON.stringify(row.details, null, 2)}
+                            </pre>
+                          </details>
+                        )}
+                      </td>
+                      <td
+                        className="px-4 py-3 mono-label truncate max-w-[12rem]"
+                        title={row.user_id ?? undefined}
+                      >
+                        {email ?? (row.user_id ? row.user_id.slice(0, 8) : '—')}
+                      </td>
+                      <td className="px-4 py-3 mono-label text-right text-on-surface-variant whitespace-nowrap">
+                        {formatAzDateTime(row.created_at, { seconds: true })}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
