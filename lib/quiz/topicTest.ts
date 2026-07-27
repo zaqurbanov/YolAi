@@ -80,7 +80,18 @@ export interface DrawnQuestion {
   question: string;
   /** Exactly 4 options, in their stored order — correct_index is positional. */
   options: string[];
+  /** True for "cərimə məbləği" (fine amount) questions — capped, not
+   *  filtered out, at draw time. See MAX_FINE_AMOUNT_QUESTIONS below. */
+  isFineAmount: boolean;
 }
+
+// Fine amounts are the most frequently amended part of the traffic code and
+// the most repetitive question shape, so a draw is capped at this many
+// regardless of test size — never removed outright (see 0086 migration
+// header). If the normal (non-fine-amount) pool can't fill the rest of the
+// test on its own, this cap is backfilled from fine-amount questions rather
+// than shrinking the test — total question count is never reduced for this.
+const MAX_FINE_AMOUNT_QUESTIONS = 2;
 
 export interface TopicAnswerInput {
   questionId: string;
@@ -104,6 +115,7 @@ interface PoolRow {
   id: string;
   question: string;
   options: unknown;
+  is_fine_amount: boolean;
 }
 
 interface AnswerRow {
@@ -365,7 +377,7 @@ export function verifyAttemptToken(
 async function readPool(topicId: string): Promise<DrawnQuestion[] | null> {
   const { data, error } = await createAdminClient()
     .from('quiz_questions')
-    .select('id, question, options')
+    .select('id, question, options, is_fine_amount')
     .eq('topic_id', topicId)
     .eq('status', 'published')
     .returns<PoolRow[]>();
@@ -387,6 +399,7 @@ async function readPool(topicId: string): Promise<DrawnQuestion[] | null> {
         id: row.id,
         question: row.question,
         options: row.options.map((option) => String(option)),
+        isFineAmount: Boolean(row.is_fine_amount),
       },
     ];
   });
@@ -409,6 +422,38 @@ function sample(pool: DrawnQuestion[], count: number): DrawnQuestion[] {
   return items.slice(0, count);
 }
 
+// Draws `count` questions from the pool with at most MAX_FINE_AMOUNT_QUESTIONS
+// of them flagged isFineAmount. Splits the pool, shuffles each half
+// independently (still crypto-random, same algorithm as sample()), then caps
+// the fine-amount side before filling the rest from the normal side. If the
+// normal side alone can't reach `count` (a small or fine-amount-heavy topic
+// pool), backfills with extra fine-amount questions beyond the cap rather
+// than shrinking the test — total is never reduced for this limit. A final
+// shuffle avoids the fine-amount questions clustering at a predictable
+// position in the returned order.
+function drawWithFineAmountCap(pool: DrawnQuestion[], count: number): DrawnQuestion[] {
+  const fineAmount = sample(
+    pool.filter((q) => q.isFineAmount),
+    pool.length
+  );
+  const normal = sample(
+    pool.filter((q) => !q.isFineAmount),
+    pool.length
+  );
+
+  const fineAmountTake = Math.min(MAX_FINE_AMOUNT_QUESTIONS, fineAmount.length);
+  const normalTake = Math.min(normal.length, count - fineAmountTake);
+
+  const selected = [...fineAmount.slice(0, fineAmountTake), ...normal.slice(0, normalTake)];
+
+  if (selected.length < count) {
+    const shortfall = count - selected.length;
+    selected.push(...fineAmount.slice(fineAmountTake, fineAmountTake + shortfall));
+  }
+
+  return sample(selected, selected.length);
+}
+
 export type DrawResult =
   | { ok: true; questions: DrawnQuestion[]; shape: TestShape }
   | { ok: false; error: 'no_questions' | 'error' };
@@ -420,7 +465,7 @@ export async function drawTopicQuestions(topicId: string): Promise<DrawResult> {
   const shape = resolveTestShape(pool.length, config);
   if (!shape) return { ok: false, error: 'no_questions' };
 
-  return { ok: true, questions: sample(pool, shape.total), shape };
+  return { ok: true, questions: drawWithFineAmountCap(pool, shape.total), shape };
 }
 
 // ---------------------------------------------------------------------------

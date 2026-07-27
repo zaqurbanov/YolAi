@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { TextField, Label, Input, TextArea, RadioGroup, Radio, Button, AlertDialog, toast } from '@heroui/react';
+import { TextField, Label, Input, TextArea, RadioGroup, Radio, Checkbox, Description, Button, AlertDialog, toast } from '@heroui/react';
 import { Spinner } from '@/components/Spinner';
 import { RULE_CATEGORIES } from '@/lib/content/ruleCategories';
 import { updateQuestionAction, publishQuestionAction, deleteQuestionAction } from './actions';
@@ -18,6 +18,7 @@ export default function QuestionEditor({ question, accent }: QuestionEditorProps
   const [correctIndex, setCorrectIndex] = useState(String(question.correctIndex));
   const [category, setCategory] = useState(question.category);
   const [explanation, setExplanation] = useState(question.explanation ?? '');
+  const [isFineAmount, setIsFineAmount] = useState(question.isFineAmount);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleted, setDeleted] = useState(false);
   const [isSaving, startSave] = useTransition();
@@ -34,6 +35,7 @@ export default function QuestionEditor({ question, accent }: QuestionEditorProps
         correctIndex: Number(correctIndex),
         category,
         explanation: explanation.trim() ? explanation : null,
+        isFineAmount,
       });
       if (result.ok) {
         toast.success('Sual yadda saxlanıldı');
@@ -81,6 +83,9 @@ export default function QuestionEditor({ question, accent }: QuestionEditorProps
         >
           {accent === 'draft' ? 'Layihə — baxış tələb olunur' : 'Dərc edilib'}
         </span>
+        {isFineAmount && (
+          <span className="text-legal-citation rounded-full bg-danger/15 px-2.5 py-1 text-danger">Cərimə</span>
+        )}
         {question.sourceTitle && (
           <span className="mono-label text-on-surface-variant">Mənbə: {question.sourceTitle}</span>
         )}
@@ -137,6 +142,16 @@ export default function QuestionEditor({ question, accent }: QuestionEditorProps
           ))}
         </select>
       </div>
+
+      <Checkbox isSelected={isFineAmount} onChange={setIsFineAmount}>
+        <Checkbox.Content>
+          <Checkbox.Control>
+            <Checkbox.Indicator />
+          </Checkbox.Control>
+          Cərimə məbləği sualı
+        </Checkbox.Content>
+        <Description>Bu tip suallar hər testdə maksimum 2 ilə məhdudlaşdırılır</Description>
+      </Checkbox>
 
       <TextField value={explanation} onChange={setExplanation}>
         <Label>İzah (məcburi deyil)</Label>

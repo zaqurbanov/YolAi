@@ -12,12 +12,6 @@ interface DailyQuestCardProps {
   status: DailyQuestStatusResult;
 }
 
-interface Mission {
-  label: string;
-  done: boolean;
-  progress?: string;
-}
-
 // Client component mirroring components/account/DailyQuizCard.tsx's pattern:
 // direct server action call (no args, server re-verifies everything) +
 // useTransition + the same coin-balance-update event contract CoinBadge listens for.
@@ -30,13 +24,7 @@ export default function DailyQuestCard({ status }: DailyQuestCardProps) {
 
   if (!status.ok) return null;
 
-  const { chatCount, chatTarget, gamePlayed, lessonRead } = status;
-  const missions: Mission[] = [
-    { label: 'AI-a ən azı 2 sual ver', done: chatCount >= chatTarget, progress: `${chatCount}/${chatTarget}` },
-    { label: 'Nişan Sürəti oyununda 1 dəfə oyna', done: gamePlayed },
-    { label: '1 dərs oxu', done: lessonRead },
-  ];
-  const allDone = missions.every((m) => m.done);
+  const { missions, allDone } = status;
 
   function handleClaim() {
     startTransition(async () => {
@@ -68,7 +56,7 @@ export default function DailyQuestCard({ status }: DailyQuestCardProps) {
 
       <ul className="space-y-2.5">
         {missions.map((mission) => (
-          <li key={mission.label} className="flex items-center justify-between gap-3">
+          <li key={mission.key} className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
               <div
                 className={

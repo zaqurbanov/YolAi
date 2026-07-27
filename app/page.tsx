@@ -229,55 +229,6 @@ export default async function Home() {
         </Card>
       </section>
 
-      <section id="movzular" className="px-6 py-16">
-        <div className="mx-auto max-w-5xl">
-          <div className="flex flex-wrap items-end justify-between gap-4 mb-8">
-            <div>
-              <h2 className="text-headline-md">Geniş Məlumat Bazası</h2>
-              <p className="mt-1 text-body-md text-on-surface-variant">
-                Hər kateqoriya üzrə dərslərlə qaydaları öyrənin, sualları cavablayıb irəliləyişinizi
-                izləyin.
-              </p>
-            </div>
-            <Link href="/oyrenme" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
-              Dərslərə başla
-            </Link>
-          </div>
-
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {topics.map((topic, i) => (
-              <ScrollReveal
-                key={topic.title}
-                className={FEATURED_TOPIC_INDEXES.has(i) ? 'sm:col-span-2' : ''}
-                delayMs={i * 80}
-              >
-                <CategoryCard
-                  category={topic}
-                  index={i}
-                  href={`/chat?q=${encodeURIComponent(topic.question)}`}
-                  questionCount={questionCounts[topic.title]}
-                />
-              </ScrollReveal>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="px-6 pb-16">
-        <div className="mx-auto max-w-5xl">
-          <div className="glass-card rounded-3xl border-primary/20 bg-primary/5 p-8 md:p-10">
-            <div className="grid gap-8 sm:grid-cols-3">
-              {stats.map((stat) => (
-                <div key={stat.label} className="flex flex-col items-center gap-1 text-center">
-                  <span className={`text-3xl font-extrabold ${stat.accent}`}>{stat.value}</span>
-                  <span className="text-label-sm text-on-surface-variant">{stat.label}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
       <section className="px-6 py-16">
         <div className="mx-auto max-w-5xl">
           <div className="mb-8 max-w-2xl">
@@ -313,6 +264,55 @@ export default async function Home() {
                 </ScrollReveal>
               );
             })}
+          </div>
+        </div>
+      </section>
+
+      <section className="px-6 pb-16">
+        <div className="mx-auto max-w-5xl">
+          <div className="glass-card rounded-3xl border-primary/20 bg-primary/5 p-8 md:p-10">
+            <div className="grid gap-8 sm:grid-cols-3">
+              {stats.map((stat) => (
+                <div key={stat.label} className="flex flex-col items-center gap-1 text-center">
+                  <span className={`text-3xl font-extrabold ${stat.accent}`}>{stat.value}</span>
+                  <span className="text-label-sm text-on-surface-variant">{stat.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="movzular" className="px-6 py-16">
+        <div className="mx-auto max-w-5xl">
+          <div className="flex flex-wrap items-end justify-between gap-4 mb-8">
+            <div>
+              <h2 className="text-headline-md">Geniş Məlumat Bazası</h2>
+              <p className="mt-1 text-body-md text-on-surface-variant">
+                Hər kateqoriya üzrə dərslərlə qaydaları öyrənin, sualları cavablayıb irəliləyişinizi
+                izləyin.
+              </p>
+            </div>
+            <Link href="/oyrenme" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
+              Dərslərə başla
+            </Link>
+          </div>
+
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {topics.map((topic, i) => (
+              <ScrollReveal
+                key={topic.title}
+                className={FEATURED_TOPIC_INDEXES.has(i) ? 'sm:col-span-2' : ''}
+                delayMs={i * 80}
+              >
+                <CategoryCard
+                  category={topic}
+                  index={i}
+                  href={`/chat?q=${encodeURIComponent(topic.question)}`}
+                  questionCount={questionCounts[topic.title]}
+                />
+              </ScrollReveal>
+            ))}
           </div>
         </div>
       </section>

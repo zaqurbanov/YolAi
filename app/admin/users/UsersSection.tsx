@@ -17,6 +17,7 @@ import SendBroadcastNotificationControl from './SendBroadcastNotificationControl
 import EmbeddingModelControl from './EmbeddingModelControl';
 import LessonEconomyControl from './LessonEconomyControl';
 import GameRewardsControl from './GameRewardsControl';
+import WheelPrizesControl from './WheelPrizesControl';
 import GaragePerksControl from './GaragePerksControl';
 import CategoryContentControl from './CategoryContentControl';
 import CarTiersControl from './CarTiersControl';
@@ -49,6 +50,7 @@ export default async function UsersSection() {
         <EmbeddingModelControl />
         <LessonEconomyControl />
         <GameRewardsControl />
+        <WheelPrizesControl />
         <GaragePerksControl />
         <CategoryContentControl />
         <CarTiersControl />

@@ -4,6 +4,24 @@ Bu sənəd saytda nə qurulduğunu, hansı biznes məntiqlərinin işlədiyini v
 mövcud olduğunu ətraflı təsvir edir. Kod dəyişdikcə köhnəlmə riski var — dəqiq detal üçün həmişə
 `CLAUDE.md` və faktiki koda istinad et, bu sənəd "böyük mənzərəni" görmək üçündür.
 
+**2026-07-27 əlavəsi — bu tarixdən sonra qurulan yeni sistemlər** (bu sənədin əsas hissəsi
+2026-07-26-da yazılıb, aşağıdakılar sonradan əlavə olundu, hələ hamısı Supabase-də tətbiq
+olunmayıb — bax `docs/VIRTUAL_QARAJ_ROADMAP.md`-in status cədvəlinə):
+- **Gündəlik Missiyalar + Günün Sandığı** (`0081_daily_quests.sql`) — 3 gündəlik tapşırıq
+  (chat, oyun, dərs), tamamlananda animasiyalı sandıq açılışı, admin-tənzimlənən mükafat.
+- **Sınaq İmtahanı** (`0082_exam_simulator.sql`) — 15 dəq/10 sual, bütün mövzular qarışıq, 100
+  coin/1 enerji girişi, tam sink (mükafatsız), nəticə `/share/[token]` ilə paylaşılır.
+- **Virtual Qaraj** (`0083_virtual_garage.sql`, `0084_vip_plate_market.sql`) — maşın sahibliyi
+  (5 pillə), kumulyativ olmayan perklər (XO/enerji/chat bonusu), VIP nömrə bazarı (hər nömrədən
+  1 ədəd). Tam yol xəritəsi: `docs/VIRTUAL_QARAJ_ROADMAP.md`.
+- **Çarx yenidən qurulması** — bərabər-ehtimallı seçimdən 10-slotlu, admin hər slotun coin
+  dəyərini VƏ faizini ayrıca təyin etdiyi çəkili seçimə keçirildi (miqrasiyasız, `lib/coins/wheel.ts`).
+- **Admin panel genişlənməsi** — demək olar ki hər coin/enerji mükafatı (gündəlik sual, oyunlar,
+  sandıq, qaraj perkləri, VIP nömrə qiyməti) indi `/admin/users`-dən tənzimlənir, SQL-ə ehtiyac yoxdur.
+- **Bildiriş və loqlama təkmilləşməsi** — server+client xəta izləmə (`error_logs`, `/admin/logs`),
+  admin bütün istifadəçilərə xüsusi mesajlı daxili bildiriş göndərə bilir, zəng ikonu ürək-döyüntülü
+  animasiya ilə diqqət çəkir.
+
 ---
 
 ## 1. Məhsul nədir

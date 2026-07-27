@@ -15,7 +15,12 @@ export const generatedQuestionSchema = z.object({
   explanation: z.string().optional(),
 });
 
-export type GeneratedQuestion = z.infer<typeof generatedQuestionSchema>;
+export type GeneratedQuestion = z.infer<typeof generatedQuestionSchema> & {
+  /** Computed here (not part of the LLM schema) so callers can pass it
+   *  straight into createDraftQuestions — see lib/admin/quizQuestions.ts
+   *  and the same heuristic backfilled in 0086_fine_amount_flag.sql. */
+  isFineAmount: boolean;
+};
 
 const generatedQuestionsSchema = z.object({
   questions: z.array(generatedQuestionSchema),
@@ -61,5 +66,18 @@ export async function generateQuestionsFromPdf(buffer: ArrayBuffer): Promise<Gen
     prompt: `Kateqoriya siyahısı (hər sual üçün bunlardan birini seç):\n${categoryList}\n\nSənəd mətni:\n"""\n${sourceText}\n"""`,
   });
 
-  return object.questions;
+  return object.questions.map((q) => ({
+    ...q,
+    isFineAmount: isFineAmountQuestion(q.question, q.options),
+  }));
+}
+
+// Same heuristic as the 0086 migration's SQL backfill, kept in sync
+// deliberately — see that file's header for why fine-amount questions are
+// flagged (capped at draw time, not removed).
+function isFineAmountQuestion(question: string, options: string[]): boolean {
+  const currencyPattern = /manat|azn|₼/i;
+  if (currencyPattern.test(question)) return true;
+  if (options.some((option) => currencyPattern.test(option))) return true;
+  return /cərimə/i.test(question) && /\d/.test(question);
 }

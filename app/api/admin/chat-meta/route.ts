@@ -1095,6 +1095,7 @@ export async function POST(request: NextRequest) {
         explanation: q.explanation,
         sourceTitle: file.name,
         createdBy: auth.userId,
+        isFineAmount: q.isFineAmount,
       }))
     );
 

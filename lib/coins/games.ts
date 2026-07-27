@@ -111,7 +111,7 @@ export async function getTicTacToeWinReward(): Promise<number> {
 }
 
 // How many tic-tac-toe games the user has already played today (UTC). Drives the
-// "first game of the day is easy" rule on the client. Fails OPEN to 0 (→ easy);
+// "every 3rd game is easy" rule on the client. Fails OPEN to 0 (→ easy);
 // this is display-only, the server independently recomputes difficulty at settle.
 export async function getTicTacToeTodayCount(userId: string): Promise<number> {
   try {
@@ -285,11 +285,11 @@ export type TicTacToeResult =
   | { ok: false; error: TicTacToeSettleError | 'invalid_moves' };
 
 export async function playTicTacToe(userId: string, userMoves: number[]): Promise<TicTacToeResult> {
-  // Difficulty is decided SERVER-SIDE from today's play count: the FIRST game of
-  // the day is easy, the rest hard. The client computes the same from the count
-  // it was given, so its local game matches this re-simulation.
+  // Difficulty is decided SERVER-SIDE from today's play count: EVERY 3RD game of
+  // the day is easy (1st, 4th, 7th, ...), the rest hard. The client computes the
+  // same from the count it was given, so its local game matches this re-simulation.
   const todayCount = await getTicTacToeTodayCount(userId);
-  const difficulty: Difficulty = todayCount === 0 ? 'easy' : 'hard';
+  const difficulty: Difficulty = todayCount % 3 === 0 ? 'easy' : 'hard';
 
   const sim = simulateTicTacToe(userMoves, difficulty);
   if (!sim.ok) return { ok: false, error: 'invalid_moves' };

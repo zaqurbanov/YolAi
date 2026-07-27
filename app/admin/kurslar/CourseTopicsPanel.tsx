@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Button } from '@heroui/react';
+import { Button, Chip, Input, Label, Switch, TextField } from '@heroui/react';
 import { Spinner } from '@/components/Spinner';
 import type { LessonCourseRow, LessonTopicRow } from '@/lib/lessons/courses';
 import type { TopicProposal } from '@/lib/lessons/proposeTopics';
@@ -11,6 +11,7 @@ import {
   listCourseTopicsAction,
   proposeTopicsAction,
   publishTopicQuestionsAction,
+  updateCourseAction,
   updateTopicAction,
 } from './actions';
 import TopicProposalEditor from './TopicProposalEditor';
@@ -77,6 +78,16 @@ export default function CourseTopicsPanel({
   const [genStates, setGenStates] = useState<Record<string, GenState>>({});
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Pricing edit form — collapsed by default, mirrors CourseCreateForm's
+  // isFree/unlockPrice fields since this is the same data on an existing row.
+  const [editingPrice, setEditingPrice] = useState(false);
+  const [priceIsFree, setPriceIsFree] = useState(course.isFree);
+  const [priceValue, setPriceValue] = useState(
+    course.unlockPrice !== null ? String(course.unlockPrice) : ''
+  );
+  const [priceError, setPriceError] = useState<string | null>(null);
+  const [priceSaving, setPriceSaving] = useState(false);
 
   // Cooperative cancellation: the in-flight topic always finishes (its work is
   // already committed server-side), the loop just stops before the next one.
@@ -243,6 +254,41 @@ export default function CourseTopicsPanel({
     onTopicsChanged();
   }
 
+  async function handleSavePrice() {
+    setPriceError(null);
+
+    const trimmed = priceValue.trim();
+    let price: number | null = null;
+    if (!priceIsFree && trimmed !== '') {
+      const parsed = Number(trimmed);
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        setPriceError('Qiymət düzgün ədəd olmalıdır');
+        return;
+      }
+      price = parsed;
+    }
+    // Free courses have no unlock price, same as CourseCreateForm's create path.
+    if (priceIsFree) price = null;
+
+    setPriceSaving(true);
+    try {
+      const result = await updateCourseAction(course.id, {
+        isFree: priceIsFree,
+        unlockPrice: price,
+      });
+      if (!result.ok) {
+        setPriceError(result.error);
+        return;
+      }
+      setEditingPrice(false);
+      onTopicsChanged();
+    } catch (e) {
+      setPriceError(e instanceof Error ? e.message : 'Xəta baş verdi');
+    } finally {
+      setPriceSaving(false);
+    }
+  }
+
   async function handlePublishTopic(topic: LessonTopicRow) {
     setError(null);
     // ORDER IS ENFORCED BY THE BACKEND: questions first, then the topic. A
@@ -341,6 +387,92 @@ export default function CourseTopicsPanel({
         {error && (
           <div className="mt-3 rounded-xl border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">
             {error}
+          </div>
+        )}
+      </div>
+
+      <div className="glass-card rounded-2xl p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="mono-label text-on-surface-variant uppercase">Qiymət</div>
+            <div className="mt-2 flex items-center gap-2">
+              {course.isFree ? (
+                <Chip size="sm" variant="soft" color="success" className="mono-label">
+                  Pulsuz
+                </Chip>
+              ) : course.unlockPrice !== null ? (
+                <Chip size="sm" variant="soft" color="default" className="mono-label">
+                  {course.unlockPrice} coin
+                </Chip>
+              ) : (
+                <p className="text-label-sm text-on-surface-variant">
+                  Qlobal standart qiymət istifadə olunur
+                </p>
+              )}
+            </div>
+          </div>
+
+          {!editingPrice && (
+            <Button
+              variant="outline"
+              size="sm"
+              isDisabled={running}
+              onPress={() => {
+                setPriceIsFree(course.isFree);
+                setPriceValue(course.unlockPrice !== null ? String(course.unlockPrice) : '');
+                setPriceError(null);
+                setEditingPrice(true);
+              }}
+            >
+              Qiyməti dəyiş
+            </Button>
+          )}
+        </div>
+
+        {editingPrice && (
+          <div className="mt-4 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <Switch isSelected={priceIsFree} onChange={setPriceIsFree}>
+                Pulsuz kurs
+              </Switch>
+
+              <TextField
+                value={priceValue}
+                onChange={setPriceValue}
+                isDisabled={priceIsFree}
+                className="w-48"
+              >
+                <Label>Qiymət (boş = qlobal standart)</Label>
+                <Input type="number" min={0} step={0.01} placeholder="standart" />
+              </TextField>
+            </div>
+
+            {priceError && <p className="mono-label text-danger">{priceError}</p>}
+
+            <div className="flex items-center gap-2">
+              <Button
+                variant="primary"
+                size="sm"
+                isPending={priceSaving}
+                isDisabled={priceSaving}
+                onPress={() => void handleSavePrice()}
+              >
+                {({ isPending }) => (
+                  <>
+                    {isPending ? <Spinner size="sm" tone="current" /> : null}
+                    Yadda saxla
+                  </>
+                )}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                isDisabled={priceSaving}
+                onPress={() => setEditingPrice(false)}
+              >
+                Ləğv et
+              </Button>
+            </div>
           </div>
         )}
       </div>

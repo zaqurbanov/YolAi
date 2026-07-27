@@ -8,8 +8,8 @@ import { playTicTacToeAction } from '@/app/coin-qazan/actions';
 // The board opponent is a DETERMINISTIC computer algorithm, mirrored EXACTLY
 // from lib/coins/games.ts so the local game the user plays matches the server's
 // re-simulation (which is the authority on the outcome + reward). "easy" (first
-// empty cell) is used for the user's first game of the day; "hard" (unbeatable
-// minimax) for every game after.
+// empty cell) is used for every 3rd game of the day (1st, 4th, 7th...); "hard"
+// (unbeatable minimax) for every other game.
 
 type Cell = 'X' | 'O' | null;
 
@@ -190,7 +190,7 @@ export default function TicTacToeGame({
     if (outcome === 'win') return reward > 0 ? `Qazandın! +${reward} coin 🎉` : 'Qazandın! 🎉';
     if (outcome === 'draw') return 'Heç-heçə 🤝';
     if (outcome === 'loss') return 'Uduzdun. Növbəti dəfə!';
-    if (difficulty === 'easy') return 'Günün ilk oyunu — udmaq asandır 🎯';
+    if (difficulty === 'easy') return 'Bu turda udmaq asandır 🎯';
     return 'Sənin növbən (X)';
   })();
 

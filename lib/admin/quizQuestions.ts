@@ -18,6 +18,7 @@ export interface QuizQuestionRow {
   createdBy: string | null;
   createdAt: string;
   updatedAt: string;
+  isFineAmount: boolean;
 }
 
 interface QuizQuestionsSelectRow {
@@ -32,6 +33,7 @@ interface QuizQuestionsSelectRow {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  is_fine_amount: boolean;
 }
 
 function mapRow(row: QuizQuestionsSelectRow): QuizQuestionRow {
@@ -47,11 +49,12 @@ function mapRow(row: QuizQuestionsSelectRow): QuizQuestionRow {
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    isFineAmount: row.is_fine_amount,
   };
 }
 
 const SELECT_COLUMNS =
-  'id, category, question, options, correct_index, explanation, status, source_title, created_by, created_at, updated_at';
+  'id, category, question, options, correct_index, explanation, status, source_title, created_by, created_at, updated_at, is_fine_amount';
 
 export async function listQuestions(status?: 'draft' | 'published'): Promise<QuizQuestionRow[]> {
   let query = createAdminClient()
@@ -80,6 +83,7 @@ export interface DraftQuestionInput {
   explanation?: string;
   sourceTitle: string;
   createdBy: string;
+  isFineAmount?: boolean;
 }
 
 // options.length !== 4 or an out-of-range correctIndex is rejected here in
@@ -112,6 +116,7 @@ export async function createDraftQuestions(
         status: 'draft' as const,
         source_title: row.sourceTitle,
         created_by: row.createdBy,
+        is_fine_amount: row.isFineAmount ?? false,
       }))
     )
     .select(SELECT_COLUMNS)
@@ -132,6 +137,7 @@ export interface QuestionPatch {
   correctIndex?: number;
   category?: string;
   explanation?: string | null;
+  isFineAmount?: boolean;
 }
 
 export async function updateQuestion(
@@ -154,6 +160,7 @@ export async function updateQuestion(
   if (patch.correctIndex !== undefined) update.correct_index = patch.correctIndex;
   if (patch.category !== undefined) update.category = patch.category;
   if (patch.explanation !== undefined) update.explanation = patch.explanation;
+  if (patch.isFineAmount !== undefined) update.is_fine_amount = patch.isFineAmount;
 
   const { data, error } = await createAdminClient()
     .from('quiz_questions')

@@ -47,10 +47,10 @@ export default function GamesSection({
   const [purchaseMessage, setPurchaseMessage] = useState<string | null>(null);
   const purchaseMessageTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // The FIRST XO game of the day (no plays recorded yet) is easy; every game
-  // after is hard. Kept in sync with the server, which recomputes the same
-  // from the DB play count at settle time. Sign speed has no such ramp.
-  const difficulty: 'easy' | 'hard' = todayCount === 0 ? 'easy' : 'hard';
+  // Every 3rd XO game of the day (1st, 4th, 7th, 10th...) is easy; the rest
+  // are hard. Kept in sync with the server, which recomputes the same from
+  // the DB play count at settle time. Sign speed has no such ramp.
+  const difficulty: 'easy' | 'hard' = todayCount % 3 === 0 ? 'easy' : 'hard';
 
   const handleSettled = useCallback((newBalance: number, newEnergy: number) => {
     setBalance(newBalance);

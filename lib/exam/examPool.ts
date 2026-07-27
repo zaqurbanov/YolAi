@@ -14,6 +14,11 @@ import { logError } from '@/lib/logging/logError';
 
 const QUESTIONS_PER_EXAM = 10;
 
+// Same cap and rationale as lib/quiz/topicTest.ts's MAX_FINE_AMOUNT_QUESTIONS
+// (see that file and the 0086 migration header) — kept as a separate
+// constant since exam size (10) and topic-test size (variable) are unrelated.
+const MAX_FINE_AMOUNT_QUESTIONS = 2;
+
 export interface ExamQuestion {
   id: string;
   question: string;
@@ -24,6 +29,11 @@ interface PoolRow {
   id: string;
   question: string;
   options: unknown;
+  is_fine_amount: boolean;
+}
+
+interface PoolQuestion extends ExamQuestion {
+  isFineAmount: boolean;
 }
 
 // Fisher-Yates using crypto randomInt — copied verbatim from
@@ -40,7 +50,7 @@ function shuffle<T>(items: T[]): T[] {
 export async function drawExamQuestions(): Promise<ExamQuestion[] | null> {
   const { data, error } = await createAdminClient()
     .from('quiz_questions')
-    .select('id, question, options')
+    .select('id, question, options, is_fine_amount')
     .eq('status', 'published')
     .returns<PoolRow[]>();
 
@@ -54,18 +64,35 @@ export async function drawExamQuestions(): Promise<ExamQuestion[] | null> {
 
   // A malformed row (options not an array of 4) is dropped rather than
   // rendered as a broken question; it simply shrinks the effective pool.
-  const pool: ExamQuestion[] = (data ?? []).flatMap((row) => {
+  const pool: PoolQuestion[] = (data ?? []).flatMap((row) => {
     if (!Array.isArray(row.options) || row.options.length !== 4) return [];
     return [
       {
         id: row.id,
         question: row.question,
         options: row.options.map((option) => String(option)),
+        isFineAmount: Boolean(row.is_fine_amount),
       },
     ];
   });
 
+  // Guard is against the TOTAL pool size, same as before splitting — a
+  // fine-amount-heavy corpus should not spuriously fail this check just
+  // because the normal side alone is thin (the draw below backfills).
   if (pool.length < QUESTIONS_PER_EXAM) return null;
 
-  return shuffle(pool).slice(0, QUESTIONS_PER_EXAM);
+  const fineAmount = shuffle(pool.filter((q) => q.isFineAmount));
+  const normal = shuffle(pool.filter((q) => !q.isFineAmount));
+
+  const fineAmountTake = Math.min(MAX_FINE_AMOUNT_QUESTIONS, fineAmount.length);
+  const normalTake = Math.min(normal.length, QUESTIONS_PER_EXAM - fineAmountTake);
+
+  const selected = [...fineAmount.slice(0, fineAmountTake), ...normal.slice(0, normalTake)];
+
+  if (selected.length < QUESTIONS_PER_EXAM) {
+    const shortfall = QUESTIONS_PER_EXAM - selected.length;
+    selected.push(...fineAmount.slice(fineAmountTake, fineAmountTake + shortfall));
+  }
+
+  return shuffle(selected).map(({ id, question, options }) => ({ id, question, options }));
 }
