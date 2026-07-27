@@ -1,4 +1,4 @@
-import { TrophyIcon } from '@/components/icons';
+import { TrophyIcon, FineIcon } from '@/components/icons';
 import type { WeeklyLeaderboard } from '@/lib/coins/leaderboard';
 
 interface WeeklyLeaderboardCardProps {
@@ -62,6 +62,15 @@ export default function WeeklyLeaderboardCard({ leaderboard }: WeeklyLeaderboard
               </span>
               <span className="min-w-0 flex-1 truncate text-body-md font-medium text-on-surface">
                 {entry.carEmoji && <span className="mr-1">{entry.carEmoji}</span>}
+                {entry.isFined && (
+                  <span
+                    title="Cəriməli"
+                    className="mr-1 inline-flex items-center gap-0.5 rounded-md bg-danger/15 px-1 py-0.5 align-middle text-[10px] font-bold uppercase tracking-wide text-danger"
+                  >
+                    <FineIcon width={10} height={10} />
+                    Cərimə
+                  </span>
+                )}
                 {entry.name}
                 {entry.plateNumber && (
                   <span

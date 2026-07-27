@@ -57,26 +57,29 @@ export const viewport: Viewport = {
   colorScheme: "dark",
 };
 
-// Sets the `dark` class on <html> from localStorage before hydration/paint, so
-// the theme never flashes to the wrong value on load. Kept as a plain inline
-// script (not next/script) because it must run synchronously as the browser
-// parses <head>, before any CSS/JS asset fetch or hydration — next/script's
+// Sets the `data-design` attribute AND the `dark` class on <html> from
+// localStorage before hydration/paint, so neither the design nor the theme
+// ever flashes to the wrong value on load. Kept as a plain inline script (not
+// next/script) because it must run synchronously as the browser parses
+// <head>, before any CSS/JS asset fetch or hydration — next/script's
 // `beforeInteractive` strategy still defers to Next's own script-loading
 // machinery and is documented for third-party scripts, not this. A raw
 // <script> in the App Router root layout's <head> is rendered verbatim in the
 // server HTML and executes immediately when the browser reaches it, ahead of
-// <body> paint. Default is dark (this app's brand default per the design
-// skill) when no stored preference exists yet.
-const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem('yol-theme');var d=t!=='light';document.documentElement.classList.toggle('dark',d);}catch(e){document.documentElement.classList.add('dark');}})();`;
-
-// Same FOUC-prevention approach as THEME_INIT_SCRIPT above, for the
-// independent "Cyber-Circuit Legal" design toggle (see
-// lib/design/useAppDesign.ts). Sets a `data-design` attribute (not a class,
-// so it can never collide with the `dark`/light class above) synchronously
-// before paint. Default is "simple" — the existing, unmodified design — so
-// nobody sees the new design unless they've explicitly opted in via the
-// NavBar toggle at least once.
-const DESIGN_INIT_SCRIPT = `(function(){try{var d=localStorage.getItem('yol-design');document.documentElement.setAttribute('data-design',d==='3d'?'3d':'simple');}catch(e){document.documentElement.setAttribute('data-design','simple');}})();`;
+// <body> paint.
+//
+// Design is resolved FIRST and theme is resolved AFTER, conditioned on it:
+// the "Cyber-Circuit Legal" 3D design is dark-only by product decision (gold
+// accent on near-black — a light variant was never designed and was never
+// meant to exist), so whenever `data-design` resolves to "3d" the `dark`
+// class is forced on regardless of the stored `yol-theme` preference. That
+// stored preference is deliberately left untouched in localStorage — it's
+// the user's choice for "sadə dizayn" and is honored again the moment they
+// switch back (see lib/design/useAppDesign.ts / lib/theme/useDarkMode.ts,
+// which enforce this same rule at runtime after mount, not just on load).
+// Default is dark (this app's brand default per the design skill) when no
+// stored theme preference exists yet, same as before this change.
+const THEME_AND_DESIGN_INIT_SCRIPT = `(function(){try{var design=localStorage.getItem('yol-design')==='3d'?'3d':'simple';document.documentElement.setAttribute('data-design',design);var t=localStorage.getItem('yol-theme');var dark=design==='3d'?true:(t!=='light');document.documentElement.classList.toggle('dark',dark);}catch(e){document.documentElement.setAttribute('data-design','simple');document.documentElement.classList.add('dark');}})();`;
 
 export default function RootLayout({
   children,
@@ -90,8 +93,7 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <head>
-        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
-        <script dangerouslySetInnerHTML={{ __html: DESIGN_INIT_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: THEME_AND_DESIGN_INIT_SCRIPT }} />
       </head>
       <body className="h-full flex flex-col overflow-hidden bg-background text-foreground">
         <TourProvider>

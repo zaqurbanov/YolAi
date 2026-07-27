@@ -16,6 +16,13 @@ import { generateExamShareLink } from '@/lib/exam/examShare';
 import type { ExamQuestion } from '@/lib/exam/examPool';
 import { purchaseCarTier } from '@/lib/garage/garage';
 import { purchaseCustomPlate } from '@/lib/garage/plates';
+import {
+  getFineStatus,
+  drawRedemptionExam,
+  submitRedemptionExam,
+  type RedemptionQuestion,
+  type RedemptionAnswerInput,
+} from '@/lib/garage/fines';
 
 export interface AdWatchClaimState {
   status: 'success' | 'daily_limit_reached' | 'invalid_token' | 'too_early' | 'error';
@@ -679,6 +686,136 @@ export async function purchaseCustomPlateAction(plateNumber: string): Promise<Pu
     message: `${result.plateNumber} alındı!`,
     balance: result.balance,
     plateNumber: result.plateNumber,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Cərimə İmtahanı — redemption exam, Virtual Qaraj Mərhələ 4
+// (0089_car_fines.sql, lib/garage/fines.ts). Clears a CƏRİMƏLİ car's fine on
+// a passing score. Pure status symbol: no coin grant/cost anywhere in this
+// feature. The daily draw rate limit is enforced inside drawRedemptionExam
+// via try_record_redemption_attempt, not here.
+// ---------------------------------------------------------------------------
+export interface StartRedemptionExamState {
+  status: 'success' | 'unauthenticated' | 'not_fined' | 'rate_limited' | 'no_questions' | 'error';
+  message: string;
+  token?: string;
+  questions?: RedemptionQuestion[];
+}
+
+export async function startRedemptionExamAction(): Promise<StartRedemptionExamState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { status: 'unauthenticated', message: 'Giriş tələb olunur' };
+  }
+
+  const fineStatus = await getFineStatus(user.id);
+  if (!fineStatus.isFined) {
+    return { status: 'not_fined', message: 'Maşınınız cərimələnməyib' };
+  }
+
+  const draw = await drawRedemptionExam(user.id);
+  if (!draw.ok) {
+    if (draw.error === 'rate_limited') {
+      return { status: 'rate_limited', message: 'Bugünkü cəhd limitinə çatmısınız. Sabah yenidən cəhd edin' };
+    }
+    if (draw.error === 'no_questions') {
+      return { status: 'no_questions', message: 'Bərpa imtahanı hazırda əlçatan deyil' };
+    }
+    return { status: 'error', message: 'Xəta baş verdi. Bir az sonra yenidən cəhd edin' };
+  }
+
+  return {
+    status: 'success',
+    message: 'Bərpa imtahanı hazırdır',
+    token: draw.token,
+    questions: draw.questions,
+  };
+}
+
+export interface SubmitRedemptionExamInput {
+  token: string;
+  answers: RedemptionAnswerInput[];
+}
+
+export interface SubmitRedemptionExamState {
+  status:
+    | 'success'
+    | 'unauthenticated'
+    | 'invalid_token'
+    | 'expired_token'
+    | 'invalid_answers'
+    | 'error';
+  message: string;
+  score?: number;
+  total?: number;
+  cleared?: boolean;
+}
+
+export async function submitRedemptionExamAction(
+  input: SubmitRedemptionExamInput
+): Promise<SubmitRedemptionExamState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { status: 'unauthenticated', message: 'Giriş tələb olunur' };
+  }
+
+  const token = input?.token;
+  const answers = Array.isArray(input?.answers) ? input.answers : [];
+
+  const wellFormed =
+    typeof token === 'string' &&
+    token.length > 0 &&
+    answers.length === 3 &&
+    answers.every(
+      (a) =>
+        a &&
+        typeof a.questionId === 'string' &&
+        a.questionId.trim() !== '' &&
+        Number.isInteger(a.selectedIndex) &&
+        a.selectedIndex >= -1 &&
+        a.selectedIndex <= 3
+    ) &&
+    new Set(answers.map((a) => a.questionId)).size === answers.length;
+
+  if (!wellFormed) {
+    return { status: 'invalid_answers', message: 'Cavablar düzgün göndərilmədi' };
+  }
+
+  const result = await submitRedemptionExam(user.id, token, answers);
+  if (!result.ok) {
+    if (result.error === 'invalid_token') {
+      return { status: 'invalid_token', message: 'İmtahan doğrulanmadı. Yenidən başlayın' };
+    }
+    if (result.error === 'expired_token') {
+      return { status: 'expired_token', message: 'İmtahanın vaxtı bitdi. Yenidən başlayın' };
+    }
+    if (result.error === 'invalid_answers') {
+      return { status: 'invalid_answers', message: 'Cavablar düzgün göndərilmədi' };
+    }
+    return { status: 'error', message: 'Xəta baş verdi. Bir az sonra yenidən cəhd edin' };
+  }
+
+  if (result.cleared) {
+    revalidatePath('/coin-qazan');
+  }
+
+  return {
+    status: 'success',
+    message: result.cleared
+      ? 'Təbriklər, cərimə silindi!'
+      : `${result.score}/${result.total} doğru. Bu dəfə alınmadı`,
+    score: result.score,
+    total: result.total,
+    cleared: result.cleared,
   };
 }
 

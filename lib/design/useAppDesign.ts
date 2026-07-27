@@ -34,6 +34,25 @@ export function useAppDesign() {
     localStorage.setItem(DESIGN_KEY, next ? '3d' : 'simple');
     setIs3D(next);
     window.dispatchEvent(new CustomEvent(DESIGN_CHANGED_EVENT, { detail: { is3D: next } }));
+
+    // The 3D design is dark-only by product decision (no light variant was
+    // ever designed) — switching into it forces dark mode on, without
+    // touching the stored `yol-theme` preference, so "sadə dizayn"'s
+    // light/dark choice is exactly as the user left it when they switch
+    // back. Mirrors the same rule enforced on initial load by
+    // THEME_AND_DESIGN_INIT_SCRIPT in app/layout.tsx, and by
+    // lib/theme/useDarkMode.ts's setDark (which refuses to go light while
+    // `data-design` is "3d") for the reverse direction — belt and braces so
+    // there is no path, load or toggle, that leaves 3D+light active.
+    if (next) {
+      document.documentElement.classList.add('dark');
+      window.dispatchEvent(new CustomEvent('yol-theme-changed', { detail: { isDark: true } }));
+    } else {
+      const storedTheme = localStorage.getItem('yol-theme');
+      const restoredDark = storedTheme !== 'light';
+      document.documentElement.classList.toggle('dark', restoredDark);
+      window.dispatchEvent(new CustomEvent('yol-theme-changed', { detail: { isDark: restoredDark } }));
+    }
   }, []);
 
   return { is3D, setDesign3D };

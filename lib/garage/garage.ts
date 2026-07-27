@@ -11,6 +11,11 @@ export interface UserGarageEntry {
   tierName: string;
   tierEmoji: string;
   tierOrder: number;
+  /** Virtual Qaraj Mərhələ 4 (0089_car_fines.sql) — true while the car is
+   *  CƏRİMƏLİ. Read here (not a second query) so perks.ts's
+   *  getActiveGaragePerk can suppress a perk with one query, not two. A
+   *  Piyada/no-purchase user is never fined (nothing to fine). */
+  isFined: boolean;
 }
 
 const PIYADA_FALLBACK: UserGarageEntry = {
@@ -18,6 +23,7 @@ const PIYADA_FALLBACK: UserGarageEntry = {
   tierName: 'Piyada',
   tierEmoji: '🚶',
   tierOrder: 0,
+  isFined: false,
 };
 
 // Read-only display path — never throws. A user with no user_garage row
@@ -30,7 +36,7 @@ export async function getUserGarage(userId: string): Promise<UserGarageEntry> {
 
   const { data, error } = await admin
     .from('user_garage')
-    .select('tier_id, car_tiers(name, emoji, tier_order)')
+    .select('tier_id, is_fined, car_tiers(name, emoji, tier_order)')
     .eq('user_id', userId)
     .maybeSingle();
 
@@ -51,6 +57,7 @@ export async function getUserGarage(userId: string): Promise<UserGarageEntry> {
         tierName: tier.name,
         tierEmoji: tier.emoji,
         tierOrder: tier.tier_order,
+        isFined: Boolean(data.is_fined),
       };
     }
   }
@@ -68,6 +75,7 @@ export async function getUserGarage(userId: string): Promise<UserGarageEntry> {
     tierName: piyada.name,
     tierEmoji: piyada.emoji,
     tierOrder: piyada.tier_order,
+    isFined: false,
   };
 }
 

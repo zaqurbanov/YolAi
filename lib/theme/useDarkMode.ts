@@ -31,6 +31,17 @@ export function useDarkMode() {
   }, []);
 
   const setDark = useCallback((next: boolean) => {
+    // The 3D ("Cyber-Circuit Legal") design is dark-only by product decision
+    // — no light variant exists — so a request to go light is refused while
+    // that design is active. See lib/design/useAppDesign.ts's setDesign3D
+    // for the matching enforcement on the design-toggle side, and
+    // THEME_AND_DESIGN_INIT_SCRIPT in app/layout.tsx for the initial-load
+    // case. Silently ignoring rather than throwing: callers are UI toggles
+    // (ThemeToggle, PreferencesCard's DarkModeRow) that already disable
+    // themselves while 3D is active (see is3D checks there) — this is a
+    // defensive second layer, not the primary UX.
+    if (!next && document.documentElement.getAttribute('data-design') === '3d') return;
+
     document.documentElement.classList.toggle('dark', next);
     localStorage.setItem(THEME_KEY, next ? 'dark' : 'light');
     setIsDark(next);

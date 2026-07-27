@@ -45,7 +45,7 @@ export default async function FaqPage({ params }: { params: Promise<{ slug: stri
     <div id="top" className="flex flex-1 flex-col">
       <section className="relative overflow-hidden px-6 py-16 lg:py-20">
         <div className="absolute inset-0 z-0 bg-gradient-to-b from-primary/10 via-transparent to-transparent" />
-        <div className="relative z-10 mx-auto flex flex-col items-center gap-4 text-center">
+        <div className="relative z-10 mx-auto flex max-w-5xl flex-col items-center gap-4 text-center">
           {page.badge && (
             <span className="mono-label rounded-full bg-primary/15 px-3 py-1 text-primary">
               {page.badge}
@@ -66,7 +66,7 @@ export default async function FaqPage({ params }: { params: Promise<{ slug: stri
       </section>
 
       <section className="px-6 py-8 lg:py-12">
-        <div className="mx-auto space-y-6">
+        <div className="mx-auto max-w-5xl space-y-6">
           {page.sections.map((section) => (
             <div key={section.heading} className="glass-card rounded-2xl p-6 text-sm leading-relaxed sm:p-8">
               <h2 className="font-display text-lg font-semibold text-on-surface">{section.heading}</h2>

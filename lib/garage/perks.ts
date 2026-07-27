@@ -53,13 +53,30 @@ export interface ActiveGaragePerk {
   xoBonusPct: number;
   energyBonus: number;
   chatDailyBonus: number;
+  /** Virtual Qaraj Mərhələ 4 — true when the owned car is CƏRİMƏLİ. The UI
+   *  still gets tierOrder so it knows WHICH car is fined; the three bonus
+   *  fields below are always forced to 0 in this state (see below). */
+  isFined: boolean;
 }
 
-const NO_PERK: ActiveGaragePerk = { tierOrder: 0, xoBonusPct: 0, energyBonus: 0, chatDailyBonus: 0 };
+const NO_PERK: ActiveGaragePerk = {
+  tierOrder: 0,
+  xoBonusPct: 0,
+  energyBonus: 0,
+  chatDailyBonus: 0,
+  isFined: false,
+};
 
 // Perks are NOT cumulative — only the currently-owned tier's perk is active.
 // Fails OPEN to NO_PERK on any error: this must never block or alter a
 // reward/energy/limit call site just because the perk lookup hiccupped.
+//
+// Virtual Qaraj Mərhələ 4: while the owned car is CƏRİMƏLİ
+// (garage.isFined), the perk is computed normally below and then forced to
+// zero right before returning — this is SERVER-SIDE TRUTH suppression, and
+// every consumer of this function (getEffectiveEnergyGrant, lib/chat/coins.ts,
+// lib/coins/games.ts) goes through here, so a fine silently disables the perk
+// everywhere without touching any of those call sites.
 export async function getActiveGaragePerk(userId: string): Promise<ActiveGaragePerk> {
   try {
     const garage = await getUserGarage(userId);
@@ -70,18 +87,22 @@ export async function getActiveGaragePerk(userId: string): Promise<ActiveGarageP
       readNumericSetting(GARAGE_CHAT_BONUS_KEY, DEFAULT_GARAGE_CHAT_BONUS),
     ]);
 
+    let perk: ActiveGaragePerk;
     if (garage.tierOrder === LADA_TIER_ORDER) {
-      return { tierOrder: garage.tierOrder, xoBonusPct, energyBonus: 0, chatDailyBonus: 0 };
-    }
-    if (garage.tierOrder === PRIUS_TIER_ORDER) {
-      return { tierOrder: garage.tierOrder, xoBonusPct: 0, energyBonus, chatDailyBonus: 0 };
-    }
-    if (garage.tierOrder === GCLASS_TIER_ORDER) {
-      return { tierOrder: garage.tierOrder, xoBonusPct: 0, energyBonus: 0, chatDailyBonus };
+      perk = { tierOrder: garage.tierOrder, xoBonusPct, energyBonus: 0, chatDailyBonus: 0, isFined: garage.isFined };
+    } else if (garage.tierOrder === PRIUS_TIER_ORDER) {
+      perk = { tierOrder: garage.tierOrder, xoBonusPct: 0, energyBonus, chatDailyBonus: 0, isFined: garage.isFined };
+    } else if (garage.tierOrder === GCLASS_TIER_ORDER) {
+      perk = { tierOrder: garage.tierOrder, xoBonusPct: 0, energyBonus: 0, chatDailyBonus, isFined: garage.isFined };
+    } else {
+      // BMW (tierOrder=3, status tier only) and Piyada (0) — no perk this phase.
+      perk = { ...NO_PERK, tierOrder: garage.tierOrder, isFined: garage.isFined };
     }
 
-    // BMW (tierOrder=3, status tier only) and Piyada (0) — no perk this phase.
-    return { ...NO_PERK, tierOrder: garage.tierOrder };
+    if (garage.isFined) {
+      return { ...perk, xoBonusPct: 0, energyBonus: 0, chatDailyBonus: 0, isFined: true };
+    }
+    return perk;
   } catch {
     return NO_PERK;
   }

@@ -6,6 +6,8 @@ import { createClient } from '@/lib/supabase/server';
 import Footer from '@/components/Footer';
 import { getCourses } from '@/lib/quiz/lessons';
 import { getCoinBalanceStatus } from '@/lib/chat/coins';
+import DesignSwitch from '@/components/design3d/DesignSwitch';
+import OyrenmePage3D from '@/components/design3d/OyrenmePage3D';
 import CourseGrid from './CourseGrid';
 
 export const metadata: Metadata = {
@@ -39,73 +41,108 @@ export default async function OyrenmePage() {
   const passedTopics = courses.reduce((sum, c) => sum + c.passedTopics, 0);
   const overallPct = totalTopics > 0 ? Math.round((passedTopics / totalTopics) * 100) : 0;
 
+  // Built once, reused by BOTH trees below — same pattern as
+  // app/coin-qazan/page.tsx's card descriptors. Internal render logic (server
+  // action wiring inside UnlockCourseCard) is untouched either way; only the
+  // surrounding chrome the 3D tree adds around it differs.
+  const hasCourses = courses.length > 0;
+  const emptyStateSimple = (
+    <div className="glass-panel rounded-2xl px-6 py-12 text-center">
+      <h2 className="text-headline-md">Kurslar hazırlanır</h2>
+      <p className="mx-auto mt-2 max-w-md text-body-md text-on-surface-variant">
+        Hələ dərc edilmiş kurs yoxdur. Yol hərəkəti qaydaları üzrə kurslar tezliklə burada
+        görünəcək.
+      </p>
+      <Link href="/chat" className={buttonVariants({ variant: 'outline', size: 'sm' }) + ' mt-5'}>
+        AI köməkçiyə sual ver
+      </Link>
+    </div>
+  );
+  const emptyStateHud = (
+    <div
+      className="hud-glass rounded-2xl px-6 py-12 text-center"
+      style={{ color: 'var(--hud-on-surface)' }}
+    >
+      <h2 className="text-lg font-bold" style={{ fontFamily: 'var(--hud-font-display)' }}>
+        Kurslar hazırlanır
+      </h2>
+      <p className="mx-auto mt-2 max-w-md text-sm" style={{ color: 'var(--hud-on-surface-variant)' }}>
+        Hələ dərc edilmiş kurs yoxdur. Yol hərəkəti qaydaları üzrə kurslar tezliklə burada
+        görünəcək.
+      </p>
+      <Link
+        href="/chat"
+        className="hud-glass mt-5 inline-flex items-center rounded-xl px-5 py-2.5 text-sm font-bold"
+        style={{ color: 'var(--hud-cyan)' }}
+      >
+        AI köməkçiyə sual ver
+      </Link>
+    </div>
+  );
+  const courseGrid = <CourseGrid balance={balance} courses={courses} />;
+
   return (
-    <div id="top" className="flex flex-1 flex-col">
-      <section className="relative overflow-hidden px-6 py-16 lg:py-20">
-        <div className="absolute inset-0 z-0 bg-gradient-to-b from-primary/10 via-transparent to-transparent" />
-        <div className="relative z-10 mx-auto flex max-w-5xl flex-col items-center gap-4 text-center">
-          <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-primary/10 px-4 py-1.5 text-label-sm text-primary">
-            <span className="size-2 rounded-full bg-go-green" />
-            Sürücülük vəsiqəsi
-          </span>
-          <h1 className="text-display-lg text-balance">Sürücülük Vəsiqəsini Al</h1>
-          <p className="max-w-2xl text-body-lg text-on-surface-variant">
-            Vəsiqə almaq üçün ilk növbədə yol hərəkəti qaydalarını bilmək lazımdır. Bu qaydaları
-            öyrənmək üçün isə aşağıdakı kurslara qatıla bilərsiniz.
-          </p>
-
-          {totalTopics > 0 && (
-            <div className="glass-panel mt-2 w-full max-w-md rounded-2xl p-5">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-label-sm text-on-surface-variant">Ümumi irəliləyiş</span>
-                <span className="text-label-sm text-go-green">
-                  {passedTopics}/{totalTopics} mövzu
-                </span>
-              </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-surface-tertiary">
-                <div
-                  className="h-full rounded-full bg-go-green shadow-[0_0_10px_rgba(34,197,94,0.4)] transition-all"
-                  style={{ width: `${overallPct}%` }}
-                />
-              </div>
-            </div>
-          )}
-
-          <Link
-            href="/chat"
-            className={
-              buttonVariants({ variant: 'ghost', size: 'sm' }) +
-              ' mt-2 transition-transform hover:scale-[1.03]'
-            }
-          >
-            Sualınız var? AI köməkçidən soruşun
-          </Link>
-        </div>
-      </section>
-
-      <section className="px-6 py-8 lg:py-12">
-        <div className="mx-auto max-w-5xl">
-          {courses.length === 0 ? (
-            <div className="glass-panel rounded-2xl px-6 py-12 text-center">
-              <h2 className="text-headline-md">Kurslar hazırlanır</h2>
-              <p className="mx-auto mt-2 max-w-md text-body-md text-on-surface-variant">
-                Hələ dərc edilmiş kurs yoxdur. Yol hərəkəti qaydaları üzrə kurslar tezliklə burada
-                görünəcək.
+    <DesignSwitch
+      simple={
+        <div id="top" className="flex flex-1 flex-col">
+          <section className="relative overflow-hidden px-6 py-16 lg:py-20">
+            <div className="absolute inset-0 z-0 bg-gradient-to-b from-primary/10 via-transparent to-transparent" />
+            <div className="relative z-10 mx-auto flex max-w-5xl flex-col items-center gap-4 text-center">
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-primary/10 px-4 py-1.5 text-label-sm text-primary">
+                <span className="size-2 rounded-full bg-go-green" />
+                Sürücülük vəsiqəsi
+              </span>
+              <h1 className="text-display-lg text-balance">Sürücülük Vəsiqəsini Al</h1>
+              <p className="max-w-2xl text-body-lg text-on-surface-variant">
+                Vəsiqə almaq üçün ilk növbədə yol hərəkəti qaydalarını bilmək lazımdır. Bu qaydaları
+                öyrənmək üçün isə aşağıdakı kurslara qatıla bilərsiniz.
               </p>
+
+              {totalTopics > 0 && (
+                <div className="glass-panel mt-2 w-full max-w-md rounded-2xl p-5">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-label-sm text-on-surface-variant">Ümumi irəliləyiş</span>
+                    <span className="text-label-sm text-go-green">
+                      {passedTopics}/{totalTopics} mövzu
+                    </span>
+                  </div>
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-surface-tertiary">
+                    <div
+                      className="h-full rounded-full bg-go-green shadow-[0_0_10px_rgba(34,197,94,0.4)] transition-all"
+                      style={{ width: `${overallPct}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
               <Link
                 href="/chat"
-                className={buttonVariants({ variant: 'outline', size: 'sm' }) + ' mt-5'}
+                className={
+                  buttonVariants({ variant: 'ghost', size: 'sm' }) +
+                  ' mt-2 transition-transform hover:scale-[1.03]'
+                }
               >
-                AI köməkçiyə sual ver
+                Sualınız var? AI köməkçidən soruşun
               </Link>
             </div>
-          ) : (
-            <CourseGrid balance={balance} courses={courses} />
-          )}
-        </div>
-      </section>
+          </section>
 
-      <Footer />
-    </div>
+          <section className="px-6 py-8 lg:py-12">
+            <div className="mx-auto max-w-5xl">{hasCourses ? courseGrid : emptyStateSimple}</div>
+          </section>
+
+          <Footer />
+        </div>
+      }
+      threeD={
+        <OyrenmePage3D
+          totalTopics={totalTopics}
+          passedTopics={passedTopics}
+          overallPct={overallPct}
+          hasCourses={hasCourses}
+          courseSection={hasCourses ? courseGrid : emptyStateHud}
+        />
+      }
+    />
   );
 }

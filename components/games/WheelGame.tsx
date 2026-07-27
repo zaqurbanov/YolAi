@@ -30,23 +30,16 @@ function reducedMotion(): boolean {
   return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
-// Formats a weight percentage tersely: strips a trailing ".0" but keeps
-// meaningful decimals (e.g. 12.5 stays, 5.0 becomes "5").
-function formatWeight(weight: number): string {
-  return weight % 1 === 0 ? String(weight) : String(Math.round(weight * 100) / 100);
-}
-
-// Each segment's start/end angle, proportional to its weight (not equal
-// slices) — weights sum to 100 by contract, so this always closes a full
-// circle. Shared by the conic-gradient stops, the label rotations and the
+// Every segment gets an equal visual slice, regardless of its weight — the
+// weight only drives the server-side probability of being selected
+// (lib/coins/wheel.ts's spinWheel()), never how big the slice looks on
+// screen. Shared by the conic-gradient stops, the label rotations and the
 // pointer-landing math below, so they never disagree with each other.
 function buildSegmentAngles(prizes: WheelPrize[]): { start: number; end: number; centre: number }[] {
-  let cursor = 0;
-  return prizes.map((p) => {
-    const angle = (p.weight / 100) * 360;
-    const start = cursor;
-    const end = cursor + angle;
-    cursor = end;
+  const angle = prizes.length > 0 ? 360 / prizes.length : 0;
+  return prizes.map((_, i) => {
+    const start = i * angle;
+    const end = start + angle;
     return { start, end, centre: start + angle / 2 };
   });
 }

@@ -7,6 +7,7 @@ import { canAccessCourse, getTopicTestConfig, getLessonRetryCost } from '@/lib/c
 import { isUserAdmin } from '@/lib/auth/isAdmin';
 import { getCourseTopics, type TopicSummary } from '@/lib/quiz/lessons';
 import { logError } from '@/lib/logging/logError';
+import { maybeApplyFine } from '@/lib/garage/fines';
 
 // Phase 2 of the lessons feature: reading a topic, drawing a topic test,
 // scoring it, and recording the attempt. Lives beside lib/quiz/lessons.ts
@@ -671,6 +672,12 @@ export async function recordTopicAttempt(
 
   const row = (Array.isArray(data) ? data[0] : data) as RecordAttemptRow | undefined;
   if (!row) return { ok: false, error: 'error' };
+
+  // Awaited (not fire-and-forget): serverless functions can be torn down
+  // right after the caller's promise resolves, so a detached promise here
+  // risks never running. maybeApplyFine never throws (see its own try/catch),
+  // so this adds one bounded RPC round trip, never a new failure mode.
+  await maybeApplyFine(userId, { score, total, source: 'topic_test', topicId });
 
   return {
     ok: true,

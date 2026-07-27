@@ -1,10 +1,11 @@
 # "Virtual Qaraj" İqtisadiyyatı — Mərhələli Yol Xəritəsi
 
-**Status (2026-07-27):**
+**Status (2026-07-28):**
 - ✅ **Mərhələ 1 — Qaraj təməli** (`car_tiers`/`user_garage`, `purchase_car_tier` RPC, `/coin-qazan`-da Qaraj kartı, admin qiymət nəzarəti) — kod hazır, **Supabase-də tətbiq olunmalı:** `supabase/migrations/0083_virtual_garage.sql`.
 - ✅ **Mərhələ 2 — Maşın perkləri** (Lada +10% XO, Prius +5 enerji, G-Class +5 gündəlik mesaj — kumulyativ deyil, admin-tənzimlənən) — kod hazır, miqrasiya lazım deyil (yalnız TS qatı).
 - ✅ **Mərhələ 3 — VIP Nömrə Bazarı** (`license_plates`, `purchase_custom_plate`/`claim_free_plate` RPC-ləri, admin moderasiya) — kod hazır, **Supabase-də tətbiq olunmalı:** `supabase/migrations/0084_vip_plate_market.sql`.
-- ⏳ Mərhələ 4 (Cərimə/Bərpa), Mərhələ 5 (Tüninq Easter Egg-i), Mərhələ 6 (Aylıq Baxış) — hələ başlanmayıb.
+- ✅ **Mərhələ 4 — Rəqəmsal Cərimələr və Bərpa İmtahanı** (mövzu testi/imtahan balı `garage_fine_fail_threshold_pct`-dən aşağı düşəndə maşın `user_garage.is_fined` ilə CƏRİMƏLİ olur, perk server-side dayandırılır (`lib/garage/perks.ts`), Leaderboard-da və Qaraj kartında qırmızı möhür göstərilir, 3 sual «Bərpa İmtahanı» ilə (rate-limited) təmizlənir) — kod hazır, **Supabase-də tətbiq olunmalı:** `supabase/migrations/0089_car_fines.sql`.
+- ⏳ Mərhələ 5 (Tüninq Easter Egg-i), Mərhələ 6 (Aylıq Baxış) — hələ başlanmayıb.
 - 🎁 **Əlaqəli əlavə iş (roadmap-dan kənar, istifadəçi tələbi ilə):** Çarx (Wheel) oyunu bərabər-ehtimallı seçimdən 10-slotlu, admin-tənzimlənən çəkili (faizli) seçimə keçirildi (`lib/coins/wheel.ts`, `WheelPrizesControl.tsx`) — miqrasiya lazım deyil.
 
 **Qeyd:** yuxarıdakı bütün miqrasiyalar (`0082` imtahan simulyatoru daxil olmaqla) hələ Supabase-də əl ilə tətbiq olunmayıb — tətbiq olunana qədər müvafiq funksiyalar "əlçatan deyil" göstərəcək, çökmür.

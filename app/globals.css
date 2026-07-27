@@ -978,8 +978,19 @@ html:not(.dark) .tour-spotlight {
 [data-design='3d'] {
   --hud-bg: #121414;
   --hud-bg-deep: #0c0f0f;
+  /* Chrome-only glass tint (navbar/sidebar) — sits directly over the
+     fixed shader backdrop, deliberately near-transparent so the shader
+     reads through. NOT used for card/panel fills — see --hud-surface. */
   --hud-surface-glass: rgba(255, 255, 255, 0.03);
-  --hud-border: rgba(255, 255, 255, 0.1);
+  /* Card/panel fill — user-specified near-black tint (#151515 @ ~60%
+     opacity, replacing the earlier #1e293b99/#1e202080 attempts) +
+     backdrop-blur, so content panels read as a distinct charcoal surface
+     instead of the near-invisible glass tint above. Applies to every
+     `.hud-glass`/`.wheel-hud-card`/`.chat-hud-shell .glass-panel`/
+     `.glass-card` card across the 3D design — single shared token, see
+     docs/design/CYBER_HUD_TOKENS.md. */
+  --hud-surface: rgba(21, 21, 21, 0.6);
+  --hud-border: rgba(71, 71, 70, 0.8);
   --hud-on-surface: #e1e3e3;
   --hud-on-surface-variant: #c4c7c8;
   --hud-outline: #8e9192;
@@ -1006,7 +1017,7 @@ html:not(.dark) .tour-spotlight {
    (components/design3d/HomePage3D.tsx) — frosted glass + subtle border,
    matching design-system.md's "Tonal Glass Layers" elevation model. */
 .hud-glass {
-  background: var(--hud-surface-glass);
+  background: var(--hud-surface);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--hud-border);
@@ -1082,7 +1093,7 @@ html:not(.dark) .tour-spotlight {
  * reproduced here.
  */
 [data-design='3d'] .wheel-hud-card {
-  background: var(--hud-surface-glass);
+  background: var(--hud-surface);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: none;
@@ -1162,4 +1173,156 @@ html:not(.dark) .tour-spotlight {
   background: var(--hud-primary);
   color: var(--hud-bg-deep);
   box-shadow: 0 0 24px var(--hud-glow-primary);
+}
+
+/*
+ * Chat (app/chat/ChatClient.tsx) — Cyber-Circuit Legal HUD re-skin.
+ *
+ * ChatClient is a single ~1600-line client component (useChat streaming,
+ * citations, coin debit, image attach, share/delete dialogs, admin log
+ * modal) that is NOT split into per-section ReactNode props like
+ * HomePage3D/CoinQazanPage3D/OyrenmePage3D are — forking it into a second
+ * full JSX tree would duplicate that logic, which the chat re-skin task
+ * explicitly forbids. Instead, components/design3d/ChatHud.tsx supplies only
+ * the chrome (fixed shader backdrop, max-w-7xl frame) around the SAME
+ * <ChatClient/> instance also mounted for "sadə dizayn" (see app/chat/page.tsx),
+ * and this block re-themes ChatClient's EXISTING classes in place.
+ *
+ * Technique: ChatClient's markup already goes through the app's Tailwind v4
+ * `--color-*` tokens (bg-primary -> --color-primary -> var(--accent), etc. —
+ * see the `@theme inline` block above) rather than hardcoded colors. Because
+ * `--color-primary: var(--accent)` is a live reference (re-resolved per
+ * element, not substituted at definition time), redeclaring `--accent` (and
+ * the handful of other primitives below) on `.chat-hud-shell` re-themes
+ * every descendant that reads `--color-primary`/`--color-on-primary`/etc.
+ * WITHOUT needing to hunt down and override each individual Tailwind utility
+ * class — this covers ChatClient's own `bg-primary`/`text-on-surface`/
+ * `border-outline-variant`/etc. AND every HeroUI component it renders
+ * (Button, Chip, Badge, Avatar, Input, Modal, AlertDialog, Dropdown), since
+ * `@heroui/styles` derives its own hover/soft/container variants
+ * (`--accent-hover`, `--surface-hover`, ...) from these same primitives via
+ * `color-mix()`. `.chat-hud-shell` is a class added directly on ChatClient's
+ * own outermost element (harmless extra class name under "sadə dizayn",
+ * where `[data-design='3d']` is never present) — see ChatClient.tsx.
+ *
+ * `.chat-hud-col` marks the 3 structural wrappers (header, message-scroll
+ * pane, composer) that should read as a centered ~4xl column rather than
+ * spanning the full max-w-7xl HUD frame — a chat transcript is more legible
+ * narrower, same reasoning HomePage3D's own content sections use inner
+ * max-w-7xl containers while text blocks within stay narrower.
+ */
+[data-design='3d'] .chat-hud-shell {
+  --accent: var(--hud-primary);
+  --accent-foreground: var(--hud-on-primary);
+  --foreground: var(--hud-on-surface);
+  --muted: var(--hud-on-surface-variant);
+  --border: var(--hud-border);
+  --outline: var(--hud-outline);
+  --surface: color-mix(in oklab, var(--hud-bg) 88%, white 4%);
+  --surface-foreground: var(--hud-on-surface);
+  --surface-secondary: color-mix(in oklab, var(--hud-bg) 92%, white 2%);
+  --surface-tertiary: color-mix(in oklab, var(--hud-bg) 80%, white 6%);
+  --overlay: var(--hud-bg);
+  --overlay-foreground: var(--hud-on-surface);
+  --danger: var(--hud-red);
+  --danger-foreground: #2a0a0a;
+  --regulatory-blue: var(--hud-cyan);
+  --background: var(--hud-bg-deep);
+  color: var(--hud-on-surface);
+  font-family: var(--hud-font-body);
+}
+
+[data-design='3d'] .chat-hud-shell .glass-panel,
+[data-design='3d'] .chat-hud-shell .glass-card {
+  background: var(--hud-surface);
+  border: 1px solid var(--hud-border);
+  box-shadow: none;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+[data-design='3d'] .chat-hud-shell .glow-primary {
+  box-shadow: 0 0 20px var(--hud-glow-primary);
+}
+
+/*
+ * Öyrənmə (Learning Center) course grid — same scoping technique as
+ * `.chat-hud-shell .glass-panel` above. CourseGrid (app/oyrenme/CourseGrid.tsx)
+ * is a server component reused UNCHANGED by both designs (real courses,
+ * UnlockCourseCard purchase dialog, coin balance — none of that is forked
+ * into a second tree), so it still renders its own "sadə dizayn" `glass-card`
+ * class. `.oyrenme-hud-courses` (added around the {courseSection} prop in
+ * components/design3d/OyrenmePage3D.tsx) repaints those existing cards with
+ * the same --hud-surface token every other 3D card uses, so the course cards
+ * read as part of the same HUD instead of the plain dark-theme surface.
+ */
+[data-design='3d'] .oyrenme-hud-courses .glass-card {
+  background: var(--hud-surface);
+  border-color: var(--hud-border);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: none;
+}
+
+/*
+ * Coin Qazan — same scoping technique, one level deeper: each HUD_FRAMES
+ * entry in components/design3d/CoinQazanPage3D.tsx already wraps its card in
+ * an outer `.hud-glass` frame with a gold `border-l-4` accent (the "qızılı
+ * border" look), but the REAL card inside (GarageCard, WheelGame,
+ * DailyQuestCard, DailyQuizCard, AdWatchCard, ReferralCard,
+ * WeeklyLeaderboardCard, PlateMarketCard, GamesSection) is mounted unchanged
+ * and still renders its own "sadə dizayn" `glass-card`/`glass-panel` surface
+ * one level in. `.coinqazan-hud-cards` repaints those inner cards with the
+ * same --hud-surface fill and a gold --hud-primary border, so the whole
+ * frame — outer accent border AND inner card — reads as one consistent HUD
+ * panel instead of a HUD shell around a plain dark-theme card.
+ */
+[data-design='3d'] .coinqazan-hud-cards .glass-card,
+[data-design='3d'] .coinqazan-hud-cards .glass-panel {
+  background: var(--hud-surface);
+  border-color: var(--hud-primary);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: none;
+}
+
+/*
+ * Hesabım (Account) — same scoping technique, one level deeper again: each
+ * HudFrame in components/design3d/AccountPage3D.tsx wraps a stateful
+ * components/account/* child (ProfileForm, SecurityForms, TransferCoinsForm,
+ * TransferHistoryList, PreferencesCard, PushNotificationOptIn,
+ * SecurityQuickView) in an outer gold `border-l-4` accent frame, but those
+ * children are forms/dialogs with real client state and server-action
+ * wiring — too deep to fork into a second JSX tree, so they mount UNCHANGED
+ * and still render their own "sadə dizayn" `glass-card`/`glass-panel`
+ * surface one level in. `.account-hud-cards` repaints that inner surface
+ * with the same --hud-surface fill and gold --hud-primary border used
+ * everywhere else, so the outer HUD frame and the inner form read as one
+ * panel instead of a HUD shell around a plain dark-theme card. The danger
+ * zone (logout/delete account) is deliberately excluded from this class —
+ * it keeps a red --hud-red border in AccountPage3D.tsx to stay visually a
+ * warning, not a gold HUD panel.
+ */
+[data-design='3d'] .account-hud-cards .glass-card,
+[data-design='3d'] .account-hud-cards .glass-panel {
+  background: var(--hud-surface);
+  border-color: var(--hud-primary);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: none;
+}
+
+[data-design='3d'] .chat-hud-shell .mono-label,
+[data-design='3d'] .chat-hud-shell .text-legal-citation {
+  font-family: var(--hud-font-mono);
+}
+
+[data-design='3d'] .chat-hud-shell h1 {
+  font-family: var(--hud-font-display);
+}
+
+[data-design='3d'] .chat-hud-shell .chat-hud-col {
+  width: 100%;
+  max-width: 56rem; /* 4xl — narrower, more legible transcript column inside the max-w-7xl HUD frame */
+  margin-inline: auto;
 }

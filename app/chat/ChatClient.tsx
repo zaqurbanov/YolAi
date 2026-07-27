@@ -1217,8 +1217,8 @@ export default function ChatClient({
   }, [logModalMessageId]);
 
   return (
-    <div className="flex flex-1 flex-col min-h-0">
-      <header className="glass-panel print:hidden flex items-center justify-between gap-4 px-4 py-3 sm:px-8">
+    <div className="chat-hud-shell flex flex-1 flex-col min-h-0">
+      <header className="glass-panel print:hidden chat-hud-col flex items-center justify-between gap-4 px-4 py-3 sm:px-8">
         <div className="flex items-center gap-3 min-w-0">
           <Badge.Anchor>
             <Avatar size="md">
@@ -1292,7 +1292,7 @@ export default function ChatClient({
       </header>
 
       <div className="relative flex-1 min-h-0 print:hidden">
-        <div ref={scrollContainerRef} className="h-full overflow-y-auto px-4 py-6 sm:px-8">
+        <div ref={scrollContainerRef} className="chat-hud-col h-full overflow-y-auto px-4 py-6 sm:px-8">
         {!historyLoaded && (
           <div className="space-y-6">
             <div className="flex flex-col items-start gap-1.5">
@@ -1365,7 +1365,7 @@ export default function ChatClient({
         )}
       </div>
 
-      <div className="border-t border-outline-variant/40 px-4 py-4 sm:px-8 print:hidden">
+      <div className="chat-hud-col border-t border-outline-variant/40 px-4 py-4 sm:px-8 print:hidden">
         {attachedPreviewUrl && (
           <div className="mb-2 flex items-center gap-2">
             <div className="relative">

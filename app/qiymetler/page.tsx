@@ -13,7 +13,7 @@ export default function QiymetlerPage() {
     <div id="top" className="flex flex-1 flex-col">
       <section className="relative overflow-hidden px-6 py-16 lg:py-20">
         <div className="absolute inset-0 z-0 bg-gradient-to-b from-primary/10 via-transparent to-transparent" />
-        <div className="relative z-10 mx-auto flex flex-col items-center gap-4 text-center">
+        <div className="relative z-10 mx-auto flex max-w-5xl flex-col items-center gap-4 text-center">
           <span className="mono-label rounded-full bg-primary/15 px-3 py-1 text-primary">
             Tezliklə
           </span>
@@ -28,7 +28,7 @@ export default function QiymetlerPage() {
       </section>
 
       <section className="px-6 py-8 lg:py-12">
-        <div className="mx-auto">
+        <div className="mx-auto max-w-5xl">
           <div className="glass-card rounded-2xl p-8 text-center">
             <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-primary/15 text-primary">
               <SparkleIcon />

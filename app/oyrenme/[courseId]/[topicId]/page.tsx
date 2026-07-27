@@ -8,6 +8,8 @@ import LessonMarkdown from '@/components/LessonMarkdown';
 import { ArrowLeftIcon, ArrowRightIcon, DocumentIcon } from '@/components/icons';
 import { getTopicForReading } from '@/lib/quiz/topicTest';
 import { getCoinBalanceStatus } from '@/lib/chat/coins';
+import DesignSwitch from '@/components/design3d/DesignSwitch';
+import TopicPage3D from '@/components/design3d/TopicPage3D';
 import TopicTest from './TopicTest';
 
 export const metadata: Metadata = {
@@ -55,116 +57,142 @@ export default async function TopicPage({
     .then((s) => s.balance)
     .catch(() => null);
 
+  // Shared between both trees — same ReactNode-prop pattern as
+  // CoinQazanPage3D's cards. TopicTest owns all its own client state/server
+  // actions either way; only the surrounding chrome the 3D tree adds differs.
+  const article = (
+    <>
+      {topic.content ? (
+        <LessonMarkdown content={topic.content} />
+      ) : (
+        <p className="text-body-md text-on-surface-variant">Bu mövzunun mətni hələ hazır deyil.</p>
+      )}
+
+      {topic.sourceCitations.length > 0 && (
+        <div className="mt-8 border-t border-outline-variant/40 pt-4">
+          <p className="text-legal-citation mb-2 text-on-surface-variant">Mənbələr</p>
+          <ul className="flex flex-wrap gap-2">
+            {topic.sourceCitations.map((citation, i) => (
+              <li
+                key={citation.chunkId ?? i}
+                className="text-legal-citation inline-flex items-center gap-1.5 rounded-full bg-surface-secondary/60 px-3 py-1 text-on-surface-variant"
+              >
+                <DocumentIcon width={13} height={13} />
+                {citation.articleLabel ?? 'Qaydalar'}
+                {citation.pageNumber != null && ` • səh. ${citation.pageNumber}`}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </>
+  );
+  const testSection = (
+    <TopicTest
+      courseId={topic.courseId}
+      topicId={topic.id}
+      testSize={topic.testSize}
+      passThreshold={topic.passThreshold}
+      canAttemptToday={topic.canAttemptToday}
+      hasUnusedRetry={topic.hasUnusedRetry}
+      retryCost={topic.retryCost}
+      balance={balance}
+      passed={topic.passed}
+      bestScore={topic.bestScore}
+      attempts={topic.attempts}
+    />
+  );
+
   return (
-    <div id="top" className="flex flex-1 flex-col">
-      <section className="relative overflow-hidden px-6 pt-10 pb-6">
-        <div className="absolute inset-0 z-0 bg-gradient-to-b from-primary/10 via-transparent to-transparent" />
-        <div className="relative z-10 mx-auto flex flex-col gap-4">
-          <nav className="flex flex-wrap items-center gap-1.5 text-label-sm text-on-surface-variant">
-            <Link href="/oyrenme" className="transition-colors hover:text-primary">
-              Kurslar
-            </Link>
-            <span aria-hidden>/</span>
-            <Link
-              href={`/oyrenme/${topic.courseId}`}
-              className="inline-flex items-center gap-1.5 transition-colors hover:text-primary"
-            >
-              <ArrowLeftIcon width={14} height={14} />
-              {topic.courseTitle || 'Kurs'}
-            </Link>
-          </nav>
+    <DesignSwitch
+      simple={
+        <div id="top" className="flex flex-1 flex-col">
+          <section className="relative overflow-hidden px-6 pt-10 pb-6">
+            <div className="absolute inset-0 z-0 bg-gradient-to-b from-primary/10 via-transparent to-transparent" />
+            <div className="relative z-10 mx-auto flex max-w-5xl flex-col gap-4">
+              <nav className="flex flex-wrap items-center gap-1.5 text-label-sm text-on-surface-variant">
+                <Link href="/oyrenme" className="transition-colors hover:text-primary">
+                  Kurslar
+                </Link>
+                <span aria-hidden>/</span>
+                <Link
+                  href={`/oyrenme/${topic.courseId}`}
+                  className="inline-flex items-center gap-1.5 transition-colors hover:text-primary"
+                >
+                  <ArrowLeftIcon width={14} height={14} />
+                  {topic.courseTitle || 'Kurs'}
+                </Link>
+              </nav>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-legal-citation rounded-full bg-primary/15 px-3 py-1 text-primary">
-              Mövzu {topic.orderIndex + 1}
-            </span>
-            {topic.passed && (
-              <Chip size="sm" variant="soft" color="success" className="mono-label">
-                Keçilib • ən yaxşı {topic.bestScore}
-              </Chip>
-            )}
-          </div>
-
-          <h1 className="text-display-lg text-[30px] text-balance lg:text-[38px]">{topic.title}</h1>
-        </div>
-      </section>
-
-      <section className="px-6 pb-10">
-        <div className="mx-auto flex flex-col gap-6">
-          <article className="glass-card rounded-2xl p-6 lg:p-8">
-            {topic.content ? (
-              <LessonMarkdown content={topic.content} />
-            ) : (
-              <p className="text-body-md text-on-surface-variant">
-                Bu mövzunun mətni hələ hazır deyil.
-              </p>
-            )}
-
-            {topic.sourceCitations.length > 0 && (
-              <div className="mt-8 border-t border-outline-variant/40 pt-4">
-                <p className="text-legal-citation mb-2 text-on-surface-variant">Mənbələr</p>
-                <ul className="flex flex-wrap gap-2">
-                  {topic.sourceCitations.map((citation, i) => (
-                    <li
-                      key={citation.chunkId ?? i}
-                      className="text-legal-citation inline-flex items-center gap-1.5 rounded-full bg-surface-secondary/60 px-3 py-1 text-on-surface-variant"
-                    >
-                      <DocumentIcon width={13} height={13} />
-                      {citation.articleLabel ?? 'Qaydalar'}
-                      {citation.pageNumber != null && ` • səh. ${citation.pageNumber}`}
-                    </li>
-                  ))}
-                </ul>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-legal-citation rounded-full bg-primary/15 px-3 py-1 text-primary">
+                  Mövzu {topic.orderIndex + 1}
+                </span>
+                {topic.passed && (
+                  <Chip size="sm" variant="soft" color="success" className="mono-label">
+                    Keçilib • ən yaxşı {topic.bestScore}
+                  </Chip>
+                )}
               </div>
-            )}
-          </article>
 
-          <TopicTest
-            courseId={topic.courseId}
-            topicId={topic.id}
-            testSize={topic.testSize}
-            passThreshold={topic.passThreshold}
-            canAttemptToday={topic.canAttemptToday}
-            hasUnusedRetry={topic.hasUnusedRetry}
-            retryCost={topic.retryCost}
-            balance={balance}
-            passed={topic.passed}
-            bestScore={topic.bestScore}
-            attempts={topic.attempts}
-          />
+              <h1 className="text-display-lg text-[30px] text-balance lg:text-[38px]">{topic.title}</h1>
+            </div>
+          </section>
 
-          <nav className="flex flex-wrap items-center justify-between gap-3">
-            {topic.prevTopicId ? (
-              <Link
-                href={`/oyrenme/${topic.courseId}/${topic.prevTopicId}`}
-                className="glass-card inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-label-sm transition-colors hover:text-primary"
-              >
-                <ArrowLeftIcon width={16} height={16} />
-                Əvvəlki mövzu
-              </Link>
-            ) : (
-              <span />
-            )}
+          <section className="px-6 pb-10">
+            <div className="mx-auto flex max-w-5xl flex-col gap-6">
+              <article className="glass-card rounded-2xl p-6 lg:p-8">{article}</article>
 
-            {/* The next topic is only reachable once THIS one is passed — the
-                sequential unlock rule is enforced server-side either way, so an
-                unpassed topic gets no link at all rather than a dead one. */}
-            {topic.nextTopicId && topic.passed ? (
-              <Link
-                href={`/oyrenme/${topic.courseId}/${topic.nextTopicId}`}
-                className="glass-card inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-label-sm transition-colors hover:text-primary"
-              >
-                Növbəti mövzu
-                <ArrowRightIcon width={16} height={16} />
-              </Link>
-            ) : (
-              <span />
-            )}
-          </nav>
+              {testSection}
+
+              <nav className="flex flex-wrap items-center justify-between gap-3">
+                {topic.prevTopicId ? (
+                  <Link
+                    href={`/oyrenme/${topic.courseId}/${topic.prevTopicId}`}
+                    className="glass-card inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-label-sm transition-colors hover:text-primary"
+                  >
+                    <ArrowLeftIcon width={16} height={16} />
+                    Əvvəlki mövzu
+                  </Link>
+                ) : (
+                  <span />
+                )}
+
+                {/* The next topic is only reachable once THIS one is passed — the
+                    sequential unlock rule is enforced server-side either way, so an
+                    unpassed topic gets no link at all rather than a dead one. */}
+                {topic.nextTopicId && topic.passed ? (
+                  <Link
+                    href={`/oyrenme/${topic.courseId}/${topic.nextTopicId}`}
+                    className="glass-card inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-label-sm transition-colors hover:text-primary"
+                  >
+                    Növbəti mövzu
+                    <ArrowRightIcon width={16} height={16} />
+                  </Link>
+                ) : (
+                  <span />
+                )}
+              </nav>
+            </div>
+          </section>
+
+          <Footer />
         </div>
-      </section>
-
-      <Footer />
-    </div>
+      }
+      threeD={
+        <TopicPage3D
+          courseId={topic.courseId}
+          courseTitle={topic.courseTitle}
+          title={topic.title}
+          orderIndex={topic.orderIndex}
+          passed={topic.passed}
+          bestScore={topic.bestScore}
+          article={article}
+          testSection={testSection}
+          prevTopicId={topic.prevTopicId}
+          nextTopicId={topic.nextTopicId}
+        />
+      }
+    />
   );
 }

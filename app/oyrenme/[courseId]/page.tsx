@@ -8,6 +8,8 @@ import Footer from '@/components/Footer';
 import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, LockIcon } from '@/components/icons';
 import { canAccessCourse } from '@/lib/coins/lessonUnlock';
 import { getCourses, getCourseTopics } from '@/lib/quiz/lessons';
+import DesignSwitch from '@/components/design3d/DesignSwitch';
+import CoursePage3D from '@/components/design3d/CoursePage3D';
 
 export const metadata: Metadata = {
   title: 'Kurs',
@@ -39,26 +41,31 @@ export default async function CoursePage({ params }: { params: Promise<{ courseI
     // count, nothing about the course leaves the server. The grid on /oyrenme
     // is where a locked course is actually purchasable.
     return (
-      <div className="flex flex-1 flex-col">
-        <section className="px-6 py-16 lg:py-20">
-          <div className="glass-panel mx-auto max-w-lg rounded-2xl px-6 py-12 text-center">
-            <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-2xl bg-safety-yellow/15 text-safety-yellow">
-              <LockIcon width={20} height={20} />
-            </div>
-            <h1 className="text-headline-md">Bu kurs sizə açıq deyil</h1>
-            <p className="mx-auto mt-2 max-w-sm text-body-md text-on-surface-variant">
-              Kursu açmaq üçün kurslar səhifəsinə qayıdın.
-            </p>
-            <Link
-              href="/oyrenme"
-              className={buttonVariants({ variant: 'primary', size: 'sm' }) + ' mt-5'}
-            >
-              Kurslara qayıt
-            </Link>
+      <DesignSwitch
+        simple={
+          <div className="flex flex-1 flex-col">
+            <section className="px-6 py-16 lg:py-20">
+              <div className="glass-panel mx-auto max-w-lg rounded-2xl px-6 py-12 text-center">
+                <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-2xl bg-safety-yellow/15 text-safety-yellow">
+                  <LockIcon width={20} height={20} />
+                </div>
+                <h1 className="text-headline-md">Bu kurs sizə açıq deyil</h1>
+                <p className="mx-auto mt-2 max-w-sm text-body-md text-on-surface-variant">
+                  Kursu açmaq üçün kurslar səhifəsinə qayıdın.
+                </p>
+                <Link
+                  href="/oyrenme"
+                  className={buttonVariants({ variant: 'primary', size: 'sm' }) + ' mt-5'}
+                >
+                  Kurslara qayıt
+                </Link>
+              </div>
+            </section>
+            <Footer />
           </div>
-        </section>
-        <Footer />
-      </div>
+        }
+        threeD={<CoursePage3D locked />}
+      />
     );
   }
 
@@ -73,11 +80,35 @@ export default async function CoursePage({ params }: { params: Promise<{ courseI
   const passedCount = topics.filter((t) => t.passed).length;
   const progressPct = topics.length > 0 ? Math.round((passedCount / topics.length) * 100) : 0;
 
+  // Same topic rows, restyled — built once and handed to the 3D tree as plain
+  // data (CoursePage3D owns the HUD markup, no JSX duplicated as a prop).
+  const topicRows = topics.map((topic) => ({
+    id: topic.id,
+    title: topic.title,
+    passed: topic.passed,
+    isUnlocked: topic.isUnlocked,
+    attempts: topic.attempts,
+    bestScore: topic.bestScore,
+    href: `/oyrenme/${courseId}/${topic.id}`,
+  }));
+  const emptyStateHud = (
+    <div className="hud-glass rounded-2xl px-6 py-12 text-center">
+      <h2 className="text-lg font-bold" style={{ fontFamily: 'var(--hud-font-display)' }}>
+        Mövzular hazırlanır
+      </h2>
+      <p className="mx-auto mt-2 max-w-md text-sm" style={{ color: 'var(--hud-on-surface-variant)' }}>
+        Bu kursda hələ dərc edilmiş mövzu yoxdur. Tezliklə burada görünəcək.
+      </p>
+    </div>
+  );
+
   return (
-    <div id="top" className="flex flex-1 flex-col">
+    <DesignSwitch
+      simple={
+        <div id="top" className="flex flex-1 flex-col">
       <section className="relative overflow-hidden px-6 pt-10 pb-6">
         <div className="absolute inset-0 z-0 bg-gradient-to-b from-primary/10 via-transparent to-transparent" />
-        <div className="relative z-10 mx-auto flex flex-col gap-4">
+        <div className="relative z-10 mx-auto flex max-w-5xl flex-col gap-4">
           <Link
             href="/oyrenme"
             className="inline-flex w-fit items-center gap-1.5 text-label-sm text-on-surface-variant transition-colors hover:text-primary"
@@ -114,7 +145,7 @@ export default async function CoursePage({ params }: { params: Promise<{ courseI
       </section>
 
       <section className="px-6 pb-12">
-        <div className="mx-auto">
+        <div className="mx-auto max-w-5xl">
           {topics.length === 0 ? (
             <div className="glass-panel rounded-2xl px-6 py-12 text-center">
               <h2 className="text-headline-md">Mövzular hazırlanır</h2>
@@ -219,6 +250,22 @@ export default async function CoursePage({ params }: { params: Promise<{ courseI
       </section>
 
       <Footer />
-    </div>
+        </div>
+      }
+      threeD={
+        <CoursePage3D
+          title={course?.title ?? 'Kurs'}
+          description={
+            course?.description ??
+            'Mövzuları ardıcıllıqla oxuyun və hər mövzunun sonundakı testi keçin. Növbəti mövzu ancaq əvvəlkini keçdikdən sonra açılır.'
+          }
+          passedCount={passedCount}
+          totalCount={topics.length}
+          progressPct={progressPct}
+          topics={topicRows}
+          emptyState={emptyStateHud}
+        />
+      }
+    />
   );
 }

@@ -250,7 +250,7 @@ export default function HomePage3D({
 
       {/* ---------- Features ---------- */}
       <section className="px-6 py-16">
-        <div className="mx-auto max-w-5xl">
+        <div className="mx-auto max-w-7xl">
           <div className="mb-8 max-w-2xl">
             <h2 className="text-2xl font-bold" style={{ fontFamily: 'var(--hud-font-display)' }}>
               YOL ilə nələr edə bilərsiniz?
@@ -289,7 +289,7 @@ export default function HomePage3D({
 
       {/* ---------- Stats ---------- */}
       <section className="px-6 pb-16">
-        <div className="mx-auto max-w-5xl">
+        <div className="mx-auto max-w-7xl">
           <div className="grid gap-6 sm:grid-cols-3">
             {stats.map((stat, i) => (
               <div key={stat.label} className="hud-glass flex flex-col items-center gap-1 rounded-2xl p-8 text-center">
@@ -310,7 +310,7 @@ export default function HomePage3D({
 
       {/* ---------- Knowledge base / topics ---------- */}
       <section id="movzular" className="px-6 py-16">
-        <div className="mx-auto max-w-5xl">
+        <div className="mx-auto max-w-7xl">
           <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
             <div>
               <h2 className="text-2xl font-bold" style={{ fontFamily: 'var(--hud-font-display)' }}>
@@ -372,7 +372,7 @@ export default function HomePage3D({
 
       {/* ---------- Coin explainer ---------- */}
       <section className="px-6 pb-16">
-        <div className="mx-auto max-w-5xl">
+        <div className="mx-auto max-w-7xl">
           <div
             className="hud-glass rounded-3xl p-8 md:p-10"
             style={{ borderColor: 'color-mix(in oklab, var(--hud-primary) 20%, transparent)' }}
@@ -417,7 +417,7 @@ export default function HomePage3D({
 
       {/* ---------- AI promo / final CTA ---------- */}
       <section className="px-6 py-16">
-        <div className="mx-auto max-w-5xl">
+        <div className="mx-auto max-w-7xl">
           <div
             className="flex flex-col overflow-hidden rounded-3xl md:flex-row"
             style={{
@@ -472,7 +472,7 @@ export default function HomePage3D({
 
       {/* ---------- Footer ---------- */}
       <footer className="border-t px-6 py-8" style={{ borderColor: 'var(--hud-border)' }}>
-        <div className="mx-auto flex max-w-5xl flex-col items-center gap-4 text-center sm:flex-row sm:justify-between sm:text-left">
+        <div className="mx-auto flex max-w-7xl flex-col items-center gap-4 text-center sm:flex-row sm:justify-between sm:text-left">
           <div className="flex flex-col items-center gap-1 sm:items-start">
             <span className="text-base font-bold" style={{ fontFamily: 'var(--hud-font-display)' }}>
               Yol Hərəkəti QA

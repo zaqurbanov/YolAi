@@ -5,6 +5,7 @@ import { logError } from '@/lib/logging/logError';
 import { drawExamQuestions, type ExamQuestion } from '@/lib/exam/examPool';
 import { GAME_DAILY_ENERGY_KEY, DEFAULT_GAME_DAILY_ENERGY } from '@/lib/coins/games';
 import { getEffectiveEnergyGrant } from '@/lib/garage/perks';
+import { maybeApplyFine } from '@/lib/garage/fines';
 
 // "Sınaq İmtahanı" (real exam simulator) — SERVER-AUTHORITATIVE, same posture
 // as sign speed / XO: the server picks the 10-question set + correct answers
@@ -207,10 +208,14 @@ export async function submitExamSession(
 
   if (typeof data !== 'object' || data === null) return { ok: false, error: 'error' };
   const result = data as { score?: number; total?: number };
+  const score = Number(result.score ?? 0);
+  const total = Number(result.total ?? QUESTIONS_PER_EXAM);
 
-  return {
-    ok: true,
-    score: Number(result.score ?? 0),
-    total: Number(result.total ?? QUESTIONS_PER_EXAM),
-  };
+  // Awaited (not fire-and-forget) — see topicTest.ts's recordTopicAttempt for
+  // why. No topicId: the exam simulator has no topic granularity to fine
+  // against (see lib/garage/fines.ts's drawQuestionPool for the accepted gap
+  // this creates on the redemption side).
+  await maybeApplyFine(userId, { score, total, source: 'exam' });
+
+  return { ok: true, score, total };
 }

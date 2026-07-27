@@ -32,6 +32,7 @@ export interface LeaderboardEntry {
   carEmoji?: string;
   plateNumber?: string;
   isCustomPlate?: boolean;
+  isFined?: boolean;
 }
 
 export interface WeeklyLeaderboard {
@@ -90,10 +91,15 @@ export async function getWeeklyLeaderboard(userId: string): Promise<WeeklyLeader
   // actually returning, not every row the RPC produced. Failure here must
   // degrade to "no emojis" without touching `top`/`me` themselves — the
   // leaderboard itself must never fail open to empty because of this.
-  const emojiByUserId = await getCarEmojisByUserId(topRows.map((r) => r.user_id));
+  const { emojiByUserId, isFinedByUserId } = await getGarageInfoByUserId(topRows.map((r) => r.user_id));
   top.forEach((entry, i) => {
     const emoji = emojiByUserId.get(topRows[i].user_id);
     if (emoji) entry.carEmoji = emoji;
+    // Virtual Qaraj Mərhələ 4 (0089, also HAND-APPLIED and possibly not run
+    // yet) — badge a CƏRİMƏLİ car next to the leaderboard name. Same
+    // fail-open, separate-query posture as carEmoji/plateNumber above: never
+    // touches top/me on failure.
+    if (isFinedByUserId.get(topRows[i].user_id)) entry.isFined = true;
   });
 
   // Virtual Qaraj Mərhələ 3 (VIP Nömrə Bazarı, also HAND-APPLIED and possibly
@@ -113,28 +119,42 @@ export async function getWeeklyLeaderboard(userId: string): Promise<WeeklyLeader
   return { top, me };
 }
 
-async function getCarEmojisByUserId(userIds: string[]): Promise<Map<string, string>> {
+interface GarageInfo {
+  emojiByUserId: Map<string, string>;
+  isFinedByUserId: Map<string, boolean>;
+}
+
+// One query serves both carEmoji and the Mərhələ 4 fine badge — same
+// user_garage rows, no reason to round-trip twice.
+async function getGarageInfoByUserId(userIds: string[]): Promise<GarageInfo> {
   const emojiByUserId = new Map<string, string>();
-  if (userIds.length === 0) return emojiByUserId;
+  const isFinedByUserId = new Map<string, boolean>();
+  if (userIds.length === 0) return { emojiByUserId, isFinedByUserId };
 
   const { data, error } = await createAdminClient()
     .from('user_garage')
-    .select('user_id, car_tiers(emoji)')
+    .select('user_id, is_fined, car_tiers(emoji)')
     .in('user_id', userIds);
 
   if (error) {
-    // Pre-migration state (0083 not yet applied) is expected and not worth
-    // logging on every load, same treatment as the RPC's own missing-relation case.
-    if (isMissingRelationError(error)) return emojiByUserId;
-    void logError('coins.leaderboard.weekly.carEmoji', error, { details: { userIds } });
+    // Pre-migration state (0083/0089 not yet applied) is expected and not
+    // worth logging on every load, same treatment as the RPC's own
+    // missing-relation case.
+    if (isMissingRelationError(error)) return { emojiByUserId, isFinedByUserId };
+    void logError('coins.leaderboard.weekly.garageInfo', error, { details: { userIds } });
     console.error('[coins/leaderboard] user_garage/car_tiers query failed:', error);
-    return emojiByUserId;
+    return { emojiByUserId, isFinedByUserId };
   }
 
-  for (const row of (data ?? []) as { user_id: string; car_tiers: { emoji: string } | { emoji: string }[] | null }[]) {
+  for (const row of (data ?? []) as {
+    user_id: string;
+    is_fined: boolean | null;
+    car_tiers: { emoji: string } | { emoji: string }[] | null;
+  }[]) {
     const tier = Array.isArray(row.car_tiers) ? row.car_tiers[0] : row.car_tiers;
     if (tier?.emoji) emojiByUserId.set(row.user_id, tier.emoji);
+    if (row.is_fined) isFinedByUserId.set(row.user_id, true);
   }
 
-  return emojiByUserId;
+  return { emojiByUserId, isFinedByUserId };
 }

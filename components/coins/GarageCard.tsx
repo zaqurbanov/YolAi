@@ -4,7 +4,8 @@ import { useState, useTransition } from 'react';
 import { Button, Chip } from '@heroui/react';
 import { Spinner } from '@/components/Spinner';
 import { purchaseCarTierAction } from '@/app/coin-qazan/actions';
-import { CoinIcon, CheckIcon, LockIcon } from '@/components/icons';
+import { CoinIcon, CheckIcon, LockIcon, FineIcon } from '@/components/icons';
+import RedemptionExamModal from '@/components/coins/RedemptionExamModal';
 import type { CarTier } from '@/lib/garage/carTiers';
 import type { UserGarageEntry } from '@/lib/garage/garage';
 import type { ActiveGaragePerk } from '@/lib/garage/perks';
@@ -41,13 +42,20 @@ export default function GarageCard({ tiers, garage, coinBalance, perk }: GarageC
     startTransition(async () => {
       const result = await purchaseCarTierAction(tierId);
       if (result.status === 'success' && result.tierId && result.tierName) {
-        const tier = tiers.find((t) => t.id === result.tierId);
-        setCurrentGarage({
-          tierId: result.tierId,
-          tierName: result.tierName,
+        const newTierId = result.tierId;
+        const newTierName = result.tierName;
+        const tier = tiers.find((t) => t.id === newTierId);
+        setCurrentGarage((prev) => ({
+          tierId: newTierId,
+          tierName: newTierName,
           tierEmoji: tier?.emoji ?? '',
           tierOrder: tier?.tierOrder ?? 0,
-        });
+          // A tier purchase never clears an existing fine server-side
+          // (purchase_car_tier's upsert only touches tier_id/purchased_at,
+          // see 0089_car_fines.sql) — the optimistic update preserves
+          // whatever fine state was already loaded rather than assuming false.
+          isFined: prev.isFined,
+        }));
         if (result.balance != null) {
           setBalance(result.balance);
           window.dispatchEvent(new CustomEvent('coin-balance-update', { detail: { balance: result.balance } }));
@@ -64,6 +72,9 @@ export default function GarageCard({ tiers, garage, coinBalance, perk }: GarageC
   // perk is a server-computed snapshot for garage.tierId at page load — only
   // show it while currentGarage still matches that tier, so a same-session
   // purchase can't display a stale/wrong perk before the next page load.
+  // The server already zeroes every bonus while fined (perkLine would return
+  // null on its own), but showing that as silence reads like a bug — an
+  // explicit "perk dayandırılıb" line is clearer than an empty space.
   const activePerkLine = currentGarage.tierId === garage.tierId ? perkLine(perk) : null;
 
   return (
@@ -79,14 +90,30 @@ export default function GarageCard({ tiers, garage, coinBalance, perk }: GarageC
         <span aria-hidden className="text-4xl leading-none">
           {currentGarage.tierEmoji}
         </span>
-        <div>
+        <div className="min-w-0 flex-1">
           <p className="text-legal-citation text-on-surface-variant">Sənin avtomobilin</p>
-          <p className="text-headline-md text-[16px] text-on-surface">{currentGarage.tierName}</p>
-          {activePerkLine && (
-            <p className="text-legal-citation text-on-surface-variant">{activePerkLine}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-headline-md text-[16px] text-on-surface">{currentGarage.tierName}</p>
+            {currentGarage.isFined && (
+              <Chip size="sm" variant="soft" color="danger" className="gap-1 uppercase tracking-wide">
+                <FineIcon width={12} height={12} />
+                Cəriməli
+              </Chip>
+            )}
+          </div>
+          {currentGarage.isFined ? (
+            <p className="text-legal-citation text-danger">Cərimə aktivdir, perk dayandırılıb</p>
+          ) : (
+            activePerkLine && <p className="text-legal-citation text-on-surface-variant">{activePerkLine}</p>
           )}
         </div>
       </div>
+
+      {currentGarage.isFined && (
+        <RedemptionExamModal
+          onCleared={() => setCurrentGarage((prev) => ({ ...prev, isFined: false }))}
+        />
+      )}
 
       <ul className="space-y-2">
         {tiers.map((tier) => {
