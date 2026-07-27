@@ -36,9 +36,9 @@ export function SidebarNav({ items }: { items: NavItem[] }) {
             onClick={() => {
               if (isMobile) close();
             }}
-            className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+            className={`hud-nav-link flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
               active
-                ? 'bg-accent-soft text-accent-soft-foreground'
+                ? 'hud-nav-link--active bg-accent-soft text-accent-soft-foreground'
                 : 'text-muted hover:bg-surface-hover hover:text-foreground'
             }`}
           >

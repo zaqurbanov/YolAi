@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Montserrat, Inter } from "next/font/google";
+import { Montserrat, Inter, JetBrains_Mono } from "next/font/google";
 import { Toast } from "@heroui/react";
 import "./globals.css";
 import NavBar from "@/components/NavBar";
@@ -19,6 +19,16 @@ const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
   weight: ["400", "500", "600"],
+});
+
+// Only consumed by the new "Cyber-Circuit Legal" design (components/design3d)
+// for legal-citation chips ("Maddə 61" etc.) — see design-system.md's
+// legal-citation type token. next/font still only loads the subset actually
+// referenced in CSS, so this costs nothing on pages that never render it.
+const jetbrainsMono = JetBrains_Mono({
+  variable: "--font-jetbrains-mono",
+  subsets: ["latin"],
+  weight: ["500"],
 });
 
 export const metadata: Metadata = {
@@ -59,6 +69,15 @@ export const viewport: Viewport = {
 // skill) when no stored preference exists yet.
 const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem('yol-theme');var d=t!=='light';document.documentElement.classList.toggle('dark',d);}catch(e){document.documentElement.classList.add('dark');}})();`;
 
+// Same FOUC-prevention approach as THEME_INIT_SCRIPT above, for the
+// independent "Cyber-Circuit Legal" design toggle (see
+// lib/design/useAppDesign.ts). Sets a `data-design` attribute (not a class,
+// so it can never collide with the `dark`/light class above) synchronously
+// before paint. Default is "simple" — the existing, unmodified design — so
+// nobody sees the new design unless they've explicitly opted in via the
+// NavBar toggle at least once.
+const DESIGN_INIT_SCRIPT = `(function(){try{var d=localStorage.getItem('yol-design');document.documentElement.setAttribute('data-design',d==='3d'?'3d':'simple');}catch(e){document.documentElement.setAttribute('data-design','simple');}})();`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -67,11 +86,12 @@ export default function RootLayout({
   return (
     <html
       lang="az"
-      className={`${montserrat.variable} ${inter.variable} h-full antialiased`}
+      className={`${montserrat.variable} ${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: DESIGN_INIT_SCRIPT }} />
       </head>
       <body className="h-full flex flex-col overflow-hidden bg-background text-foreground">
         <TourProvider>

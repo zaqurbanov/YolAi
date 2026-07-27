@@ -956,3 +956,210 @@ html:not(.dark) .tour-spotlight {
     color: #000 !important;
   }
 }
+
+/*
+ * "Cyber-Circuit Legal" — second, independent design system (Phase 1: NavBar
+ * toggle + home page only — see components/design3d/). Selected via
+ * `[data-design="3d"]` on <html> (set by lib/design/useAppDesign.ts / the
+ * FOUC-prevention script in app/layout.tsx), completely separate from the
+ * `html.dark` / `html:not(.dark)` blocks above, which this section MUST NOT
+ * modify or override — those rules, and every existing page that relies on
+ * them, stay exactly as they were.
+ *
+ * These are new `--hud-*` custom properties, not overrides of the existing
+ * `--color-*`/HeroUI primitives, so they have zero effect anywhere the new
+ * "3D" component tree (components/design3d/HomePage3D.tsx) isn't rendered —
+ * simple design pages never reference a `--hud-*` var, so the attribute
+ * being present on <html> is inert for them regardless of value. Values are
+ * the literal Stitch "ana-sehife-premium" export (gold/cyan HUD), not the
+ * design-system.md frontmatter's cyan-primary variant — the home page task
+ * asked to match that specific screenshot.
+ */
+[data-design='3d'] {
+  --hud-bg: #121414;
+  --hud-bg-deep: #0c0f0f;
+  --hud-surface-glass: rgba(255, 255, 255, 0.03);
+  --hud-border: rgba(255, 255, 255, 0.1);
+  --hud-on-surface: #e1e3e3;
+  --hud-on-surface-variant: #c4c7c8;
+  --hud-outline: #8e9192;
+
+  --hud-primary: #e6c300;
+  --hud-on-primary: #3a3000;
+  --hud-primary-container: #554600;
+  --hud-glow-primary: rgba(230, 195, 0, 0.4);
+
+  --hud-cyan: #00e5ff;
+  --hud-glow-cyan: rgba(0, 229, 255, 0.4);
+
+  --hud-red: #ff4d4d;
+  --hud-glow-red: rgba(255, 77, 77, 0.3);
+
+  --hud-green: #4ade80;
+
+  --hud-font-display: var(--font-montserrat), sans-serif;
+  --hud-font-body: var(--font-inter), sans-serif;
+  --hud-font-mono: var(--font-jetbrains-mono), monospace;
+}
+
+/* Reusable glass-panel surface for the Cyber-Circuit Legal design
+   (components/design3d/HomePage3D.tsx) — frosted glass + subtle border,
+   matching design-system.md's "Tonal Glass Layers" elevation model. */
+.hud-glass {
+  background: var(--hud-surface-glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--hud-border);
+}
+
+/*
+ * NavBar/Sidebar chrome under the 3D design — GLOBAL (all pages), not just
+ * the home page. NavBar.tsx and Sidebar.tsx/SidebarShell.tsx/SidebarNav.tsx
+ * render once in the root layout (app/layout.tsx) and are shared by every
+ * route, so this is the one place a `[data-design="3d"]` rule is meant to
+ * reach beyond app/page.tsx — Phase 1 only redesigns the HOME PAGE'S
+ * CONTENT, but the surrounding chrome is deliberately consistent everywhere
+ * once "3D" is selected, even on pages whose content hasn't been migrated
+ * yet. Targets `.hud-navbar`/`.hud-sidebar`/`.hud-nav-link(--active)` —
+ * classes ADDED alongside the existing ones in those components (nothing
+ * existing was removed there), so this has zero effect while
+ * `data-design` is absent/"simple" (default).
+ */
+[data-design='3d'] .hud-navbar {
+  background: var(--hud-surface-glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--hud-border);
+  box-shadow: 0 1px 24px rgba(0, 0, 0, 0.35);
+}
+
+[data-design='3d'] .hud-sidebar {
+  background: var(--hud-surface-glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-color: var(--hud-border);
+}
+
+[data-design='3d'] .hud-nav-link {
+  color: var(--hud-on-surface-variant);
+}
+
+[data-design='3d'] .hud-nav-link:hover {
+  background: color-mix(in oklab, var(--hud-primary) 8%, transparent);
+  color: var(--hud-primary);
+}
+
+[data-design='3d'] .hud-nav-link--active {
+  background: color-mix(in oklab, var(--hud-primary) 15%, transparent);
+  color: var(--hud-primary);
+  box-shadow:
+    inset 2px 0 0 0 var(--hud-primary),
+    0 0 12px color-mix(in oklab, var(--hud-primary) 40%, transparent);
+}
+
+/* Hero background "road" animation: implemented as a raw-WebGL shader
+   component (components/design3d/RoadShaderBackground.tsx, ported from the
+   Stitch "Shader"/ANIMATION_26 export), not CSS — no styles needed here.
+   That component handles its own `prefers-reduced-motion` fallback in JS
+   (skips starting the WebGL/rAF loop entirely) plus a small CSS fallback
+   background via the `motion-reduce:` Tailwind variant already used
+   elsewhere in this file. */
+
+/*
+ * Çarx (WheelGame, components/games/WheelGame.tsx) — Cyber-Circuit Legal
+ * visual only. The component's segment math (buildSegmentAngles — weights
+ * proportional, NOT equal slices), the server-authoritative spin
+ * (spinWheelAction picks prizeIndex, client only animates to it) and the
+ * conic-gradient render logic are all UNCHANGED. These rules override size /
+ * border / glow / segment colors on the `wheel-hud-*` classes added
+ * ALONGSIDE the component's existing classes (nothing removed there), so
+ * they're inert while `data-design` is absent/"simple" — the default wheel
+ * (small, two flat brand tones, thin border) renders exactly as before.
+ * Loosely modeled on the Stitch "Böyük 3D Şans Çarxı (Premium)" screenshot
+ * (large disc, thick gold ring, glow, dark hub) as a CSS *technique*
+ * reference, not copied verbatim — that export was a plain evenly-sliced
+ * demo wheel with no real weighting, which is exactly what must NOT be
+ * reproduced here.
+ */
+[data-design='3d'] .wheel-hud-card {
+  background: var(--hud-surface-glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: none;
+  box-shadow: none;
+}
+
+[data-design='3d'] .wheel-hud-wrap {
+  /* Consumed by the inline `translateY(calc(-1 * var(--wheel-hud-label-radius, 88px)))`
+     on each segment label in WheelGame.tsx — pushes labels out to match the
+     bigger wheel radius below. Segment *angles* are untouched by this. */
+  --wheel-hud-label-radius: 118px;
+  width: clamp(15rem, 34vw, 20rem);
+  height: clamp(15rem, 34vw, 20rem);
+}
+
+/* Pulsing outer glow ring, purely decorative (Stitch's `.glow-ring`). */
+[data-design='3d'] .wheel-hud-wrap::before {
+  content: '';
+  position: absolute;
+  inset: -14px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in oklab, var(--hud-primary) 35%, transparent);
+  animation: wheel-hud-pulse 2.2s infinite;
+  pointer-events: none;
+}
+
+@keyframes wheel-hud-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(1.12);
+    opacity: 0;
+  }
+}
+
+[data-design='3d'] .wheel-hud-wheel {
+  /* Read by the inline `background: conic-gradient(...)` built from
+     SEG_COLORS in WheelGame.tsx — falls back to the "sadə dizayn" tokens
+     when unset, so the component never has to branch on design system. */
+  --wheel-hud-seg-1: color-mix(in oklab, var(--hud-primary) 22%, var(--hud-bg));
+  --wheel-hud-seg-2: color-mix(in oklab, var(--hud-primary) 10%, var(--hud-bg));
+
+  width: 100%;
+  height: 100%;
+  border-width: 8px;
+  border-color: var(--hud-primary);
+  box-shadow:
+    inset 0 0 40px color-mix(in oklab, var(--hud-primary) 22%, transparent),
+    0 0 30px var(--hud-glow-primary),
+    0 0 60px color-mix(in oklab, var(--hud-primary) 25%, transparent);
+}
+
+[data-design='3d'] .wheel-hud-pointer {
+  border-top-color: var(--hud-primary);
+  filter: drop-shadow(0 0 8px var(--hud-glow-primary));
+}
+
+[data-design='3d'] .wheel-hud-hub {
+  border-color: var(--hud-bg-deep);
+  background: var(--hud-primary);
+  color: var(--hud-bg-deep);
+  box-shadow: 0 0 16px var(--hud-glow-primary);
+}
+
+[data-design='3d'] .wheel-hud-label {
+  font-family: var(--hud-font-mono);
+  letter-spacing: 0.02em;
+  color: #fff;
+  text-shadow:
+    0 0 4px rgba(0, 0, 0, 0.6),
+    0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+[data-design='3d'] .wheel-hud-spin-btn {
+  background: var(--hud-primary);
+  color: var(--hud-bg-deep);
+  box-shadow: 0 0 24px var(--hud-glow-primary);
+}

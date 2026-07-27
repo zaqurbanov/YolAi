@@ -167,7 +167,7 @@ export type SignSpeedSubmitError =
   | 'error';
 
 export type SignSpeedSubmitResult =
-  | { ok: true; correctCount: number; reward: number; energy: number; balance: number }
+  | { ok: true; correctCount: number; correctFlags: boolean[]; reward: number; energy: number; balance: number }
   | { ok: false; error: SignSpeedSubmitError };
 
 // Energy was already spent atomically inside startSignSpeedRound — settling a
@@ -235,13 +235,24 @@ export async function submitSignSpeedRound(
   }
 
   if (typeof data !== 'object' || data === null) return { ok: false, error: 'error' };
-  const result = data as { balance?: number; correctCount?: number; reward?: number };
+  const result = data as { balance?: number; correctCount?: number; reward?: number; correctFlags?: unknown };
 
   const energy = await readCurrentEnergyBalance(userId);
+
+  // correctFlags is only present once 0088 is applied — fail safe (not
+  // throw) against a DB that's still only on 0071, since migrations here are
+  // applied by hand and may lag the code.
+  const correctFlags =
+    Array.isArray(result.correctFlags) &&
+    result.correctFlags.length === QUESTIONS_PER_ROUND &&
+    result.correctFlags.every((f) => typeof f === 'boolean')
+      ? (result.correctFlags as boolean[])
+      : Array(QUESTIONS_PER_ROUND).fill(false);
 
   return {
     ok: true,
     correctCount: Number(result.correctCount ?? 0),
+    correctFlags,
     reward: Number(result.reward ?? 0),
     energy,
     balance: Number(result.balance ?? 0),

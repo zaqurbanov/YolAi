@@ -9,6 +9,8 @@ import { CheckIcon, FineIcon, SparkleIcon, ChatIcon, RulesIcon, CoinIcon, Trophy
 import { getCategoryContent, getCategoryQuestionCounts } from '@/lib/content/categoryContent';
 import { getHomeBackgroundImageUrl } from '@/lib/content/homeBackground';
 import { getRegisteredDriverCount, getRecentDriverInitials } from '@/lib/content/getRegisteredDriverCount';
+import DesignSwitch from '@/components/design3d/DesignSwitch';
+import HomePage3D from '@/components/design3d/HomePage3D';
 
 // Statically rendered with hourly ISR rather than per-request: the three
 // server reads below (background image, registered-driver count, recent
@@ -130,7 +132,15 @@ export default async function Home() {
     ...MOCK_STATS_TAIL,
   ];
 
+  // Phase 1 of the second "Cyber-Circuit Legal" design (see
+  // components/design3d/): a client-side switch chooses between the
+  // unmodified JSX below (`simple`, also the default/SSR-matching tree) and
+  // the new HomePage3D tree (`threeD`), both built from the exact same data
+  // fetched above. Every other page in the app is untouched — this is the
+  // only page with a second design in this phase.
   return (
+    <DesignSwitch
+      simple={
     <div id="top" className="flex flex-1 flex-col">
       <section className="relative flex min-h-[640px] flex-col items-center justify-center gap-8 overflow-hidden px-6 py-20 text-center lg:min-h-[720px]">
         <div className="absolute inset-0 z-0">
@@ -395,5 +405,17 @@ export default async function Home() {
 
       <Footer />
     </div>
+      }
+      threeD={
+        <HomePage3D
+          formattedDriverCount={formattedDriverCount}
+          driverInitials={driverInitials}
+          stats={stats}
+          topics={topics}
+          questionCounts={questionCounts}
+          fineCategory={fineCategory}
+        />
+      }
+    />
   );
 }

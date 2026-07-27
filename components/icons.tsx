@@ -398,6 +398,18 @@ export function CloseIcon(props: IconProps) {
   );
 }
 
+// Used by the "Cyber-Circuit Legal" design toggle (components/design3d) —
+// an isometric cube reads as "alternate/3D visual mode" next to the
+// sun/moon theme toggle it sits alongside in NavBar.
+export function CubeIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3Z" />
+      <path d="M12 3v9M12 12l8-4.5M12 12 4 7.5M12 12v9" />
+    </svg>
+  );
+}
+
 // Deliberate exception to base(): brand mark requires the official 4-color "G", not currentColor stroke.
 export function GoogleIcon(props: IconProps) {
   return (

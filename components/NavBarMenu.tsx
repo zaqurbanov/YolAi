@@ -5,9 +5,10 @@ import { useState } from 'react';
 import { buttonVariants } from '@heroui/styles';
 import { Popover } from '@heroui/react';
 import { logout } from '@/app/(auth)/actions';
-import { CoinIcon, MoonIcon, MoreIcon, SunIcon } from '@/components/icons';
+import { CoinIcon, CubeIcon, MoonIcon, MoreIcon, SunIcon } from '@/components/icons';
 import { useTour } from '@/components/onboarding/TourProvider';
 import { useDarkMode } from '@/lib/theme/useDarkMode';
+import { useAppDesign } from '@/lib/design/useAppDesign';
 
 interface NavBarMenuProps {
   hasUser: boolean;
@@ -24,6 +25,7 @@ export default function NavBarMenu({ hasUser, isAdmin }: NavBarMenuProps) {
   const closeMenu = () => setIsOpen(false);
   const { start: startTour } = useTour();
   const { isDark, setDark } = useDarkMode();
+  const { is3D, setDesign3D } = useAppDesign();
 
   const ghostItem = `${buttonVariants({ variant: 'ghost', size: 'sm' })} w-full justify-start`;
   const secondaryItem = `${buttonVariants({ variant: 'secondary', size: 'sm' })} w-full justify-start`;
@@ -60,6 +62,16 @@ export default function NavBarMenu({ hasUser, isAdmin }: NavBarMenuProps) {
               >
                 {isDark ? <SunIcon width={16} height={16} /> : <MoonIcon width={16} height={16} />}
                 {isDark ? 'İşıqlı tema' : 'Qaranlıq tema'}
+              </button>
+            )}
+            {is3D !== null && (
+              <button
+                type="button"
+                className={`${ghostItem} gap-2 sm:hidden`}
+                onClick={() => setDesign3D(!is3D)}
+              >
+                <CubeIcon width={16} height={16} />
+                {is3D ? 'Sadə dizayna qayıt' : 'Yeni dizayna keç'}
               </button>
             )}
             {hasUser && (

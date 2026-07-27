@@ -9,6 +9,7 @@ import CoinBadge from '@/components/CoinBadge';
 import NotificationBell from '@/components/NotificationBell';
 import NavBarMenu from '@/components/NavBarMenu';
 import ThemeToggle from '@/components/ThemeToggle';
+import DesignToggle from '@/components/DesignToggle';
 import { CoinIcon } from '@/components/icons';
 import { useNavState } from '@/components/useNavState';
 
@@ -35,7 +36,7 @@ export default function NavBar() {
   const logoUrl = nav?.logoUrl ?? '/logo.png';
 
   return (
-    <nav className="border-b px-3 py-3 flex items-center justify-between gap-2 sm:px-6">
+    <nav className="hud-navbar border-b px-3 py-3 flex items-center justify-between gap-2 sm:px-6">
       <div className="flex min-w-0 items-center gap-2">
         <BackButton />
         <SidebarToggleButton />
@@ -97,7 +98,11 @@ export default function NavBar() {
             )}
           </>
         )}
-        {/* Desktop only — on mobile the theme switch lives in the 3-dot menu. */}
+        {/* Desktop only — on mobile the theme switch and design switch live
+            in the 3-dot menu. */}
+        <span className="hidden sm:inline-flex">
+          <DesignToggle />
+        </span>
         <span className="hidden sm:inline-flex">
           <ThemeToggle />
         </span>

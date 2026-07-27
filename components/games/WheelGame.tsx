@@ -13,8 +13,18 @@ interface WheelGameProps {
 }
 
 // Two brand tones alternating around the wheel. Kept token-based so it tracks
-// the theme (light/dark) like the rest of the HUD.
-const SEG_COLORS = ['var(--color-primary)', 'var(--color-regulatory-blue)'];
+// the theme (light/dark) like the rest of the HUD. The `--wheel-hud-seg-*`
+// custom properties are the "Cyber-Circuit Legal" ([data-design='3d']) HUD
+// override point — set on the wheel element itself via the `.wheel-hud-wheel`
+// rule in app/globals.css — and fall back to the existing "sadə dizayn"
+// tokens when that attribute/rule isn't present, so this file never needs to
+// branch on design system at render time; the browser just resolves whichever
+// custom property is in scope. Segment *angles* are untouched — only these
+// two color sources are swappable.
+const SEG_COLORS = [
+  'var(--wheel-hud-seg-1, var(--color-primary))',
+  'var(--wheel-hud-seg-2, var(--color-regulatory-blue))',
+];
 
 function reducedMotion(): boolean {
   return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -107,7 +117,7 @@ export default function WheelGame({ prizes, initialStatus }: WheelGameProps) {
   }, [spinning, status, segments, settle]);
 
   return (
-    <div className="glass-card rounded-2xl p-6 space-y-4 lg:col-span-2">
+    <div className="glass-card wheel-hud-card rounded-2xl p-6 space-y-4 lg:col-span-2">
       <div className="flex items-center gap-3 border-b border-outline-variant/30 pb-4">
         <div className="flex size-10 items-center justify-center rounded-xl bg-primary/15 text-primary">
           <span aria-hidden className="text-lg">🎡</span>
@@ -119,15 +129,21 @@ export default function WheelGame({ prizes, initialStatus }: WheelGameProps) {
       </div>
 
       <div className="flex flex-col items-center gap-5 pt-2">
-        <div className="relative flex items-center justify-center">
+        {/*
+         * `wheel-hud-wrap` carries the pulsing outer glow ring
+         * (`[data-design='3d'] .wheel-hud-wrap::before`) around the wheel — a
+         * purely decorative, purely visual addition scoped to the 3D design;
+         * it's inert (no rule targets it) under the default/"simple" design.
+         */}
+        <div className="relative flex items-center justify-center wheel-hud-wrap">
           {/* Pointer */}
           <div
             aria-hidden
-            className="absolute -top-1 z-10 size-0 border-x-8 border-t-[14px] border-x-transparent border-t-primary drop-shadow"
+            className="absolute -top-1 z-10 size-0 border-x-8 border-t-[14px] border-x-transparent border-t-primary drop-shadow wheel-hud-pointer"
           />
           {/* Wheel */}
           <div
-            className="relative size-56 rounded-full border-4 border-primary/40 shadow-lg"
+            className="relative size-56 rounded-full border-4 border-primary/40 shadow-lg wheel-hud-wheel"
             style={{
               background,
               transform: `rotate(${rotation}deg)`,
@@ -137,9 +153,13 @@ export default function WheelGame({ prizes, initialStatus }: WheelGameProps) {
             {prizes.map((p, i) => (
               <span
                 key={i}
-                className="absolute left-1/2 top-1/2 text-sm font-bold text-white"
+                className="absolute left-1/2 top-1/2 text-sm font-bold text-white wheel-hud-label"
                 style={{
-                  transform: `rotate(${segments[i].centre}deg) translateY(-88px)`,
+                  // `--wheel-hud-label-radius` lets the bigger 3D wheel push
+                  // labels further from centre (set on `.wheel-hud-wheel` in
+                  // app/globals.css); falls back to the original 88px radius
+                  // used by the default/"sadə dizayn" size-56 wheel.
+                  transform: `rotate(${segments[i].centre}deg) translateY(calc(-1 * var(--wheel-hud-label-radius, 88px)))`,
                   transformOrigin: '0 0',
                 }}
               >
@@ -147,7 +167,7 @@ export default function WheelGame({ prizes, initialStatus }: WheelGameProps) {
               </span>
             ))}
             {/* Hub */}
-            <div className="absolute left-1/2 top-1/2 flex size-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-primary/50 bg-background text-primary">
+            <div className="absolute left-1/2 top-1/2 flex size-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-primary/50 bg-background text-primary wheel-hud-hub">
               <CoinIcon width={18} height={18} />
             </div>
           </div>
@@ -166,7 +186,7 @@ export default function WheelGame({ prizes, initialStatus }: WheelGameProps) {
             size="md"
             isPending={spinning}
             onPress={() => void spin()}
-            className="glow-primary w-full max-w-xs justify-center"
+            className="glow-primary wheel-hud-spin-btn w-full max-w-xs justify-center"
           >
             {spinning ? 'Fırlanır…' : 'Fırlat (pulsuz)'}
           </Button>

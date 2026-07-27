@@ -17,7 +17,7 @@ export function SidebarShell({ children }: { children: ReactNode }) {
   return (
     <>
       <aside
-        className={`hidden md:flex md:shrink-0 md:flex-col md:min-h-0 md:overflow-hidden border-r bg-surface transition-[width] duration-200 ${
+        className={`hud-sidebar hidden md:flex md:shrink-0 md:flex-col md:min-h-0 md:overflow-hidden border-r bg-surface transition-[width] duration-200 ${
           isOpen ? 'md:w-[250px] border-border' : 'md:w-0 border-transparent'
         }`}
       >
@@ -33,7 +33,7 @@ export function SidebarShell({ children }: { children: ReactNode }) {
         className="md:hidden"
       >
         <Drawer.Content placement="left" className="md:hidden">
-          <Drawer.Dialog className="glass-panel h-full w-72 max-w-[80vw] flex-col gap-0 rounded-r-2xl border-r border-border p-0">
+          <Drawer.Dialog className="hud-sidebar glass-panel h-full w-72 max-w-[80vw] flex-col gap-0 rounded-r-2xl border-r border-border p-0">
             <div className="hud-scrollbar flex h-full flex-col min-h-0 overflow-y-auto">{children}</div>
           </Drawer.Dialog>
         </Drawer.Content>

@@ -77,7 +77,7 @@ export default async function CoursePage({ params }: { params: Promise<{ courseI
     <div id="top" className="flex flex-1 flex-col">
       <section className="relative overflow-hidden px-6 pt-10 pb-6">
         <div className="absolute inset-0 z-0 bg-gradient-to-b from-primary/10 via-transparent to-transparent" />
-        <div className="relative z-10 mx-auto flex max-w-3xl flex-col gap-4">
+        <div className="relative z-10 mx-auto flex flex-col gap-4">
           <Link
             href="/oyrenme"
             className="inline-flex w-fit items-center gap-1.5 text-label-sm text-on-surface-variant transition-colors hover:text-primary"
@@ -114,7 +114,7 @@ export default async function CoursePage({ params }: { params: Promise<{ courseI
       </section>
 
       <section className="px-6 pb-12">
-        <div className="mx-auto max-w-3xl">
+        <div className="mx-auto">
           {topics.length === 0 ? (
             <div className="glass-panel rounded-2xl px-6 py-12 text-center">
               <h2 className="text-headline-md">Mövzular hazırlanır</h2>

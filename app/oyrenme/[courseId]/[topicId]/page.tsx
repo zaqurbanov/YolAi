@@ -59,7 +59,7 @@ export default async function TopicPage({
     <div id="top" className="flex flex-1 flex-col">
       <section className="relative overflow-hidden px-6 pt-10 pb-6">
         <div className="absolute inset-0 z-0 bg-gradient-to-b from-primary/10 via-transparent to-transparent" />
-        <div className="relative z-10 mx-auto flex max-w-3xl flex-col gap-4">
+        <div className="relative z-10 mx-auto flex flex-col gap-4">
           <nav className="flex flex-wrap items-center gap-1.5 text-label-sm text-on-surface-variant">
             <Link href="/oyrenme" className="transition-colors hover:text-primary">
               Kurslar
@@ -90,7 +90,7 @@ export default async function TopicPage({
       </section>
 
       <section className="px-6 pb-10">
-        <div className="mx-auto flex max-w-3xl flex-col gap-6">
+        <div className="mx-auto flex flex-col gap-6">
           <article className="glass-card rounded-2xl p-6 lg:p-8">
             {topic.content ? (
               <LessonMarkdown content={topic.content} />

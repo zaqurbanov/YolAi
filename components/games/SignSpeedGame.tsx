@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@heroui/react';
-import { CoinIcon } from '@/components/icons';
+import { CheckIcon, CloseIcon, CoinIcon } from '@/components/icons';
 import AnimatedNumber from '@/components/AnimatedNumber';
 import { useResetCountdown } from '@/components/useResetCountdown';
 import { startSignSpeedRoundAction, submitSignSpeedRoundAction } from '@/app/coin-qazan/actions';
@@ -27,6 +27,59 @@ interface SignSpeedGameProps {
 
 type Phase = 'idle' | 'starting' | 'playing' | 'submitting' | 'result';
 
+/**
+ * 10-box progress strip, shared shape between 'playing' (progress only, no
+ * grading available yet) and 'result' (revealed ✓/✗ from the server's
+ * per-question grading). Never infer correctness during 'playing' — the
+ * server withholds it until the round is submitted and graded as a whole.
+ */
+function QuestionBoxes({
+  count,
+  currentIndex,
+  answers,
+  correctFlags,
+}: {
+  count: number;
+  currentIndex?: number;
+  answers?: number[];
+  correctFlags?: boolean[];
+}) {
+  return (
+    <div className="grid w-full grid-cols-10 gap-1">
+      {Array.from({ length: count }, (_, i) => {
+        if (correctFlags) {
+          const isCorrect = correctFlags[i];
+          return (
+            <span
+              key={i}
+              className={`flex size-6 items-center justify-center rounded-md text-[10px] ${
+                isCorrect ? 'bg-go-green/15 text-go-green' : 'bg-error/15 text-error'
+              }`}
+            >
+              {isCorrect ? <CheckIcon width={10} height={10} /> : <CloseIcon width={10} height={10} />}
+            </span>
+          );
+        }
+
+        const isCurrent = i === currentIndex;
+        const isAnswered = answers ? answers[i] !== UNANSWERED : false;
+        return (
+          <span
+            key={i}
+            className={`size-6 rounded-md border ${
+              isCurrent
+                ? 'border-primary ring-2 ring-primary'
+                : isAnswered
+                  ? 'border-primary/40 bg-primary/40'
+                  : 'border-outline-variant/40 bg-surface-tertiary/40'
+            }`}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
 export default function SignSpeedGame({ energy, onSettled }: SignSpeedGameProps) {
   const [phase, setPhase] = useState<Phase>('idle');
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -35,7 +88,11 @@ export default function SignSpeedGame({ energy, onSettled }: SignSpeedGameProps)
   const [remainingMs, setRemainingMs] = useState(ROUND_DURATION_MS);
   const [note, setNote] = useState<string | null>(null);
   const [unavailable, setUnavailable] = useState(false);
-  const [result, setResult] = useState<{ correctCount: number; reward: number } | null>(null);
+  const [result, setResult] = useState<{
+    correctCount: number;
+    reward: number;
+    correctFlags: boolean[];
+  } | null>(null);
 
   const deadlineRef = useRef(0);
   const submittedRef = useRef(false);
@@ -53,7 +110,11 @@ export default function SignSpeedGame({ energy, onSettled }: SignSpeedGameProps)
       const res = await submitSignSpeedRoundAction(sessionId ?? '', finalAnswers);
 
       if (res.status === 'success') {
-        setResult({ correctCount: res.correctCount ?? 0, reward: res.reward ?? 0 });
+        setResult({
+          correctCount: res.correctCount ?? 0,
+          reward: res.reward ?? 0,
+          correctFlags: res.correctFlags ?? Array(10).fill(false),
+        });
         setPhase('result');
         if (typeof res.balance === 'number' && typeof res.energy === 'number') {
           onSettled(res.balance, res.energy);
@@ -149,6 +210,7 @@ export default function SignSpeedGame({ energy, onSettled }: SignSpeedGameProps)
             {Math.ceil(remainingMs / 1000)}s
           </span>
         </div>
+        <QuestionBoxes count={questions.length} currentIndex={currentIndex} answers={answers} />
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-tertiary/40">
           <div
             className={`h-full rounded-full ${progressPct <= 20 ? 'bg-error' : 'bg-primary'}`}
@@ -189,6 +251,7 @@ export default function SignSpeedGame({ energy, onSettled }: SignSpeedGameProps)
         <p className="text-body-md font-semibold text-go-green" aria-live="polite">
           {result.correctCount}/10 doğru!
         </p>
+        <QuestionBoxes count={result.correctFlags.length} correctFlags={result.correctFlags} />
         <span className="flex items-center gap-1.5 rounded-full bg-safety-yellow/15 px-3 py-1 text-safety-yellow">
           <CoinIcon width={16} height={16} />
           <AnimatedNumber
