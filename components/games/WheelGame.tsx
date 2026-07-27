@@ -5,9 +5,10 @@ import { Button } from '@heroui/react';
 import { CoinIcon } from '@/components/icons';
 import { useResetCountdown } from '@/components/useResetCountdown';
 import { spinWheelAction } from '@/app/coin-qazan/actions';
+import type { WheelPrize } from '@/lib/coins/wheel';
 
 interface WheelGameProps {
-  prizes: number[];
+  prizes: WheelPrize[];
   initialStatus: 'available' | 'spun' | 'unavailable';
 }
 
@@ -17,6 +18,27 @@ const SEG_COLORS = ['var(--color-primary)', 'var(--color-regulatory-blue)'];
 
 function reducedMotion(): boolean {
   return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+// Formats a weight percentage tersely: strips a trailing ".0" but keeps
+// meaningful decimals (e.g. 12.5 stays, 5.0 becomes "5").
+function formatWeight(weight: number): string {
+  return weight % 1 === 0 ? String(weight) : String(Math.round(weight * 100) / 100);
+}
+
+// Each segment's start/end angle, proportional to its weight (not equal
+// slices) — weights sum to 100 by contract, so this always closes a full
+// circle. Shared by the conic-gradient stops, the label rotations and the
+// pointer-landing math below, so they never disagree with each other.
+function buildSegmentAngles(prizes: WheelPrize[]): { start: number; end: number; centre: number }[] {
+  let cursor = 0;
+  return prizes.map((p) => {
+    const angle = (p.weight / 100) * 360;
+    const start = cursor;
+    const end = cursor + angle;
+    cursor = end;
+    return { start, end, centre: start + angle / 2 };
+  });
 }
 
 // The daily free prize wheel. The SERVER decides the winning segment (crypto
@@ -33,15 +55,15 @@ export default function WheelGame({ prizes, initialStatus }: WheelGameProps) {
   // shown only once the spin has been used.
   const respinCountdown = useResetCountdown(status === 'spun');
 
-  const segAngle = 360 / prizes.length;
+  const segments = useMemo(() => buildSegmentAngles(prizes), [prizes]);
 
   // Static conic-gradient of the coloured segments (the wheel graphic itself).
   const background = useMemo(() => {
-    const stops = prizes
-      .map((_, i) => `${SEG_COLORS[i % SEG_COLORS.length]} ${i * segAngle}deg ${(i + 1) * segAngle}deg`)
+    const stops = segments
+      .map((seg, i) => `${SEG_COLORS[i % SEG_COLORS.length]} ${seg.start}deg ${seg.end}deg`)
       .join(', ');
     return `conic-gradient(${stops})`;
-  }, [prizes, segAngle]);
+  }, [segments]);
 
   const settle = useCallback((prize: number, balance: number) => {
     setWonPrize(prize);
@@ -69,7 +91,7 @@ export default function WheelGame({ prizes, initialStatus }: WheelGameProps) {
 
     const { prizeIndex, prize, balance = 0 } = res;
     // Land the winning segment's centre at the top pointer.
-    const centreAngle = prizeIndex * segAngle + segAngle / 2;
+    const centreAngle = segments[prizeIndex]?.centre ?? 0;
 
     if (reducedMotion()) {
       setRotation(-centreAngle);
@@ -82,7 +104,7 @@ export default function WheelGame({ prizes, initialStatus }: WheelGameProps) {
     setRotation(target);
     // Matches the CSS transition duration below; on end we reveal the prize.
     window.setTimeout(() => settle(prize, balance), 3600);
-  }, [spinning, status, segAngle, settle]);
+  }, [spinning, status, segments, settle]);
 
   return (
     <div className="glass-card rounded-2xl p-6 space-y-4 lg:col-span-2">
@@ -117,11 +139,11 @@ export default function WheelGame({ prizes, initialStatus }: WheelGameProps) {
                 key={i}
                 className="absolute left-1/2 top-1/2 text-sm font-bold text-white"
                 style={{
-                  transform: `rotate(${i * segAngle + segAngle / 2}deg) translateY(-88px)`,
+                  transform: `rotate(${segments[i].centre}deg) translateY(-88px)`,
                   transformOrigin: '0 0',
                 }}
               >
-                {p}
+                {p.value}
               </span>
             ))}
             {/* Hub */}

@@ -8,6 +8,7 @@ import { getChatModelId } from '@/lib/llm';
 import { ingestDocument, reprocessDocument } from '@/lib/ingestion/ingestDocument';
 import { deleteDocuments } from '@/lib/documents/deleteDocuments';
 import { isStaleProcessing } from '@/lib/ingestion/staleness';
+import { isMissingRelationError } from '@/lib/supabase/missingRelation';
 import { generateQuestionsFromPdf } from '@/lib/quiz/generateQuestionsFromPdf';
 import { createDraftQuestions } from '@/lib/admin/quizQuestions';
 import {
@@ -56,8 +57,26 @@ import {
   DEFAULT_ENERGY_PURCHASE_ENERGY_AMOUNT,
   ENERGY_PURCHASE_MAX_BALANCE_KEY,
   DEFAULT_ENERGY_PURCHASE_MAX_BALANCE,
+  TICTACTOE_WIN_REWARD_KEY,
+  DEFAULT_TICTACTOE_WIN_REWARD,
 } from '@/lib/coins/games';
 import { DAILY_CHEST_REWARD_KEY, DEFAULT_DAILY_CHEST_REWARD } from '@/lib/coins/dailyQuests';
+import { QUIZ_REWARD_KEY, DEFAULT_QUIZ_REWARD } from '@/lib/coins/quiz';
+import {
+  SIGN_SPEED_PER_CORRECT_REWARD_KEY,
+  DEFAULT_SIGN_SPEED_PER_CORRECT_REWARD,
+} from '@/lib/coins/signSpeed';
+import type { CarTier } from '@/lib/garage/carTiers';
+import {
+  GARAGE_XO_BONUS_PCT_KEY,
+  DEFAULT_GARAGE_XO_BONUS_PCT,
+  GARAGE_ENERGY_BONUS_KEY,
+  DEFAULT_GARAGE_ENERGY_BONUS,
+  GARAGE_CHAT_BONUS_KEY,
+  DEFAULT_GARAGE_CHAT_BONUS,
+} from '@/lib/garage/perks';
+import { VIP_PLATE_PRICE_KEY, DEFAULT_VIP_PLATE_PRICE } from '@/lib/garage/plates';
+import { WHEEL_PRIZES_KEY, getWheelPrizes, type WheelPrize } from '@/lib/coins/wheel';
 
 // Inherited from the folded-in documents/quiz-questions routes: PDF ingestion
 // and LLM question extraction over a full PDF are both slow. This applies to
@@ -117,6 +136,10 @@ const MAX_ALLOWED_COIN_GRANT = 100000;
 // Daily chest reward is a per-quest-completion coin amount, not a daily
 // aggregate limit — a much lower sane ceiling than MAX_ALLOWED applies.
 const MAX_ALLOWED_CHEST_REWARD = 1000;
+
+// Daily quiz reward is a per-answer coin amount, not an aggregate — same
+// rationale as MAX_ALLOWED_CHEST_REWARD above.
+const MAX_ALLOWED_QUIZ_REWARD = 1000;
 
 // The lesson/ad economy tunables, exposed through one `?type=lesson-economy`
 // branch rather than one type discriminator each — the Vercel Hobby
@@ -245,6 +268,64 @@ const ENERGY_ECONOMY_FIELDS = [
 ] as const;
 
 const ENERGY_ECONOMY_KEYS = ENERGY_ECONOMY_FIELDS.map((f) => f.key);
+
+// Per-game coin rewards, exposed through their own `?type=game-rewards`
+// group — the XO (tic-tac-toe) win reward and the Nişan Sürəti per-correct
+// reward are edited together on one games-economy admin screen, same
+// shared field/validation/response shape as LESSON_ECONOMY_FIELDS above.
+const GAME_REWARD_FIELDS = [
+  {
+    param: 'tictactoeWinReward',
+    key: TICTACTOE_WIN_REWARD_KEY,
+    defaultValue: DEFAULT_TICTACTOE_WIN_REWARD,
+    integerOnly: false,
+    min: 0.01,
+    max: MAX_ALLOWED_PRICE,
+  },
+  {
+    param: 'signSpeedPerCorrectReward',
+    key: SIGN_SPEED_PER_CORRECT_REWARD_KEY,
+    defaultValue: DEFAULT_SIGN_SPEED_PER_CORRECT_REWARD,
+    integerOnly: false,
+    min: 0.01,
+    max: MAX_ALLOWED_PRICE,
+  },
+] as const;
+
+const GAME_REWARD_KEYS = GAME_REWARD_FIELDS.map((f) => f.key);
+
+// Virtual Qaraj Phase 2 (Mərhələ 2) per-tier perk tunables, exposed through
+// their own `?type=garage-perks` group — same shared field/validation/response
+// shape as GAME_REWARD_FIELDS above. Not cumulative: only the currently-owned
+// tier's perk applies (see lib/garage/perks.ts).
+const GARAGE_PERK_FIELDS = [
+  {
+    param: 'garageXoBonusPct',
+    key: GARAGE_XO_BONUS_PCT_KEY,
+    defaultValue: DEFAULT_GARAGE_XO_BONUS_PCT,
+    integerOnly: false,
+    min: 0,
+    max: 1000,
+  },
+  {
+    param: 'garageEnergyBonus',
+    key: GARAGE_ENERGY_BONUS_KEY,
+    defaultValue: DEFAULT_GARAGE_ENERGY_BONUS,
+    integerOnly: true,
+    min: 0,
+    max: 1000,
+  },
+  {
+    param: 'garageChatDailyBonus',
+    key: GARAGE_CHAT_BONUS_KEY,
+    defaultValue: DEFAULT_GARAGE_CHAT_BONUS,
+    integerOnly: true,
+    min: 0,
+    max: 1000,
+  },
+] as const;
+
+const GARAGE_PERK_KEYS = GARAGE_PERK_FIELDS.map((f) => f.key);
 
 // Category-card override text fields (`?type=category-content`). 300 chars is
 // a card-copy bound, not a technical one — these render inside fixed-size
@@ -608,6 +689,24 @@ export async function GET(request: NextRequest) {
     });
   }
 
+  if (type === 'daily-quiz-reward') {
+    const { data, error } = await createAdminClient()
+      .from('app_settings')
+      .select('value')
+      .eq('key', QUIZ_REWARD_KEY)
+      .maybeSingle();
+
+    if (error) return serverError(error, 'Ayarları oxumaq uğursuz oldu');
+
+    const tableValue = data ? Number(data.value) : null;
+    const isTableConfigured = tableValue !== null && Number.isFinite(tableValue) && tableValue > 0;
+
+    return NextResponse.json({
+      dailyQuizReward: isTableConfigured ? tableValue : DEFAULT_QUIZ_REWARD,
+      source: isTableConfigured ? 'table' : 'default',
+    });
+  }
+
   if (type === 'lesson-economy') {
     const { data, error } = await createAdminClient()
       .from('app_settings')
@@ -667,6 +766,84 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ settings });
   }
 
+  if (type === 'game-rewards') {
+    const { data, error } = await createAdminClient()
+      .from('app_settings')
+      .select('key, value')
+      .in('key', GAME_REWARD_KEYS);
+
+    if (error) return serverError(error, 'Ayarları oxumaq uğursuz oldu');
+
+    const byKey = new Map((data ?? []).map((row) => [row.key, row.value]));
+
+    const settings = Object.fromEntries(
+      GAME_REWARD_FIELDS.map((field) => {
+        const raw = byKey.get(field.key);
+        const value = raw === undefined || raw === null ? null : Number(raw);
+        const isConfigured = value !== null && isValidLessonEconomyValue(field, value);
+        return [
+          field.param,
+          {
+            value: isConfigured ? value : field.defaultValue,
+            source: isConfigured ? 'table' : 'default',
+          },
+        ];
+      })
+    );
+
+    return NextResponse.json({ settings });
+  }
+
+  if (type === 'garage-perks') {
+    const { data, error } = await createAdminClient()
+      .from('app_settings')
+      .select('key, value')
+      .in('key', GARAGE_PERK_KEYS);
+
+    if (error) return serverError(error, 'Ayarları oxumaq uğursuz oldu');
+
+    const byKey = new Map((data ?? []).map((row) => [row.key, row.value]));
+
+    const settings = Object.fromEntries(
+      GARAGE_PERK_FIELDS.map((field) => {
+        const raw = byKey.get(field.key);
+        const value = raw === undefined || raw === null ? null : Number(raw);
+        const isConfigured = value !== null && isValidLessonEconomyValue(field, value);
+        return [
+          field.param,
+          {
+            value: isConfigured ? value : field.defaultValue,
+            source: isConfigured ? 'table' : 'default',
+          },
+        ];
+      })
+    );
+
+    return NextResponse.json({ settings });
+  }
+
+  // Virtual Qaraj (0083_virtual_garage.sql) — car_tiers is a small FIXED
+  // catalog table, not an app_settings key-value tunable, so this reads/writes
+  // the table directly rather than following the *_FIELDS pattern above.
+  if (type === 'car-tiers') {
+    const { data, error } = await createAdminClient()
+      .from('car_tiers')
+      .select('id, tier_order, name, emoji, coin_price')
+      .order('tier_order', { ascending: true });
+
+    if (error) return serverError(error, 'Avtomobil kateqoriyalarını yükləmək uğursuz oldu');
+
+    const tiers: CarTier[] = (data ?? []).map((row) => ({
+      id: row.id,
+      tierOrder: row.tier_order,
+      name: row.name,
+      emoji: row.emoji,
+      coinPrice: Number(row.coin_price),
+    }));
+
+    return NextResponse.json({ tiers });
+  }
+
   if (type === 'category-content') {
     const { data, error } = await createAdminClient()
       .from('app_settings')
@@ -677,6 +854,80 @@ export async function GET(request: NextRequest) {
     if (error) return serverError(error, 'Ayarları oxumaq uğursuz oldu');
 
     return NextResponse.json(buildCategoryContentResponse(parseCategoryOverrides(data?.value)));
+  }
+
+  // Virtual Qaraj Mərhələ 3 (VIP Nömrə Bazarı, 0084_vip_plate_market.sql) —
+  // single-field pattern, same shape as daily-chest-reward above.
+  if (type === 'vip-plate-price') {
+    const { data, error } = await createAdminClient()
+      .from('app_settings')
+      .select('value')
+      .eq('key', VIP_PLATE_PRICE_KEY)
+      .maybeSingle();
+
+    if (error) return serverError(error, 'Ayarları oxumaq uğursuz oldu');
+
+    const tableValue = data ? Number(data.value) : null;
+    const isTableConfigured = tableValue !== null && Number.isFinite(tableValue) && tableValue > 0;
+
+    return NextResponse.json({
+      vipPlatePrice: isTableConfigured ? tableValue : DEFAULT_VIP_PLATE_PRICE,
+      source: isTableConfigured ? 'table' : 'default',
+    });
+  }
+
+  // Çarx (wheel of fortune) segment values + weights — reuses
+  // getWheelPrizes() directly so the legacy-array backward-compat handling
+  // isn't duplicated between the spin path and this admin read.
+  if (type === 'wheel-prizes') {
+    const prizes = await getWheelPrizes();
+    return NextResponse.json({ prizes });
+  }
+
+  // Moderation list of all custom (paid) plates, with the owning user's
+  // email joined in a SECOND query (not a Postgrest join) — same two-query
+  // pattern app/admin/logs/LogsSection.tsx uses for the same purpose.
+  if (type === 'plate-moderation') {
+    const admin = createAdminClient();
+
+    const { data: plates, error } = await admin
+      .from('license_plates')
+      .select('plate_number, owner_id, price_paid, claimed_at')
+      .eq('is_custom', true)
+      .order('claimed_at', { ascending: false });
+
+    if (error) {
+      // Pre-migration state (0084 not yet applied) is expected and must
+      // degrade to an empty moderation list, not a 500 — same posture as
+      // getWeeklyLeaderboard/getCarEmojisByUserId's isMissingRelationError
+      // fail-open handling.
+      if (isMissingRelationError(error)) {
+        return NextResponse.json({ plates: [] });
+      }
+      return serverError(error, 'Nömrələri yükləmək uğursuz oldu');
+    }
+
+    const ownerIds = Array.from(
+      new Set((plates ?? []).map((p) => p.owner_id).filter((id): id is string => typeof id === 'string'))
+    );
+
+    const emailsByOwnerId = new Map<string, string>();
+    if (ownerIds.length > 0) {
+      const { data: profileRows } = await admin.from('profiles').select('id, email').in('id', ownerIds);
+      for (const p of profileRows ?? []) {
+        if (p.email) emailsByOwnerId.set(p.id, p.email);
+      }
+    }
+
+    return NextResponse.json({
+      plates: (plates ?? []).map((p) => ({
+        plateNumber: p.plate_number,
+        ownerId: p.owner_id,
+        ownerEmail: p.owner_id ? emailsByOwnerId.get(p.owner_id) ?? null : null,
+        pricePaid: Number(p.price_paid),
+        claimedAt: p.claimed_at,
+      })),
+    });
   }
 
   return apiError(400, 'type parametri düzgün deyil');
@@ -1057,6 +1308,38 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ dailyChestReward, source: 'table' });
   }
 
+  if (type === 'daily-quiz-reward') {
+    const body = await request.json().catch(() => null);
+    const dailyQuizReward = body?.dailyQuizReward;
+
+    if (
+      dailyQuizReward !== null &&
+      dailyQuizReward !== undefined &&
+      (typeof dailyQuizReward !== 'number' ||
+        !Number.isInteger(dailyQuizReward) ||
+        dailyQuizReward <= 0 ||
+        dailyQuizReward > MAX_ALLOWED_QUIZ_REWARD)
+    ) {
+      return apiError(400, `dailyQuizReward null və ya 1-${MAX_ALLOWED_QUIZ_REWARD} arasında tam ədəd olmalıdır`);
+    }
+
+    const admin = createAdminClient();
+
+    if (dailyQuizReward === null || dailyQuizReward === undefined) {
+      const { error } = await admin.from('app_settings').delete().eq('key', QUIZ_REWARD_KEY);
+      if (error) return serverError(error, 'Ayarı sıfırlamaq uğursuz oldu');
+      return NextResponse.json({ dailyQuizReward: DEFAULT_QUIZ_REWARD, source: 'default' });
+    }
+
+    const { error } = await admin
+      .from('app_settings')
+      .upsert({ key: QUIZ_REWARD_KEY, value: dailyQuizReward, updated_at: new Date().toISOString() });
+
+    if (error) return serverError(error, 'Ayarı yeniləmək uğursuz oldu');
+
+    return NextResponse.json({ dailyQuizReward, source: 'table' });
+  }
+
   if (type === 'lesson-economy') {
     const body = await request.json().catch(() => null);
     if (!body || typeof body !== 'object') return apiError(400, 'Gövdə düzgün deyil');
@@ -1193,6 +1476,250 @@ export async function PATCH(request: NextRequest) {
     );
 
     return NextResponse.json({ settings });
+  }
+
+  if (type === 'game-rewards') {
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== 'object') return apiError(400, 'Gövdə düzgün deyil');
+
+    // Partial update, all-or-nothing validation, null-resets-to-default — same
+    // convention as lesson-economy above.
+    const present = GAME_REWARD_FIELDS.filter((f) => body[f.param] !== undefined);
+
+    if (present.length === 0) {
+      return apiError(400, `Yeniləmək üçün heç olmasa bir sahə tələb olunur: ${GAME_REWARD_FIELDS.map((f) => f.param).join(', ')}`);
+    }
+
+    for (const field of present) {
+      const value = body[field.param];
+      if (value === null) continue;
+      if (typeof value !== 'number' || !isValidLessonEconomyValue(field, value)) {
+        return apiError(
+          400,
+          `${field.param} null və ya ${field.min}-${field.max} arasında ${field.integerOnly ? 'tam ' : ''}ədəd olmalıdır`
+        );
+      }
+    }
+
+    const admin = createAdminClient();
+
+    for (const field of present) {
+      const value = body[field.param];
+
+      if (value === null) {
+        const { error } = await admin.from('app_settings').delete().eq('key', field.key);
+        if (error) return serverError(error, 'Ayarı sıfırlamaq uğursuz oldu');
+        continue;
+      }
+
+      const { error } = await admin
+        .from('app_settings')
+        .upsert({ key: field.key, value, updated_at: new Date().toISOString() });
+      if (error) return serverError(error, 'Ayarı yeniləmək uğursuz oldu');
+    }
+
+    const { data, error } = await admin
+      .from('app_settings')
+      .select('key, value')
+      .in('key', GAME_REWARD_KEYS);
+
+    if (error) return serverError(error, 'Ayarları oxumaq uğursuz oldu');
+
+    const byKey = new Map((data ?? []).map((row) => [row.key, row.value]));
+
+    const settings = Object.fromEntries(
+      GAME_REWARD_FIELDS.map((field) => {
+        const raw = byKey.get(field.key);
+        const numeric = raw === undefined || raw === null ? null : Number(raw);
+        const isConfigured = numeric !== null && isValidLessonEconomyValue(field, numeric);
+        return [
+          field.param,
+          {
+            value: isConfigured ? numeric : field.defaultValue,
+            source: isConfigured ? 'table' : 'default',
+          },
+        ];
+      })
+    );
+
+    return NextResponse.json({ settings });
+  }
+
+  if (type === 'garage-perks') {
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== 'object') return apiError(400, 'Gövdə düzgün deyil');
+
+    // Partial update, all-or-nothing validation, null-resets-to-default — same
+    // convention as game-rewards above.
+    const present = GARAGE_PERK_FIELDS.filter((f) => body[f.param] !== undefined);
+
+    if (present.length === 0) {
+      return apiError(400, `Yeniləmək üçün heç olmasa bir sahə tələb olunur: ${GARAGE_PERK_FIELDS.map((f) => f.param).join(', ')}`);
+    }
+
+    for (const field of present) {
+      const value = body[field.param];
+      if (value === null) continue;
+      if (typeof value !== 'number' || !isValidLessonEconomyValue(field, value)) {
+        return apiError(
+          400,
+          `${field.param} null və ya ${field.min}-${field.max} arasında ${field.integerOnly ? 'tam ' : ''}ədəd olmalıdır`
+        );
+      }
+    }
+
+    const admin = createAdminClient();
+
+    for (const field of present) {
+      const value = body[field.param];
+
+      if (value === null) {
+        const { error } = await admin.from('app_settings').delete().eq('key', field.key);
+        if (error) return serverError(error, 'Ayarı sıfırlamaq uğursuz oldu');
+        continue;
+      }
+
+      const { error } = await admin
+        .from('app_settings')
+        .upsert({ key: field.key, value, updated_at: new Date().toISOString() });
+      if (error) return serverError(error, 'Ayarı yeniləmək uğursuz oldu');
+    }
+
+    const { data, error } = await admin
+      .from('app_settings')
+      .select('key, value')
+      .in('key', GARAGE_PERK_KEYS);
+
+    if (error) return serverError(error, 'Ayarları oxumaq uğursuz oldu');
+
+    const byKey = new Map((data ?? []).map((row) => [row.key, row.value]));
+
+    const settings = Object.fromEntries(
+      GARAGE_PERK_FIELDS.map((field) => {
+        const raw = byKey.get(field.key);
+        const numeric = raw === undefined || raw === null ? null : Number(raw);
+        const isConfigured = numeric !== null && isValidLessonEconomyValue(field, numeric);
+        return [
+          field.param,
+          {
+            value: isConfigured ? numeric : field.defaultValue,
+            source: isConfigured ? 'table' : 'default',
+          },
+        ];
+      })
+    );
+
+    return NextResponse.json({ settings });
+  }
+
+  // Virtual Qaraj (0083_virtual_garage.sql) — only coin_price is editable per
+  // row; name/emoji are immutable seed data. tierId always resolves the row
+  // to update; price never comes from anywhere but this validated body.
+  if (type === 'car-tiers') {
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== 'object') return apiError(400, 'Gövdə düzgün deyil');
+
+    const { tierId, coinPrice } = body as { tierId?: unknown; coinPrice?: unknown };
+
+    if (typeof tierId !== 'string' || tierId.length === 0) {
+      return apiError(400, 'tierId tələb olunur');
+    }
+    if (typeof coinPrice !== 'number' || !Number.isFinite(coinPrice) || coinPrice < 0 || coinPrice > MAX_ALLOWED_PRICE) {
+      return apiError(400, `coinPrice 0-${MAX_ALLOWED_PRICE} arasında ədəd olmalıdır`);
+    }
+
+    const { data, error } = await createAdminClient()
+      .from('car_tiers')
+      .update({ coin_price: coinPrice })
+      .eq('id', tierId)
+      .select('id, tier_order, name, emoji, coin_price')
+      .maybeSingle();
+
+    if (error) return serverError(error, 'Avtomobil qiymətini yeniləmək uğursuz oldu');
+    if (!data) return notFound('Avtomobil tapılmadı');
+
+    const tier: CarTier = {
+      id: data.id,
+      tierOrder: data.tier_order,
+      name: data.name,
+      emoji: data.emoji,
+      coinPrice: Number(data.coin_price),
+    };
+
+    return NextResponse.json({ tier });
+  }
+
+  // Virtual Qaraj Mərhələ 3 (VIP Nömrə Bazarı) — same single-field
+  // null-resets-to-default convention as daily-chest-reward above.
+  if (type === 'vip-plate-price') {
+    const body = await request.json().catch(() => null);
+    const vipPlatePrice = body?.vipPlatePrice;
+
+    if (
+      vipPlatePrice !== null &&
+      vipPlatePrice !== undefined &&
+      (typeof vipPlatePrice !== 'number' ||
+        !Number.isInteger(vipPlatePrice) ||
+        vipPlatePrice <= 0 ||
+        vipPlatePrice > MAX_ALLOWED)
+    ) {
+      return apiError(400, `vipPlatePrice null və ya 1-${MAX_ALLOWED} arasında tam ədəd olmalıdır`);
+    }
+
+    const admin = createAdminClient();
+
+    if (vipPlatePrice === null || vipPlatePrice === undefined) {
+      const { error } = await admin.from('app_settings').delete().eq('key', VIP_PLATE_PRICE_KEY);
+      if (error) return serverError(error, 'Ayarı sıfırlamaq uğursuz oldu');
+      return NextResponse.json({ vipPlatePrice: DEFAULT_VIP_PLATE_PRICE, source: 'default' });
+    }
+
+    const { error } = await admin
+      .from('app_settings')
+      .upsert({ key: VIP_PLATE_PRICE_KEY, value: vipPlatePrice, updated_at: new Date().toISOString() });
+
+    if (error) return serverError(error, 'Ayarı yeniləmək uğursuz oldu');
+
+    return NextResponse.json({ vipPlatePrice, source: 'table' });
+  }
+
+  // Çarx (wheel of fortune) — replaces all 10 segments at once (value +
+  // weight per segment); weights must sum to exactly 100 so spinWheel()'s
+  // weighted draw has well-defined odds.
+  if (type === 'wheel-prizes') {
+    const body = await request.json().catch(() => null);
+    const prizes = body?.prizes;
+
+    if (!Array.isArray(prizes) || prizes.length !== 10) {
+      return apiError(400, 'prizes tam olaraq 10 element olan massiv olmalıdır');
+    }
+
+    const parsed: WheelPrize[] = [];
+    for (const entry of prizes) {
+      const value = entry?.value;
+      const weight = entry?.weight;
+      if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+        return apiError(400, 'Hər value müsbət ədəd olmalıdır');
+      }
+      if (typeof weight !== 'number' || !Number.isFinite(weight) || weight <= 0) {
+        return apiError(400, 'Hər weight müsbət ədəd olmalıdır');
+      }
+      parsed.push({ value, weight });
+    }
+
+    const weightSum = parsed.reduce((sum, p) => sum + p.weight, 0);
+    if (Math.abs(weightSum - 100) >= 0.01) {
+      return apiError(400, `Faizlərin cəmi 100 olmalıdır, hazırda ${weightSum}%`);
+    }
+
+    const admin = createAdminClient();
+    const { error } = await admin
+      .from('app_settings')
+      .upsert({ key: WHEEL_PRIZES_KEY, value: parsed, updated_at: new Date().toISOString() });
+
+    if (error) return serverError(error, 'Ayarı yeniləmək uğursuz oldu');
+
+    return NextResponse.json({ prizes: parsed });
   }
 
   if (type === 'category-content') {
@@ -1501,6 +2028,22 @@ export async function DELETE(request: NextRequest) {
     const { error } = await createAdminClient().from('app_settings').delete().eq('key', CATEGORY_OVERRIDES_SETTING_KEY);
     if (error) return serverError(error, 'Ayarı sıfırlamaq uğursuz oldu');
     return NextResponse.json(buildCategoryContentResponse({}));
+  }
+
+  // Moderation tool, NOT a refund system — freeing the row does not credit
+  // coins back to the (former) owner.
+  if (type === 'plate-moderation') {
+    const body = await request.json().catch(() => null);
+    const plateNumber = body?.plateNumber;
+
+    if (typeof plateNumber !== 'string' || plateNumber.trim().length === 0) {
+      return apiError(400, 'plateNumber tələb olunur');
+    }
+
+    const { error } = await createAdminClient().from('license_plates').delete().eq('plate_number', plateNumber);
+    if (error) return serverError(error, 'Nömrəni silmək uğursuz oldu');
+
+    return NextResponse.json({ ok: true });
   }
 
   if (type !== 'busy-phrases') {

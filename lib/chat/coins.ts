@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { formatMsUntilReset } from '@/lib/format/coins';
 import { ADMIN_CONTACT_EMAIL } from '@/lib/contact';
 import { logError } from '@/lib/logging/logError';
+import { getActiveGaragePerk } from '@/lib/garage/perks';
 
 // Hardcoded TS default (not an env var) — this is a brand-new concept with
 // no prior env var to preserve compatibility with, unlike
@@ -67,7 +68,11 @@ export async function checkAndReserveCoins(
   userId: string,
 ): Promise<{ allowed: boolean; balance: number | null; dailyLimit: number | null; price: number; message: string | null }> {
   const price = await getGlobalMessagePrice();
-  const dailyGrant = await getGlobalDailyCoinGrant();
+  const baseDailyGrant = await getGlobalDailyCoinGrant();
+  // Mercedes G-Class garage perk: +chatDailyBonus flat on top of the global
+  // daily free-message limit. Not cumulative with any other tier's perk.
+  const garagePerk = await getActiveGaragePerk(userId);
+  const dailyGrant = baseDailyGrant + garagePerk.chatDailyBonus;
   const { data, error } = await createAdminClient()
     .rpc('check_and_reserve_coins', {
       p_user_id: userId,
@@ -145,7 +150,9 @@ export async function getCoinBalanceStatus(
   userId: string,
 ): Promise<{ balance: number; dailyLimit: number | null; price: number; msUntilReset: number }> {
   const price = await getGlobalMessagePrice();
-  const dailyGrant = await getGlobalDailyCoinGrant();
+  const baseDailyGrant = await getGlobalDailyCoinGrant();
+  const garagePerk = await getActiveGaragePerk(userId);
+  const dailyGrant = baseDailyGrant + garagePerk.chatDailyBonus;
   const { data, error } = await createAdminClient()
     .from('user_coins')
     .select('balance, daily_limit, last_reset_at')

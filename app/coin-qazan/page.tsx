@@ -22,10 +22,16 @@ import {
 } from '@/lib/coins/games';
 import { getWheelStatus } from '@/lib/coins/wheel';
 import { getDailyQuestStatus } from '@/lib/coins/dailyQuests';
+import { getCarTiers } from '@/lib/garage/carTiers';
+import { getUserGarage } from '@/lib/garage/garage';
+import { getActiveGaragePerk } from '@/lib/garage/perks';
+import { ensureFreePlate, getUserPlate, getVipPlatePrice } from '@/lib/garage/plates';
 import GamesSection from '@/components/games/GamesSection';
 import WheelGame from '@/components/games/WheelGame';
 import DailyQuizCard from '@/components/account/DailyQuizCard';
 import DailyQuestCard from '@/components/coins/DailyQuestCard';
+import GarageCard from '@/components/coins/GarageCard';
+import PlateMarketCard from '@/components/coins/PlateMarketCard';
 import ReferralCard from '@/components/account/ReferralCard';
 import AdWatchCard from '@/components/account/AdWatchCard';
 import WeeklyLeaderboardCard from '@/components/account/WeeklyLeaderboardCard';
@@ -68,6 +74,11 @@ export default async function CoinQazanPage() {
     wheelStatus,
     energyPurchaseConfig,
     dailyQuestStatus,
+    carTiers,
+    userGarage,
+    garagePerk,
+    plateNumber,
+    vipPlatePrice,
   ] = await Promise.all([
     getQuizRewardAmount(),
     hasClaimedToday(user.id),
@@ -86,7 +97,22 @@ export default async function CoinQazanPage() {
     getWheelStatus(user.id),
     getEnergyPurchaseConfig(),
     getDailyQuestStatus(user.id),
+    getCarTiers(),
+    getUserGarage(user.id),
+    getActiveGaragePerk(user.id),
+    // WRITE the first time (lazily assigns + persists a free plate), called
+    // the exact same way getOrCreateReferralCode is above — already proven
+    // safe inside this page's render-time Promise.all.
+    ensureFreePlate(user.id),
+    getVipPlatePrice(),
   ]);
+
+  // ensureFreePlate only returns the plate string; isCustom comes from a
+  // follow-up read (the row it just wrote/confirmed is already there, so
+  // this is not a race) rather than threading a richer return type through
+  // the write path.
+  const plate = await getUserPlate(user.id);
+  const isCustomPlate = plate?.isCustom ?? false;
 
   // Strip correctIndex before it ever reaches the client component's props —
   // the server action re-derives it server-side from (userId, today) when
@@ -117,6 +143,15 @@ export default async function CoinQazanPage() {
         <DailyQuestCard status={dailyQuestStatus} />
 
         <WeeklyLeaderboardCard leaderboard={weeklyLeaderboard} />
+
+        <GarageCard tiers={carTiers} garage={userGarage} coinBalance={coinStatus.balance} perk={garagePerk} />
+
+        <PlateMarketCard
+          plateNumber={plateNumber}
+          isCustom={isCustomPlate}
+          coinBalance={coinStatus.balance}
+          price={vipPlatePrice}
+        />
 
         <DailyQuizCard
           question={dailyQuestion.question}

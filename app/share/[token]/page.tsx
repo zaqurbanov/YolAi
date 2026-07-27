@@ -1,8 +1,16 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
+import { buttonVariants } from '@heroui/styles';
 import { getSharedConversation, type SharedConversationMessage } from '@/lib/chat/getSharedConversation';
+import { getSharedExamResult } from '@/lib/exam/examShare';
 import { renderCitationText } from '@/lib/chat/renderCitationText';
 import { formatAzTime } from '@/lib/format/date';
 import { Chip } from '@heroui/react';
+
+// Same cosmetic pass threshold as components/games/ExamSimulatorGame.tsx —
+// frontend badge only, not enforced server-side (see that file's comment).
+// No shared constants file exists for this yet; duplicated deliberately.
+const EXAM_PASS_THRESHOLD = 8;
 
 interface Citation {
   document_id: string;
@@ -22,9 +30,16 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { token } = await params;
   const conversation = await getSharedConversation(token);
-  return {
-    title: conversation?.title ?? 'Paylaşılan söhbət',
-  };
+  if (conversation) {
+    return { title: conversation.title ?? 'Paylaşılan söhbət' };
+  }
+
+  const examResult = await getSharedExamResult(token);
+  if (examResult) {
+    return { title: 'Sınaq İmtahanı Nəticəsi' };
+  }
+
+  return { title: 'Paylaşılan söhbət' };
 }
 
 export default async function SharedConversationPage({
@@ -36,6 +51,32 @@ export default async function SharedConversationPage({
   const conversation = await getSharedConversation(token);
 
   if (!conversation) {
+    const examResult = await getSharedExamResult(token);
+    if (examResult) {
+      const passed = examResult.score >= EXAM_PASS_THRESHOLD;
+      return (
+        <div className="flex flex-1 items-center justify-center px-4 py-16">
+          <div className="glass-card flex max-w-md flex-col items-center gap-4 rounded-2xl px-6 py-8 text-center">
+            <Chip size="sm" variant="soft" color="accent">
+              Sınaq İmtahanı Nəticəsi
+            </Chip>
+            <p className="text-headline-md text-on-surface">
+              {examResult.score}/{examResult.total}
+            </p>
+            <Chip color={passed ? 'success' : 'danger'} variant="soft">
+              {passed ? 'Keçdin!' : 'Keçmədin'}
+            </Chip>
+            <Link
+              href="/coin-qazan"
+              className={buttonVariants({ variant: 'primary', size: 'md' }) + ' glow-primary'}
+            >
+              Sən də özünü yoxla
+            </Link>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="flex flex-1 items-center justify-center px-4 py-16">
         <div className="glass-card max-w-md rounded-2xl px-6 py-8 text-center">

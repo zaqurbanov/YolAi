@@ -2,6 +2,7 @@ import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isMissingRelationError } from '@/lib/supabase/missingRelation';
 import { logError } from '@/lib/logging/logError';
+import { getEffectiveEnergyGrant, getActiveGaragePerk } from '@/lib/garage/perks';
 
 // XO (tic-tac-toe) — NO-WAGER reward model (0067_xo_energy_rewards.sql). The old
 // betting games (rps, coinflip) were removed. Playing costs 1 ENERGY (a daily
@@ -93,7 +94,7 @@ export async function getEnergyStatus(userId: string): Promise<EnergyStatus> {
   try {
     const { data, error } = await createAdminClient().rpc('grant_daily_energy', {
       p_user_id: userId,
-      p_daily_grant: max,
+      p_daily_grant: Math.round(await getEffectiveEnergyGrant(userId, max)),
     });
     if (error || typeof data !== 'number') return { balance: max, max };
     return { balance: data, max };
@@ -293,18 +294,28 @@ export async function playTicTacToe(userId: string, userMoves: number[]): Promis
   const sim = simulateTicTacToe(userMoves, difficulty);
   if (!sim.ok) return { ok: false, error: 'invalid_moves' };
 
-  const [energyMax, energyCost, winReward, winCap] = await Promise.all([
+  const [energyMax, energyCost, winReward, winCap, garagePerk] = await Promise.all([
     readNumericSetting(GAME_DAILY_ENERGY_KEY, DEFAULT_GAME_DAILY_ENERGY),
     readNumericSetting(GAME_ENERGY_COST_KEY, DEFAULT_GAME_ENERGY_COST),
     readNumericSetting(TICTACTOE_WIN_REWARD_KEY, DEFAULT_TICTACTOE_WIN_REWARD),
     readNumericSetting(TICTACTOE_DAILY_WIN_CAP_KEY, DEFAULT_TICTACTOE_DAILY_WIN_CAP),
+    getActiveGaragePerk(userId),
   ]);
+
+  // Energy grant amount goes through getEffectiveEnergyGrant (the ONLY place
+  // that computes it) so it stays in sync with getEnergyStatus above and the
+  // sign speed / exam call sites — reusing garagePerk.energyBonus here would
+  // duplicate that logic and risk drifting from it.
+  const effectiveEnergyMax = await getEffectiveEnergyGrant(userId, energyMax);
+  // Lada 2107 perk: +xoBonusPct% on the win reward (not cumulative with any
+  // other tier's perk — see lib/garage/perks.ts).
+  const effectiveWinReward = Math.round(winReward * (1 + garagePerk.xoBonusPct / 100) * 100) / 100;
 
   const { data, error } = await createAdminClient().rpc('settle_tictactoe', {
     p_user_id: userId,
     p_outcome: sim.outcome,
-    p_win_reward: winReward,
-    p_daily_energy_grant: Math.round(energyMax),
+    p_win_reward: effectiveWinReward,
+    p_daily_energy_grant: Math.round(effectiveEnergyMax),
     p_energy_cost: Math.round(energyCost),
     p_daily_win_reward_cap: Math.round(winCap),
   });

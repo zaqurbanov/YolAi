@@ -7,6 +7,15 @@ import { playTicTacToe, purchaseEnergy } from '@/lib/coins/games';
 import { spinWheel } from '@/lib/coins/wheel';
 import { startSignSpeedRound, submitSignSpeedRound, type SignSpeedQuestion } from '@/lib/coins/signSpeed';
 import { claimDailyChest } from '@/lib/coins/dailyQuests';
+import {
+  startExamSession,
+  submitExamSession,
+  type ExamPaymentMethod,
+} from '@/lib/exam/examSession';
+import { generateExamShareLink } from '@/lib/exam/examShare';
+import type { ExamQuestion } from '@/lib/exam/examPool';
+import { purchaseCarTier } from '@/lib/garage/garage';
+import { purchaseCustomPlate } from '@/lib/garage/plates';
 
 export interface AdWatchClaimState {
   status: 'success' | 'daily_limit_reached' | 'invalid_token' | 'too_early' | 'error';
@@ -397,6 +406,278 @@ export interface DailyChestClaimState {
   message: string;
   reward?: number;
   balance?: number;
+}
+
+// ---------------------------------------------------------------------------
+// Sınaq İmtahanı — real exam simulator (0082_exam_simulator.sql,
+// lib/exam/examSession.ts). A 15-minute, 10-question, all-topics-mixed timed
+// mock exam. Entry costs EITHER 100 coins OR 1 energy, the user's choice —
+// pure coin/energy SINK, no reward on completion (unlike the mini-games
+// above). Result can be shared via a link.
+// ---------------------------------------------------------------------------
+
+export interface StartExamState {
+  status: 'success' | 'no_energy' | 'insufficient_coins' | 'pool_too_small' | 'unavailable' | 'error';
+  message: string;
+  sessionId?: string;
+  questions?: ExamQuestion[];
+  balance?: number;
+  energy?: number;
+}
+
+export async function startExamSessionAction(paymentMethod: ExamPaymentMethod): Promise<StartExamState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { status: 'error', message: 'Giriş tələb olunur' };
+  }
+
+  if (paymentMethod !== 'coin' && paymentMethod !== 'energy') {
+    return { status: 'error', message: 'Yanlış ödəniş üsulu' };
+  }
+
+  const result = await startExamSession(user.id, paymentMethod);
+  if (!result.ok) {
+    if (result.error === 'no_energy') {
+      return { status: 'no_energy', message: 'Enerjin bitib. Sabah yenilənəcək' };
+    }
+    if (result.error === 'insufficient_coins') {
+      return { status: 'insufficient_coins', message: 'Kifayət qədər coin yoxdur' };
+    }
+    if (result.error === 'pool_too_small') {
+      return { status: 'pool_too_small', message: 'İmtahan hazırda əlçatan deyil' };
+    }
+    if (result.error === 'unavailable') {
+      return { status: 'unavailable', message: 'İmtahan hazırda əlçatan deyil' };
+    }
+    return { status: 'error', message: 'Xəta baş verdi. Bir az sonra yenidən cəhd edin' };
+  }
+
+  revalidatePath('/coin-qazan');
+  return {
+    status: 'success',
+    message: 'İmtahan başladı',
+    sessionId: result.sessionId,
+    questions: result.questions,
+    balance: result.balance,
+    energy: result.energy,
+  };
+}
+
+export interface SubmitExamState {
+  status:
+    | 'success'
+    | 'session_not_found'
+    | 'already_used'
+    | 'session_expired'
+    | 'invalid_answers'
+    | 'unavailable'
+    | 'error';
+  message: string;
+  score?: number;
+  total?: number;
+}
+
+export async function submitExamSessionAction(
+  sessionId: string,
+  answers: number[]
+): Promise<SubmitExamState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { status: 'error', message: 'Giriş tələb olunur' };
+  }
+
+  if (typeof sessionId !== 'string' || sessionId.length === 0) {
+    return { status: 'invalid_answers', message: 'Yanlış sessiya' };
+  }
+
+  if (
+    !Array.isArray(answers) ||
+    answers.length !== 10 ||
+    !answers.every((a) => Number.isInteger(a) && a >= 0 && a <= 3)
+  ) {
+    return { status: 'invalid_answers', message: 'Yanlış cavablar' };
+  }
+
+  const result = await submitExamSession(user.id, sessionId, answers);
+  if (!result.ok) {
+    if (result.error === 'session_not_found') {
+      return { status: 'session_not_found', message: 'Sessiya tapılmadı' };
+    }
+    if (result.error === 'already_used') {
+      return { status: 'already_used', message: 'Bu imtahan artıq təqdim edilib' };
+    }
+    if (result.error === 'session_expired') {
+      return { status: 'session_expired', message: 'Vaxt bitib. Yenidən başlayın' };
+    }
+    if (result.error === 'invalid_answers') {
+      return { status: 'invalid_answers', message: 'Yanlış cavablar' };
+    }
+    if (result.error === 'unavailable') {
+      return { status: 'unavailable', message: 'İmtahan hazırda əlçatan deyil' };
+    }
+    return { status: 'error', message: 'Xəta baş verdi. Bir az sonra yenidən cəhd edin' };
+  }
+
+  revalidatePath('/coin-qazan');
+  return {
+    status: 'success',
+    message: `${result.score}/${result.total} doğru`,
+    score: result.score,
+    total: result.total,
+  };
+}
+
+export interface GenerateExamShareLinkState {
+  status: 'success' | 'error';
+  message?: string;
+  url?: string;
+}
+
+export async function generateExamShareLinkAction(sessionId: string): Promise<GenerateExamShareLinkState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { status: 'error', message: 'Giriş tələb olunur' };
+  }
+
+  if (typeof sessionId !== 'string' || sessionId.length === 0) {
+    return { status: 'error', message: 'Yanlış sessiya' };
+  }
+
+  const token = await generateExamShareLink(user.id, sessionId);
+  if (!token) {
+    return { status: 'error', message: 'Paylaşım linki yaradıla bilmədi' };
+  }
+
+  return { status: 'success', url: `/share/${token}` };
+}
+
+// ---------------------------------------------------------------------------
+// Virtual Qaraj — car ownership + display, Phase 1 ONLY (0083_virtual_garage.sql,
+// lib/garage/garage.ts). Pure coin SINK: the RPC reads the real price from
+// car_tiers server-side, this action never accepts a client-supplied price.
+// No perks/plates/fines/tuning/inspection here — that's later phases.
+// ---------------------------------------------------------------------------
+export interface PurchaseCarTierState {
+  status: 'success' | 'insufficient_coins' | 'tier_not_found' | 'unavailable' | 'error';
+  message: string;
+  balance?: number;
+  tierId?: string;
+  tierName?: string;
+}
+
+export async function purchaseCarTierAction(tierId: string): Promise<PurchaseCarTierState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { status: 'error', message: 'Giriş tələb olunur' };
+  }
+
+  if (typeof tierId !== 'string' || tierId.length === 0) {
+    return { status: 'error', message: 'Yanlış avtomobil' };
+  }
+
+  const result = await purchaseCarTier(user.id, tierId);
+  if (!result.ok) {
+    if (result.error === 'insufficient_coins') {
+      return { status: 'insufficient_coins', message: 'Kifayət qədər coin yoxdur' };
+    }
+    if (result.error === 'tier_not_found') {
+      return { status: 'tier_not_found', message: 'Avtomobil tapılmadı' };
+    }
+    if (result.error === 'unavailable') {
+      return { status: 'unavailable', message: 'Qaraj hazırda əlçatan deyil' };
+    }
+    return { status: 'error', message: 'Xəta baş verdi. Bir az sonra yenidən cəhd edin' };
+  }
+
+  revalidatePath('/coin-qazan');
+  return {
+    status: 'success',
+    message: `${result.tierName} alındı!`,
+    balance: result.balance,
+    tierId: result.tierId,
+    tierName: result.tierName,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// VIP Nömrə Bazarı — VIP license plate market, Virtual Qaraj Mərhələ 3
+// (0084_vip_plate_market.sql, lib/garage/plates.ts). INDEPENDENT of Phase 1/2
+// — a plate needs no car. Pure coin SINK: the real price is resolved
+// server-side in purchaseCustomPlate, this action never accepts a
+// client-supplied price. No action for ensureFreePlate — called directly from
+// the /coin-qazan server component.
+// ---------------------------------------------------------------------------
+export interface PurchaseCustomPlateState {
+  status:
+    | 'success'
+    | 'invalid_format'
+    | 'plate_taken'
+    | 'already_have_custom_plate'
+    | 'insufficient_coins'
+    | 'unavailable'
+    | 'error';
+  message: string;
+  balance?: number;
+  plateNumber?: string;
+}
+
+export async function purchaseCustomPlateAction(plateNumber: string): Promise<PurchaseCustomPlateState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { status: 'error', message: 'Giriş tələb olunur' };
+  }
+
+  if (typeof plateNumber !== 'string' || plateNumber.trim().length === 0) {
+    return { status: 'invalid_format', message: 'Yanlış nömrə formatı' };
+  }
+
+  const result = await purchaseCustomPlate(user.id, plateNumber);
+  if (!result.ok) {
+    if (result.error === 'invalid_format') {
+      return { status: 'invalid_format', message: 'Yanlış nömrə formatı (məs. 10-AA-001)' };
+    }
+    if (result.error === 'plate_taken') {
+      return { status: 'plate_taken', message: 'Bu nömrə artıq alınıb' };
+    }
+    if (result.error === 'already_have_custom_plate') {
+      return { status: 'already_have_custom_plate', message: 'Artıq VIP nömrən var' };
+    }
+    if (result.error === 'insufficient_coins') {
+      return { status: 'insufficient_coins', message: 'Kifayət qədər coin yoxdur' };
+    }
+    if (result.error === 'unavailable') {
+      return { status: 'unavailable', message: 'Nömrə bazarı hazırda əlçatan deyil' };
+    }
+    return { status: 'error', message: 'Xəta baş verdi. Bir az sonra yenidən cəhd edin' };
+  }
+
+  revalidatePath('/coin-qazan');
+  return {
+    status: 'success',
+    message: `${result.plateNumber} alındı!`,
+    balance: result.balance,
+    plateNumber: result.plateNumber,
+  };
 }
 
 export async function claimDailyChestAction(): Promise<DailyChestClaimState> {

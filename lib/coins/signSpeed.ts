@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { isMissingRelationError } from '@/lib/supabase/missingRelation';
 import { getSignPool, type SignPoolEntry } from '@/lib/coins/signPool';
 import { GAME_DAILY_ENERGY_KEY, DEFAULT_GAME_DAILY_ENERGY } from '@/lib/coins/games';
+import { getEffectiveEnergyGrant } from '@/lib/garage/perks';
 import { logError } from '@/lib/logging/logError';
 
 // "Nişan Sürəti" (sign speed quiz) — see docs/sign-speed-game-plan.md.
@@ -122,10 +123,11 @@ export async function startSignSpeedRound(userId: string): Promise<SignSpeedStar
     });
   }
 
-  const [dailyEnergyGrant, energyCost] = await Promise.all([
+  const [baseDailyEnergyGrant, energyCost] = await Promise.all([
     readNumericSetting(GAME_DAILY_ENERGY_KEY, DEFAULT_GAME_DAILY_ENERGY),
     readNumericSetting(SIGN_SPEED_ENERGY_COST_KEY, DEFAULT_SIGN_SPEED_ENERGY_COST),
   ]);
+  const dailyEnergyGrant = await getEffectiveEnergyGrant(userId, baseDailyEnergyGrant);
 
   const { data, error } = await createAdminClient().rpc('start_sign_speed_round', {
     p_user_id: userId,

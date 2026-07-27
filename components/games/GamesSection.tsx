@@ -7,6 +7,7 @@ import AnimatedNumber from '@/components/AnimatedNumber';
 import { purchaseEnergyAction } from '@/app/coin-qazan/actions';
 import TicTacToeGame from './TicTacToeGame';
 import SignSpeedGame from './SignSpeedGame';
+import ExamSimulatorGame from './ExamSimulatorGame';
 
 interface GamesSectionProps {
   initialBalance: number;
@@ -18,7 +19,7 @@ interface GamesSectionProps {
   energyPurchaseEnergyAmount: number;
 }
 
-type ActiveGame = 'xo' | 'sign-speed';
+type ActiveGame = 'xo' | 'sign-speed' | 'exam';
 
 // The games section owns the live coin balance + shared energy meter (XO and
 // Nişan Sürəti draw from ONE daily energy pool, per lib/coins/games.ts's
@@ -119,7 +120,7 @@ export default function GamesSection({
         <div>
           <h2 className="text-headline-md text-[18px]">Oyunlar</h2>
           <p className="text-legal-citation text-on-surface-variant">
-            XO və Nişan Sürəti · bir enerji hovuzu
+            XO, Nişan Sürəti, Sınaq İmtahanı · bir enerji hovuzu
           </p>
         </div>
       </div>
@@ -177,6 +178,10 @@ export default function GamesSection({
               Nişan Sürəti
               <Tabs.Indicator />
             </Tabs.Tab>
+            <Tabs.Tab id="exam">
+              Sınaq İmtahanı
+              <Tabs.Indicator />
+            </Tabs.Tab>
           </Tabs.List>
         </Tabs.ListContainer>
 
@@ -201,6 +206,12 @@ export default function GamesSection({
         <Tabs.Panel id="sign-speed" className="pt-4">
           <div className="mx-auto w-full max-w-sm">
             <SignSpeedGame energy={energy} onSettled={handleSettled} />
+          </div>
+        </Tabs.Panel>
+
+        <Tabs.Panel id="exam" className="pt-4">
+          <div className="mx-auto w-full max-w-sm">
+            <ExamSimulatorGame balance={balance} energy={energy} onBalanceChange={handleSettled} />
           </div>
         </Tabs.Panel>
       </Tabs>

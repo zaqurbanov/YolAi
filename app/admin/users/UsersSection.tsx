@@ -9,13 +9,19 @@ import GlobalRateLimitControl from './GlobalRateLimitControl';
 import GlobalCoinPriceControl from './GlobalCoinPriceControl';
 import GlobalDailyCoinGrantControl from './GlobalDailyCoinGrantControl';
 import DailyChestRewardControl from './DailyChestRewardControl';
+import QuizRewardControl from './QuizRewardControl';
 import BackgroundImageControl from './BackgroundImageControl';
 import LogoControl from './LogoControl';
 import SendPushReminderControl from './SendPushReminderControl';
 import SendBroadcastNotificationControl from './SendBroadcastNotificationControl';
 import EmbeddingModelControl from './EmbeddingModelControl';
 import LessonEconomyControl from './LessonEconomyControl';
+import GameRewardsControl from './GameRewardsControl';
+import GaragePerksControl from './GaragePerksControl';
 import CategoryContentControl from './CategoryContentControl';
+import CarTiersControl from './CarTiersControl';
+import VipPlatePriceControl from './VipPlatePriceControl';
+import PlateModerationControl from './PlateModerationControl';
 
 export default async function UsersSection() {
   const auth = await requireAdmin();
@@ -34,6 +40,7 @@ export default async function UsersSection() {
         <GlobalRateLimitControl />
         <GlobalDailyCoinGrantControl />
         <DailyChestRewardControl />
+        <QuizRewardControl />
         <GlobalCoinPriceControl />
         <BackgroundImageControl />
         <LogoControl />
@@ -41,7 +48,12 @@ export default async function UsersSection() {
         <SendBroadcastNotificationControl />
         <EmbeddingModelControl />
         <LessonEconomyControl />
+        <GameRewardsControl />
+        <GaragePerksControl />
         <CategoryContentControl />
+        <CarTiersControl />
+        <VipPlatePriceControl />
+        <PlateModerationControl />
       </div>
 
       <div className="glass-panel rounded-2xl overflow-hidden overflow-x-auto">

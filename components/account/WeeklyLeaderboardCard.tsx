@@ -61,7 +61,20 @@ export default function WeeklyLeaderboardCard({ leaderboard }: WeeklyLeaderboard
                 {entry.rank}
               </span>
               <span className="min-w-0 flex-1 truncate text-body-md font-medium text-on-surface">
+                {entry.carEmoji && <span className="mr-1">{entry.carEmoji}</span>}
                 {entry.name}
+                {entry.plateNumber && (
+                  <span
+                    className={
+                      'ml-2 text-legal-citation rounded-md border px-1.5 py-0.5 align-middle tracking-wide ' +
+                      (entry.isCustomPlate
+                        ? 'border-safety-yellow/40 bg-safety-yellow/15 text-safety-yellow'
+                        : 'border-outline-variant/30 bg-outline-variant/10 text-on-surface-variant')
+                    }
+                  >
+                    {entry.plateNumber}
+                  </span>
+                )}
                 {entry.isMe && (
                   <span className="ml-2 text-legal-citation rounded-full bg-primary/15 px-2 py-0.5 align-middle text-primary">
                     sən
