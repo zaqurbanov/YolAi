@@ -39,12 +39,14 @@ import Footer from '@/components/Footer';
 import { ArrowLeftIcon, RulesIcon, CoinIcon } from '@/components/icons';
 import DesignSwitch from '@/components/design3d/DesignSwitch';
 import CoinQazanPage3D from '@/components/design3d/CoinQazanPage3D';
+import { getServerDesign } from '@/lib/design/getServerDesign';
 
 export const metadata: Metadata = {
   title: 'Coin Qazan',
 };
 
 export default async function CoinQazanPage() {
+  const design = await getServerDesign();
   const supabase = await createClient();
   const {
     data: { user },
@@ -177,6 +179,7 @@ export default async function CoinQazanPage() {
 
   return (
     <DesignSwitch
+      design={design}
       simple={
         <div className="space-y-6 px-4 pt-8 pb-16 md:px-8">
           <div>

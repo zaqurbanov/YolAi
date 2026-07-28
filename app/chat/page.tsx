@@ -2,6 +2,7 @@ import { isVisionAvailable } from '@/lib/llm';
 import ChatClient from './ChatClient';
 import DesignSwitch from '@/components/design3d/DesignSwitch';
 import ChatHud from '@/components/design3d/ChatHud';
+import { getServerDesign } from '@/lib/design/getServerDesign';
 
 // Id-less "new chat" landing state. See app/chat/[id]/page.tsx for the
 // existing-conversation route and ChatClient's header comment for how the
@@ -19,6 +20,7 @@ export default async function ChatPage({
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const { q } = await searchParams;
+  const design = await getServerDesign();
   const chatClient = (
     <ChatClient
       conversationId={null}
@@ -26,5 +28,5 @@ export default async function ChatPage({
       initialInput={typeof q === 'string' ? q : undefined}
     />
   );
-  return <DesignSwitch simple={chatClient} threeD={<ChatHud>{chatClient}</ChatHud>} />;
+  return <DesignSwitch design={design} simple={chatClient} threeD={<ChatHud>{chatClient}</ChatHud>} />;
 }

@@ -8,6 +8,7 @@ import { getCourses } from '@/lib/quiz/lessons';
 import { getCoinBalanceStatus } from '@/lib/chat/coins';
 import DesignSwitch from '@/components/design3d/DesignSwitch';
 import OyrenmePage3D from '@/components/design3d/OyrenmePage3D';
+import { getServerDesign } from '@/lib/design/getServerDesign';
 import CourseGrid from './CourseGrid';
 
 export const metadata: Metadata = {
@@ -15,6 +16,7 @@ export const metadata: Metadata = {
 };
 
 export default async function OyrenmePage() {
+  const design = await getServerDesign();
   const supabase = await createClient();
   const {
     data: { user },
@@ -83,6 +85,7 @@ export default async function OyrenmePage() {
 
   return (
     <DesignSwitch
+      design={design}
       simple={
         <div id="top" className="flex flex-1 flex-col">
           <section className="relative overflow-hidden px-6 py-16 lg:py-20">

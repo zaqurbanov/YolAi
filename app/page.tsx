@@ -11,6 +11,7 @@ import { getHomeBackgroundImageUrl } from '@/lib/content/homeBackground';
 import { getRegisteredDriverCount, getRecentDriverInitials } from '@/lib/content/getRegisteredDriverCount';
 import DesignSwitch from '@/components/design3d/DesignSwitch';
 import HomePage3D from '@/components/design3d/HomePage3D';
+import { getServerDesign } from '@/lib/design/getServerDesign';
 
 // Statically rendered with hourly ISR rather than per-request: the three
 // server reads below (background image, registered-driver count, recent
@@ -109,8 +110,9 @@ const COIN_EARN = [
 ];
 
 export default async function Home() {
-  const [backgroundImageUrl, driverCount, driverInitials, categories, questionCounts] =
+  const [design, backgroundImageUrl, driverCount, driverInitials, categories, questionCounts] =
     await Promise.all([
+      getServerDesign(),
       getHomeBackgroundImageUrl().then((url) => url ?? '/bg.png'),
       getRegisteredDriverCount(),
       getRecentDriverInitials(),
@@ -140,6 +142,7 @@ export default async function Home() {
   // only page with a second design in this phase.
   return (
     <DesignSwitch
+      design={design}
       simple={
     <div id="top" className="flex flex-1 flex-col">
       <section className="relative flex min-h-[640px] flex-col items-center justify-center gap-8 overflow-hidden px-6 py-20 text-center lg:min-h-[720px]">

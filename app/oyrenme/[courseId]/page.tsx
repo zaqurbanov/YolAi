@@ -10,6 +10,7 @@ import { canAccessCourse } from '@/lib/coins/lessonUnlock';
 import { getCourses, getCourseTopics } from '@/lib/quiz/lessons';
 import DesignSwitch from '@/components/design3d/DesignSwitch';
 import CoursePage3D from '@/components/design3d/CoursePage3D';
+import { getServerDesign } from '@/lib/design/getServerDesign';
 
 export const metadata: Metadata = {
   title: 'Kurs',
@@ -23,6 +24,7 @@ export const metadata: Metadata = {
 // params is a Promise in Next.js 16 (see
 // node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/page.md).
 export default async function CoursePage({ params }: { params: Promise<{ courseId: string }> }) {
+  const design = await getServerDesign();
   const supabase = await createClient();
   const {
     data: { user },
@@ -42,6 +44,7 @@ export default async function CoursePage({ params }: { params: Promise<{ courseI
     // is where a locked course is actually purchasable.
     return (
       <DesignSwitch
+        design={design}
         simple={
           <div className="flex flex-1 flex-col">
             <section className="px-6 py-16 lg:py-20">
@@ -104,6 +107,7 @@ export default async function CoursePage({ params }: { params: Promise<{ courseI
 
   return (
     <DesignSwitch
+      design={design}
       simple={
         <div id="top" className="flex flex-1 flex-col">
       <section className="relative overflow-hidden px-6 pt-10 pb-6">

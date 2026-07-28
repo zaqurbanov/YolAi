@@ -1,24 +1,22 @@
-'use client';
-
 import type { ReactNode } from 'react';
-import { useAppDesign } from '@/lib/design/useAppDesign';
+import type { Design } from '@/lib/design/constants';
 
 interface DesignSwitchProps {
-  /** Existing, unmodified "sadə dizayn" tree — also the SSR/first-paint default. */
+  /**
+   * Resolved server-side by the calling page via lib/design/getServerDesign
+   * (reads the `yol-design` cookie) BEFORE either tree below is chosen — so
+   * the correct tree is what the server sends on first paint. No client
+   * hook, no swap-after-mount, no flash. Toggling designs (DesignToggle ->
+   * useAppDesign.setDesign3D) writes the cookie and calls router.refresh(),
+   * which re-runs the calling page and re-resolves this value.
+   */
+  design: Design;
+  /** Existing, unmodified "sadə dizayn" tree. */
   simple: ReactNode;
-  /** New "Cyber-Circuit Legal" tree, shown once the client resolves the stored choice as 3D. */
+  /** "Cyber-Circuit Legal" tree — the default for first-time visitors. */
   threeD: ReactNode;
 }
 
-// Chooses between two ALREADY-RENDERED element trees passed down from the
-// server component (app/page.tsx) — it never re-fetches or re-derives data,
-// it only decides which tree is mounted. Always renders `simple` until the
-// client has resolved the real `data-design` attribute (mirrors
-// ThemeToggle/useDarkMode's "undecided-until-mounted" pattern elsewhere in
-// this app), so first paint on the server and first paint on the client
-// always agree — no hydration mismatch, at the cost of one swap-after-mount
-// frame for users who previously opted into the 3D design.
-export default function DesignSwitch({ simple, threeD }: DesignSwitchProps) {
-  const { is3D } = useAppDesign();
-  return <>{is3D ? threeD : simple}</>;
+export default function DesignSwitch({ design, simple, threeD }: DesignSwitchProps) {
+  return <>{design === '3d' ? threeD : simple}</>;
 }

@@ -1,8 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { DESIGN_COOKIE_NAME } from './constants';
 
-const DESIGN_KEY = 'yol-design';
+const DESIGN_KEY = DESIGN_COOKIE_NAME;
 const DESIGN_CHANGED_EVENT = 'yol-design-changed';
 
 // Second, independent visual-design toggle — separate from useDarkMode (which
@@ -16,6 +18,7 @@ const DESIGN_CHANGED_EVENT = 'yol-design-changed';
 // sync without a page reload) so the two toggles behave identically and don't
 // interfere with each other; they read/write different attributes and keys.
 export function useAppDesign() {
+  const router = useRouter();
   const [is3D, setIs3D] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -30,10 +33,22 @@ export function useAppDesign() {
   }, []);
 
   const setDesign3D = useCallback((next: boolean) => {
-    document.documentElement.setAttribute('data-design', next ? '3d' : 'simple');
-    localStorage.setItem(DESIGN_KEY, next ? '3d' : 'simple');
+    const value = next ? '3d' : 'simple';
+    // Cookie is the source of truth every one of the 8 pages reads
+    // server-side (lib/design/getServerDesign.ts) to decide which tree to
+    // render — this is what actually makes the switch "stick" across
+    // reloads/navigations with no flash. router.refresh() below re-runs the
+    // current page's server component so it picks up the new cookie value
+    // immediately, without a full document reload.
+    document.cookie = `${DESIGN_COOKIE_NAME}=${value}; path=/; max-age=31536000; samesite=lax`;
+    // Kept in sync for the pre-paint inline script in app/layout.tsx, which
+    // runs before any request round-trip can happen and can't read a cookie
+    // set this same tick reliably faster than it can read localStorage.
+    localStorage.setItem(DESIGN_KEY, value);
+    document.documentElement.setAttribute('data-design', value);
     setIs3D(next);
     window.dispatchEvent(new CustomEvent(DESIGN_CHANGED_EVENT, { detail: { is3D: next } }));
+    router.refresh();
 
     // The 3D design is dark-only by product decision (no light variant was
     // ever designed) — switching into it forces dark mode on, without
@@ -53,7 +68,7 @@ export function useAppDesign() {
       document.documentElement.classList.toggle('dark', restoredDark);
       window.dispatchEvent(new CustomEvent('yol-theme-changed', { detail: { isDark: restoredDark } }));
     }
-  }, []);
+  }, [router]);
 
   return { is3D, setDesign3D };
 }

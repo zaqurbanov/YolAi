@@ -10,6 +10,7 @@ import { getTopicForReading } from '@/lib/quiz/topicTest';
 import { getCoinBalanceStatus } from '@/lib/chat/coins';
 import DesignSwitch from '@/components/design3d/DesignSwitch';
 import TopicPage3D from '@/components/design3d/TopicPage3D';
+import { getServerDesign } from '@/lib/design/getServerDesign';
 import TopicTest from './TopicTest';
 
 export const metadata: Metadata = {
@@ -29,6 +30,7 @@ export default async function TopicPage({
 }: {
   params: Promise<{ courseId: string; topicId: string }>;
 }) {
+  const design = await getServerDesign();
   const supabase = await createClient();
   const {
     data: { user },
@@ -105,6 +107,7 @@ export default async function TopicPage({
 
   return (
     <DesignSwitch
+      design={design}
       simple={
         <div id="top" className="flex flex-1 flex-col">
           <section className="relative overflow-hidden px-6 pt-10 pb-6">

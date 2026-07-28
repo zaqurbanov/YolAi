@@ -24,6 +24,7 @@ import PushNotificationOptIn from '@/components/account/PushNotificationOptIn';
 import SecurityQuickView from '@/components/account/SecurityQuickView';
 import DesignSwitch from '@/components/design3d/DesignSwitch';
 import AccountPage3D from '@/components/design3d/AccountPage3D';
+import { getServerDesign } from '@/lib/design/getServerDesign';
 
 export const metadata: Metadata = {
   title: 'Hesab',
@@ -40,6 +41,7 @@ function initialsFrom(name: string | null, email: string): string {
 }
 
 export default async function AccountPage() {
+  const design = await getServerDesign();
   const supabase = await createClient();
   const {
     data: { user },
@@ -125,6 +127,7 @@ export default async function AccountPage() {
 
   return (
     <DesignSwitch
+      design={design}
       simple={
         <div className="space-y-8 px-4 pt-8 pb-16 md:px-8">
           <section className="glass-panel relative grid grid-cols-1 gap-6 overflow-hidden rounded-3xl p-6 md:grid-cols-12 md:items-center md:gap-8 md:p-8">

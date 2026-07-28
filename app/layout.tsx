@@ -77,9 +77,16 @@ export const viewport: Viewport = {
 // the user's choice for "sadə dizayn" and is honored again the moment they
 // switch back (see lib/design/useAppDesign.ts / lib/theme/useDarkMode.ts,
 // which enforce this same rule at runtime after mount, not just on load).
-// Default is dark (this app's brand default per the design skill) when no
-// stored theme preference exists yet, same as before this change.
-const THEME_AND_DESIGN_INIT_SCRIPT = `(function(){try{var design=localStorage.getItem('yol-design')==='3d'?'3d':'simple';document.documentElement.setAttribute('data-design',design);var t=localStorage.getItem('yol-theme');var dark=design==='3d'?true:(t!=='light');document.documentElement.classList.toggle('dark',dark);}catch(e){document.documentElement.setAttribute('data-design','simple');document.documentElement.classList.add('dark');}})();`;
+//
+// Design resolution here reads the SAME `yol-design` cookie every page's
+// server component reads via lib/design/getServerDesign.ts (so the
+// `data-design` attribute this script sets pre-paint always agrees with
+// whichever tree the server actually rendered — no hydration mismatch),
+// falling back to localStorage (kept in sync by
+// lib/design/useAppDesign.ts's setDesign3D) and finally to '3d': first-time
+// visitors with neither a cookie nor localStorage entry get the newer
+// "Cyber-Circuit Legal" design by default (product decision, 2026-07-28).
+const THEME_AND_DESIGN_INIT_SCRIPT = `(function(){try{var m=document.cookie.match(/(?:^|; )yol-design=([^;]+)/);var cookieVal=m?decodeURIComponent(m[1]):null;var design=(cookieVal==='simple'||cookieVal==='3d')?cookieVal:(localStorage.getItem('yol-design')==='simple'?'simple':'3d');document.documentElement.setAttribute('data-design',design);var t=localStorage.getItem('yol-theme');var dark=design==='3d'?true:(t!=='light');document.documentElement.classList.toggle('dark',dark);}catch(e){document.documentElement.setAttribute('data-design','3d');document.documentElement.classList.add('dark');}})();`;
 
 export default function RootLayout({
   children,

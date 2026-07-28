@@ -2,6 +2,7 @@ import { isVisionAvailable } from '@/lib/llm';
 import ChatClient from '../ChatClient';
 import DesignSwitch from '@/components/design3d/DesignSwitch';
 import ChatHud from '@/components/design3d/ChatHud';
+import { getServerDesign } from '@/lib/design/getServerDesign';
 
 // key={id} forces a full remount (fresh history fetch, fresh transport ref)
 // whenever the user navigates between two *different* existing
@@ -13,7 +14,8 @@ import ChatHud from '@/components/design3d/ChatHud';
 // app/chat/page.tsx — see that file's comment.
 export default async function ChatConversationPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const design = await getServerDesign();
 
   const chatClient = <ChatClient key={id} conversationId={id} visionAvailable={isVisionAvailable()} />;
-  return <DesignSwitch simple={chatClient} threeD={<ChatHud>{chatClient}</ChatHud>} />;
+  return <DesignSwitch design={design} simple={chatClient} threeD={<ChatHud>{chatClient}</ChatHud>} />;
 }
