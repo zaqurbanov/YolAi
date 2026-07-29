@@ -362,6 +362,14 @@ export function LockIcon(props: IconProps) {
   );
 }
 
+export function PlayIcon(props: IconProps) {
+  return (
+    <svg {...base(props)} fill="currentColor" stroke="none">
+      <path d="M7 4.5v15l13-7.5-13-7.5Z" />
+    </svg>
+  );
+}
+
 export function DownloadIcon(props: IconProps) {
   return (
     <svg {...base(props)}>
@@ -390,6 +398,24 @@ export function ImageIcon(props: IconProps) {
   );
 }
 
+export function PaperclipIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M8.5 12.5 15 6a3 3 0 0 1 4.24 4.24l-8.13 8.13a5 5 0 0 1-7.07-7.07l7.78-7.78" />
+    </svg>
+  );
+}
+
+export function MicIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="9" y="3" width="6" height="11" rx="3" />
+      <path d="M5 11a7 7 0 0 0 14 0" />
+      <path d="M12 18v3M9 21h6" />
+    </svg>
+  );
+}
+
 export function CloseIcon(props: IconProps) {
   return (
     <svg {...base(props)}>
@@ -411,6 +437,18 @@ export function CubeIcon(props: IconProps) {
 }
 
 // Deliberate exception to base(): brand mark requires the official 4-color "G", not currentColor stroke.
+export function GavelIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="m14.5 12.5-8 8" />
+      <path d="m17.5 5.5 3 3-3.5 3.5-3-3z" />
+      <path d="m11 12 6-6" />
+      <path d="M3 21h9" />
+      <path d="m5.5 8.5 3 3-3.5 3.5-3-3z" />
+    </svg>
+  );
+}
+
 export function GoogleIcon(props: IconProps) {
   return (
     <svg viewBox="0 0 48 48" width={18} height={18} {...props}>

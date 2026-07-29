@@ -10,6 +10,7 @@ import DesignSwitch from '@/components/design3d/DesignSwitch';
 import OyrenmePage3D from '@/components/design3d/OyrenmePage3D';
 import { getServerDesign } from '@/lib/design/getServerDesign';
 import CourseGrid from './CourseGrid';
+import MobileOyrenme from '@/components/oyrenme/MobileOyrenme';
 
 export const metadata: Metadata = {
   title: 'Sürücülük vəsiqəsini al',
@@ -87,6 +88,21 @@ export default async function OyrenmePage() {
     <DesignSwitch
       design={design}
       simple={
+        <>
+          {/* Mobile Academy shell (see legaldrive-design skill, "Academy
+              (Öyrənmə) page — mobile") — CSS-only split via md:hidden, no
+              separate route. Desktop tree below is untouched, just wrapped. */}
+          <div className="md:hidden">
+            <MobileOyrenme
+              courses={courses}
+              balance={balance}
+              overallPct={overallPct}
+              totalTopics={totalTopics}
+              passedTopics={passedTopics}
+            />
+          </div>
+
+          <div className="hidden md:contents">
         <div id="top" className="flex flex-1 flex-col">
           <section className="relative overflow-hidden px-6 py-16 lg:py-20">
             <div className="absolute inset-0 z-0 bg-gradient-to-b from-primary/10 via-transparent to-transparent" />
@@ -136,6 +152,8 @@ export default async function OyrenmePage() {
 
           <Footer />
         </div>
+          </div>
+        </>
       }
       threeD={
         <OyrenmePage3D

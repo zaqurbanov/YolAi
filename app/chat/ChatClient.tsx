@@ -27,12 +27,14 @@ import { formatAzTime } from '@/lib/format/date';
 import { formatCoinBalance } from '@/lib/format/coins';
 import { ADMIN_CONTACT_EMAIL } from '@/lib/contact';
 import { reportClientError } from '@/app/actions/reportClientError';
+import MobileChat from './MobileChat';
 
 interface Citation {
   document_id: string;
   title: string;
   page: number | null;
   article_label: string | null;
+  excerpt?: string;
 }
 
 interface HistoryMessage {
@@ -1216,8 +1218,44 @@ export default function ChatClient({
     };
   }, [logModalMessageId]);
 
+  // Mobile-only tree (below) receives the same messages/coins/input state as
+  // props rather than re-deriving them — see MobileChat.tsx's header comment.
+  // Citations live on message.metadata in the shape MobileChat's Citation type
+  // expects, so no reshaping beyond this thin map is needed.
+  const mobileMessages = messages.map((m) => ({
+    id: m.id,
+    role: m.role as 'user' | 'assistant',
+    parts: m.parts,
+    citations: (m.metadata as ChatMessageMetadata | undefined)?.citations,
+  }));
+  const isStreamingId =
+    isBusy && messages.length > 0 && messages[messages.length - 1].role === 'assistant'
+      ? messages[messages.length - 1].id
+      : null;
+
   return (
-    <div className="chat-hud-shell flex flex-1 flex-col min-h-0">
+    <>
+      <div className="md:hidden h-full">
+        <MobileChat
+          conversationTitle={conversationTitle}
+          coins={coins}
+          messages={mobileMessages}
+          timestampFor={timestampFor}
+          isBusy={isBusy}
+          isStreamingId={isStreamingId}
+          historyLoaded={historyLoaded}
+          input={input}
+          onInputChange={setInput}
+          onSubmit={handleSubmit}
+          visionAvailable={visionAvailable}
+          attachedPreviewUrl={attachedPreviewUrl}
+          onAttachClick={() => fileInputRef.current?.click()}
+          onClearAttachedFile={clearAttachedFile}
+          isResizingImage={isResizingImage}
+        />
+      </div>
+
+      <div className="hidden md:flex flex-1 flex-col min-h-0 chat-hud-shell">
       <header className="glass-panel print:hidden chat-hud-col flex items-center justify-between gap-4 px-4 py-3 sm:px-8">
         <div className="flex items-center gap-3 min-w-0">
           <Badge.Anchor>
@@ -1618,6 +1656,7 @@ export default function ChatClient({
           </Modal.Dialog>
         </Modal.Container>
       </Modal.Backdrop>
-    </div>
+      </div>
+    </>
   );
 }

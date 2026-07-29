@@ -1,7 +1,6 @@
 'use client';
 
 import { Suspense, useActionState } from 'react';
-import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { TextField, Label, Input, Button, Alert, Separator } from '@heroui/react';
 import { login, type AuthFormState } from '../actions';
@@ -18,6 +17,7 @@ function LoginForm() {
   const [state, formAction, pending] = useActionState(login, initialState);
   const searchParams = useSearchParams();
   const error = state?.error ?? searchParams.get('error');
+  const ref = searchParams.get('ref');
 
   return (
     <div className="flex min-h-full w-full items-center justify-center px-4 py-16">
@@ -30,7 +30,7 @@ function LoginForm() {
         </div>
 
         <div className="glass-panel rounded-2xl p-6 sm:p-8">
-          <GoogleSignInButton />
+          <GoogleSignInButton referralCode={ref} />
 
           <div className="my-6 flex items-center gap-3">
             <Separator className="flex-1" />
@@ -67,13 +67,6 @@ function LoginForm() {
             </Button>
           </form>
         </div>
-
-        <p className="mt-6 text-center text-sm text-on-surface-variant">
-          Hesabın yoxdur?{' '}
-          <Link href="/signup" className="font-medium text-primary hover:underline">
-            Qeydiyyatdan keç
-          </Link>
-        </p>
       </div>
     </div>
   );

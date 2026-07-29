@@ -61,6 +61,7 @@ const nextConfig: NextConfig = {
         destination: "/faq/istifade-qaydalari",
         permanent: true,
       },
+      { source: "/signup", destination: "/login", permanent: true },
     ];
   },
 };

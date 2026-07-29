@@ -11,6 +11,8 @@ import { getCourses, getCourseTopics } from '@/lib/quiz/lessons';
 import DesignSwitch from '@/components/design3d/DesignSwitch';
 import CoursePage3D from '@/components/design3d/CoursePage3D';
 import { getServerDesign } from '@/lib/design/getServerDesign';
+import { getCoinBalanceStatus } from '@/lib/chat/coins';
+import MobileCoursePage from '@/components/oyrenme/MobileCoursePage';
 
 export const metadata: Metadata = {
   title: 'Kurs',
@@ -75,13 +77,19 @@ export default async function CoursePage({ params }: { params: Promise<{ courseI
   // getCourses() rather than a fresh lesson_courses query: it is the existing
   // read for the same rows (title/description) and keeps every course read on
   // this feature going through lib/quiz/lessons.
-  const [topics, courses] = await Promise.all([
+  const [topics, courses, balance] = await Promise.all([
     getCourseTopics(courseId, user.id),
     getCourses(user.id),
+    getCoinBalanceStatus(user.id)
+      .then((s) => s.balance)
+      .catch(() => null),
   ]);
   const course = courses.find((c) => c.id === courseId);
   const passedCount = topics.filter((t) => t.passed).length;
   const progressPct = topics.length > 0 ? Math.round((passedCount / topics.length) * 100) : 0;
+  // "Sizin üçün seçilənlər" mobile rail — same getCourses() read as above,
+  // just the current course excluded, not a second content source.
+  const otherCourses = courses.filter((c) => c.id !== courseId);
 
   // Same topic rows, restyled — built once and handed to the 3D tree as plain
   // data (CoursePage3D owns the HUD markup, no JSX duplicated as a prop).
@@ -109,6 +117,27 @@ export default async function CoursePage({ params }: { params: Promise<{ courseI
     <DesignSwitch
       design={design}
       simple={
+        <>
+          {/* Mobile course-detail shell (see legaldrive-design skill,
+              "Academy (Öyrənmə) page — mobile") — CSS-only split via
+              md:hidden. Desktop tree below is untouched, just wrapped. */}
+          <div className="md:hidden">
+            <MobileCoursePage
+              courseId={courseId}
+              title={course?.title ?? 'Kurs'}
+              description={
+                course?.description ??
+                'Mövzuları ardıcıllıqla oxuyun və hər mövzunun sonundakı testi keçin. Növbəti mövzu ancaq əvvəlkini keçdikdən sonra açılır.'
+              }
+              topics={topics}
+              passedCount={passedCount}
+              progressPct={progressPct}
+              balance={balance}
+              otherCourses={otherCourses}
+            />
+          </div>
+
+          <div className="hidden md:contents">
         <div id="top" className="flex flex-1 flex-col">
       <section className="relative overflow-hidden px-6 pt-10 pb-6">
         <div className="absolute inset-0 z-0 bg-gradient-to-b from-primary/10 via-transparent to-transparent" />
@@ -255,6 +284,8 @@ export default async function CoursePage({ params }: { params: Promise<{ courseI
 
       <Footer />
         </div>
+          </div>
+        </>
       }
       threeD={
         <CoursePage3D

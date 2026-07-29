@@ -382,6 +382,16 @@ html:not(.dark) .glow-primary {
   text-transform: uppercase;
 }
 
+/* Mobile bottom tab bar has 5 items in ~390px — the default 12px
+   .text-legal-citation size (used elsewhere for citations, where there's
+   room) makes labels overflow the nav's width budget. Scoped override, not
+   a change to the shared class, so citations elsewhere are untouched. */
+.mobile-tab-bar .text-legal-citation {
+  font-size: 10px;
+  line-height: 12px;
+  letter-spacing: 0.02em;
+}
+
 .text-body-lg {
   font-family: var(--font-inter);
   font-weight: 400;

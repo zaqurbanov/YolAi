@@ -14,16 +14,16 @@ export default function ReferralCard({ code, bonusAmount }: ReferralCardProps) {
   // Relative path renders identically on server and first client paint
   // (avoids a hydration mismatch from reading window.location during
   // render); swapped for the real absolute link once mounted.
-  const [displayLink, setDisplayLink] = useState(`/signup?ref=${code}`);
+  const [displayLink, setDisplayLink] = useState(`/login?ref=${code}`);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setDisplayLink(`${window.location.origin}/signup?ref=${code}`);
+    setDisplayLink(`${window.location.origin}/login?ref=${code}`);
   }, [code]);
 
   async function handleCopy() {
     try {
-      await navigator.clipboard.writeText(`${window.location.origin}/signup?ref=${code}`);
+      await navigator.clipboard.writeText(`${window.location.origin}/login?ref=${code}`);
       setCopied(true);
       toast.success('Link kopyalandı');
       setTimeout(() => setCopied(false), 1500);

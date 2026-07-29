@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
+import { usePathname } from 'next/navigation';
 import { Avatar } from '@heroui/react';
 import { SidebarToggleButton } from '@/components/SidebarToggleButton';
 import { BackButton } from '@/components/BackButton';
@@ -33,10 +34,18 @@ function initialsFrom(name: string | null | undefined, email: string | null): st
 
 export default function NavBar() {
   const nav = useNavState();
+  const pathname = usePathname();
   const logoUrl = nav?.logoUrl ?? '/logo.png';
+  // MobileHome (`/`) and MobileChat (`/chat`, `/chat/[id]`) each render their
+  // own sticky header at mobile widths, so the global NavBar would
+  // double-render chrome there — hide it on those routes at mobile widths
+  // only; every other route/breakpoint is unchanged.
+  const hasOwnMobileHeader = pathname === '/' || pathname.startsWith('/chat');
 
   return (
-    <nav className="hud-navbar border-b px-3 py-3 flex items-center justify-between gap-2 sm:px-6">
+    <nav
+      className={`hud-navbar border-b px-3 py-3 items-center justify-between gap-2 sm:px-6 ${hasOwnMobileHeader ? 'hidden md:flex' : 'flex'}`}
+    >
       <div className="flex min-w-0 items-center gap-2">
         <BackButton />
         <SidebarToggleButton />

@@ -106,14 +106,9 @@ export default function NavBarMenu({ hasUser, isAdmin }: NavBarMenuProps) {
                 </form>
               </>
             ) : (
-              <>
-                <Link href="/login" className={ghostItem} onClick={closeMenu}>
-                  Daxil ol
-                </Link>
-                <Link href="/signup" className={primaryItem} onClick={closeMenu}>
-                  Qeydiyyat
-                </Link>
-              </>
+              <Link href="/login" className={primaryItem} onClick={closeMenu}>
+                Daxil ol
+              </Link>
             )}
           </div>
         </Popover.Dialog>

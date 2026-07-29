@@ -96,20 +96,12 @@ export default function Sidebar() {
               </button>
             </form>
           ) : (
-            <>
-              <Link
-                href="/login"
-                className="rounded-lg px-3 py-2 text-sm font-medium text-muted hover:bg-surface-hover hover:text-foreground"
-              >
-                Daxil ol
-              </Link>
-              <Link
-                href="/signup"
-                className="rounded-lg px-3 py-2 text-sm font-medium text-muted hover:bg-surface-hover hover:text-foreground"
-              >
-                Qeydiyyat
-              </Link>
-            </>
+            <Link
+              href="/login"
+              className="rounded-lg px-3 py-2 text-sm font-medium text-muted hover:bg-surface-hover hover:text-foreground"
+            >
+              Daxil ol
+            </Link>
           ))}
       </div>
 

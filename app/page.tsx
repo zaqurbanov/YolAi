@@ -5,21 +5,34 @@ import { Card } from '@heroui/react';
 import { CategoryCard } from '@/components/CategoryCard';
 import ScrollReveal from '@/components/ScrollReveal';
 import Footer from '@/components/Footer';
-import { CheckIcon, FineIcon, SparkleIcon, ChatIcon, RulesIcon, CoinIcon, TrophyIcon } from '@/components/icons';
+import { CheckIcon, FineIcon, SparkleIcon, ChatIcon, RulesIcon, CoinIcon, TrophyIcon, SignIcon, ShieldIcon } from '@/components/icons';
 import { getCategoryContent, getCategoryQuestionCounts } from '@/lib/content/categoryContent';
 import { getHomeBackgroundImageUrl } from '@/lib/content/homeBackground';
 import { getRegisteredDriverCount, getRecentDriverInitials } from '@/lib/content/getRegisteredDriverCount';
 import DesignSwitch from '@/components/design3d/DesignSwitch';
 import HomePage3D from '@/components/design3d/HomePage3D';
 import { getServerDesign } from '@/lib/design/getServerDesign';
+import { createClient } from '@/lib/supabase/server';
+import { getCoinBalanceStatus } from '@/lib/chat/coins';
+import { getCourses } from '@/lib/quiz/lessons';
+import { getStreakStatus, getQuizRewardAmount, hasClaimedToday, type StreakStatus } from '@/lib/coins/quiz';
+import { getDailyQuestionForUser } from '@/lib/quiz/questions';
+import MobileHome, { type MobileQuickLink } from '@/components/home/MobileHome';
 
-// Statically rendered with hourly ISR rather than per-request: the three
-// server reads below (background image, registered-driver count, recent
-// initials) all go through the service-role client, which never touches
-// cookies, so nothing here forces dynamic rendering. They do read live data,
-// hence a revalidate window instead of a build-time snapshot frozen forever —
-// a registered-driver count does not need to be real-time.
+// NOTE ON DYNAMIC RENDERING: this page used to be a pure ISR page (no
+// cookies() call anywhere, service-role reads only) — one of the six routes
+// CLAUDE.md's Vercel-Hobby-function-budget section calls out as "would go
+// static if [the cookies() dependency] were moved client-side". The mobile
+// dashboard tree below is real, per-user, session-aware content (coin
+// balance, streak, daily quiz), which requires supabase.auth.getUser() and
+// therefore cookies() — so `/` is now unavoidably dynamic-per-request like
+// most of the rest of the app. `revalidate` below is now inert for the
+// dynamic path; left in place only because removing it doesn't change
+// behavior. Flagged here rather than silently reintroducing the exact
+// function-budget regression CLAUDE.md warns about.
 export const revalidate = 3600;
+
+const EMPTY_STREAK: StreakStatus = { current: 0, longest: 0, nextMilestone: null, nextMilestoneBonus: null };
 
 const AVATAR_TONES = ['bg-primary/40', 'bg-regulatory-blue/40', 'bg-go-green/40'];
 
@@ -110,6 +123,11 @@ const COIN_EARN = [
 ];
 
 export default async function Home() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   const [design, backgroundImageUrl, driverCount, driverInitials, categories, questionCounts] =
     await Promise.all([
       getServerDesign(),
@@ -119,6 +137,45 @@ export default async function Home() {
       getCategoryContent(),
       getCategoryQuestionCounts(),
     ]);
+
+  // Mobile-only personalized data, fetched unconditionally server-side (this
+  // is a server component; gating the *fetch* on viewport would require an
+  // unreliable UA sniff — CSS handles which tree is visually shown, see the
+  // md:hidden / md:contents split in the returned JSX below).
+  let mobileProfile: { full_name: string | null; role: string } | null = null;
+  if (user) {
+    const { data } = await supabase
+      .from('profiles')
+      .select('full_name, role')
+      .eq('id', user.id)
+      .maybeSingle();
+    mobileProfile = data;
+  }
+  const isAdmin = mobileProfile?.role === 'admin';
+  const firstName = mobileProfile?.full_name?.trim().split(/\s+/)[0] || null;
+  // Admins are exempt from the coin economy (same convention as
+  // app/coin-qazan/page.tsx and app/account/page.tsx) — no balance/daily quiz
+  // to show them.
+  const showCoinEconomy = Boolean(user) && !isAdmin;
+
+  const [courses, mobileStreakStatus, mobileCoinStatus, quizReward, quizAlreadyClaimed] = await Promise.all([
+    user ? getCourses(user.id) : Promise.resolve([]),
+    user ? getStreakStatus(user.id) : Promise.resolve(EMPTY_STREAK),
+    showCoinEconomy ? getCoinBalanceStatus(user!.id) : Promise.resolve(null),
+    showCoinEconomy ? getQuizRewardAmount() : Promise.resolve(0),
+    showCoinEconomy ? hasClaimedToday(user!.id) : Promise.resolve(false),
+  ]);
+  // Synchronous (seeded by date+userId), not part of the Promise.all above —
+  // same call shape as app/coin-qazan/page.tsx.
+  const mobileDailyQuestion = showCoinEconomy ? getDailyQuestionForUser(user!.id, new Date()) : null;
+
+  const mobileTotalTopics = courses.reduce((sum, c) => sum + c.totalTopics, 0);
+  const mobilePassedTopics = courses.reduce((sum, c) => sum + c.passedTopics, 0);
+  const mobileProgress = {
+    totalTopics: mobileTotalTopics,
+    passedTopics: mobilePassedTopics,
+    progressPct: mobileTotalTopics > 0 ? Math.round((mobilePassedTopics / mobileTotalTopics) * 100) : 0,
+  };
   // Admin-overridable content, so TOPICS is built per render (ISR-cached)
   // rather than at module scope from the raw defaults.
   const topics = HOME_TOPIC_TITLES.map(
@@ -134,6 +191,28 @@ export default async function Home() {
     ...MOCK_STATS_TAIL,
   ];
 
+  // Mobile "Sürətli Keçid" grid. Cərimələr/Nişanlar route into real
+  // categories from getCategoryContent() (same /chat?q= pattern as
+  // CategoryCard below). İmtahan and Xidmətlər have no dedicated route
+  // anywhere in app/** (confirmed via glob) — rendered as disabled
+  // "tezliklə" tiles (href: null) rather than guessing a URL, per the task
+  // brief. Flagged back: neither exists yet.
+  const nisanlarCategory = categories.find((category) => category.title === 'Nişanlar');
+  const mobileQuickLinks: MobileQuickLink[] = [
+    { key: 'fines', label: 'Cərimələr', icon: FineIcon, href: `/chat?q=${encodeURIComponent(fineCategory.question)}` },
+    {
+      key: 'signs',
+      label: 'Nişanlar',
+      icon: SignIcon,
+      href: nisanlarCategory ? `/chat?q=${encodeURIComponent(nisanlarCategory.question)}` : null,
+    },
+    { key: 'exam', label: 'İmtahan', icon: TrophyIcon, href: null },
+    { key: 'services', label: 'Xidmətlər', icon: ShieldIcon, href: null },
+  ];
+  // "Məsləhət görülən mövzular" — compact subset of the same topics list the
+  // desktop bento grid renders below, not a second content source.
+  const mobileRecommendedTopics = topics.slice(0, 3);
+
   // Phase 1 of the second "Cyber-Circuit Legal" design (see
   // components/design3d/): a client-side switch chooses between the
   // unmodified JSX below (`simple`, also the default/SSR-matching tree) and
@@ -144,6 +223,36 @@ export default async function Home() {
     <DesignSwitch
       design={design}
       simple={
+    <>
+      {/* Mobile app-dashboard shell (see legaldrive-design skill, "Home page
+          — mobile") — CSS-only split via md:hidden, no separate route, no
+          matchMedia. Desktop tree below is untouched, just wrapped. */}
+      <div className="md:hidden">
+        <MobileHome
+          isLoggedIn={Boolean(user)}
+          firstName={firstName}
+          coinBalance={mobileCoinStatus?.balance ?? null}
+          progress={mobileProgress}
+          streakStatus={mobileStreakStatus}
+          dailyQuiz={
+            mobileDailyQuestion
+              ? {
+                  question: mobileDailyQuestion.question,
+                  options: mobileDailyQuestion.options,
+                  alreadyClaimed: quizAlreadyClaimed,
+                  reward: quizReward,
+                }
+              : null
+          }
+          quickLinks={mobileQuickLinks}
+          topics={mobileRecommendedTopics}
+          questionCounts={questionCounts}
+        />
+      </div>
+
+      {/* Unmodified desktop marketing tree — only gated behind md:contents,
+          no JSX inside changed. */}
+      <div className="hidden md:contents">
     <div id="top" className="flex flex-1 flex-col">
       <section className="relative flex min-h-[640px] flex-col items-center justify-center gap-8 overflow-hidden px-6 py-20 text-center lg:min-h-[720px]">
         <div className="absolute inset-0 z-0">
@@ -408,6 +517,8 @@ export default async function Home() {
 
       <Footer />
     </div>
+      </div>
+    </>
       }
       threeD={
         <HomePage3D

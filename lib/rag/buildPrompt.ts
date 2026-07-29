@@ -52,6 +52,7 @@ export function buildCitations(chunks: RetrievedChunk[]) {
     title: chunk.document_title,
     page: chunk.page_number,
     article_label: chunk.article_label,
+    excerpt: chunk.content.trim().replace(/\n{3,}/g, '\n\n'),
   }));
 }
 
