@@ -51,6 +51,15 @@ export default async function OyrenmePage() {
   const passedTopics = courses.reduce((sum, c) => sum + c.passedTopics, 0);
   const overallPct = totalTopics > 0 ? Math.round((passedTopics / totalTopics) * 100) : 0;
 
+  // Real, derived learning stats for the mobile stat rail. Deliberately only
+  // things that can be computed from published rows — there is no time-tracking
+  // table and no certificate entity, so "study time" and "certificates earned"
+  // are not shown at all rather than invented.
+  const unlockedCourses = courses.filter((c) => c.isUnlocked).length;
+  const completedCourses = courses.filter(
+    (c) => c.totalTopics > 0 && c.passedTopics === c.totalTopics
+  ).length;
+
   const hasCourses = courses.length > 0;
   const emptyStateSimple = (
     <div className="glass-panel rounded-2xl px-6 py-12 text-center">
@@ -100,6 +109,9 @@ export default async function OyrenmePage() {
               totalTopics={totalTopics}
               passedTopics={passedTopics}
               featuredTopics={featuredTopics}
+              totalCourses={courses.length}
+              unlockedCourses={unlockedCourses}
+              completedCourses={completedCourses}
             />
           </div>
 

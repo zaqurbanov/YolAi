@@ -25,83 +25,91 @@
 html.dark {
   color-scheme: dark;
 
-  /* HeroUI primitive overrides -> HUD palette, dark theme (restrained neutral-dominant
-     palette, full rebuild — see skill "Palette update (latest)"). A single soft-charcoal
-     cool-gray neutral family (H~222deg, low saturation, NOT pure black) carries
-     background/surface, with exactly one moderate-saturation indigo-blue accent
-     (H~231deg) for primary/interactive elements. No second competing vivid accent —
-     the old warning/secondary slot is now a quiet desaturated slate tone. */
-  --background: #051424;
-  --foreground: #e7e9ee;
+  /* HeroUI primitive overrides -> dark theme. Rebuilt 2026-07-31 from the
+     palette the Öyrənmə (learning) screens were already drawn in — deep navy
+     canvas with a mint-green accent — which is now the app's ONE dark theme
+     rather than a per-page look. Those screens hardcoded the values as hex;
+     they live here as tokens so every page shares them.
 
-  --surface: #1e2128;
-  --surface-foreground: #e7e9ee;
-  --surface-secondary: #191c22;
-  --surface-tertiary: #2a2e37;
+     Light mode is unrelated and unchanged (the warm-sand "Editorial" palette
+     further down). The two themes are deliberately different families: light
+     is paper-and-ink editorial, dark is instrument-panel. */
+  --background: #0d1527;
+  --foreground: #e8ecf3;
 
-  --overlay: #1e2128;
-  --overlay-foreground: #e7e9ee;
+  --surface: #162032;
+  --surface-foreground: #e8ecf3;
+  --surface-secondary: #131b2c;
+  --surface-tertiary: #19273e;
 
-  --muted: #9299a6;
+  --overlay: #162032;
+  --overlay-foreground: #e8ecf3;
 
-  --default: #2a2e37;
-  --default-foreground: #e7e9ee;
+  --muted: #94a3b8;
 
-  --accent: #c0c1ff;
-  --accent-foreground: #1000a9;
+  --default: #19273e;
+  --default-foreground: #e8ecf3;
 
-  --border: #2e323c;
-  --separator: #363b46;
-  --focus: #7c93f2;
-  --link: #7c93f2;
+  /* Mint green — the accent the learning screens used for progress rings,
+     active states and the "keçilib" markers. 8.9:1 on the navy canvas. */
+  --accent: #34d399;
+  --accent-foreground: #04231a;
 
-  --success: #7fd99a;
-  --success-foreground: #003917;
+  --border: #24344f;
+  --separator: #1e2c44;
+  --focus: #34d399;
+  --link: #34d399;
 
-  --warning: #94a3b8;
-  --warning-foreground: #12141a;
+  --success: #34d399;
+  --success-foreground: #04231a;
+
+  --warning: #22d3ee;
+  --warning-foreground: #04232a;
 
   --danger: #ffb4ab;
   --danger-foreground: #690005;
 
-  --segment: #2a2e37;
-  --segment-foreground: #e7e9ee;
+  --segment: #19273e;
+  --segment-foreground: #e8ecf3;
 
-  --field-background: #1e2128;
-  --field-foreground: #e7e9ee;
-  --field-placeholder: #9299a6;
+  --field-background: #162032;
+  --field-foreground: #e8ecf3;
+  --field-placeholder: #94a3b8;
   --field-border: transparent;
 
-  --backdrop: rgba(22, 24, 29, 0.6);
+  --backdrop: rgba(6, 11, 21, 0.65);
 
   --surface-shadow: 0 0 0 0 transparent inset;
   --overlay-shadow: 0 0 1px 0 rgba(255, 255, 255, 0.3) inset;
   --field-shadow: 0 0 0 0 transparent inset;
 
   /* M3-only tokens that have no direct HeroUI primitive equivalent above */
-  --surface-container-lowest: #101216;
-  --surface-container-highest: #3a3f4b;
-  --surface-bright: #454b59;
-  --outline: #6b7280;
-  --primary-container: #8083ff;
-  --on-primary-container: #0d0096;
-  --secondary-container: #333947;
-  --tertiary: #7a8699;
+  --surface-container-lowest: #0a1120;
+  --surface-container-highest: #223350;
+  --surface-bright: #2a3d5c;
+  --outline: #64748b;
+  --primary-container: #1b4332;
+  --on-primary-container: #8ff8b4;
+  --secondary-container: #123a4a;
+  --on-secondary-container: #7dd3fc;
+  --secondary: #22d3ee;
+  --on-secondary: #04232a;
+  --tertiary: #7dd3fc;
   --error-container: #93000a;
 
   /* Deepest recessed canvas layer (Stitch "LegalDrive HUD" navy/indigo palette,
      see skill "Palette update (latest)") — distinct from --surface-container-lowest
      above (that's the M3 surface ramp's floor; this is the page-canvas-level "deep"
      background named explicitly in the Stitch design-system.md frontmatter). */
-  --background-deep: #0b0e14;
+  --background-deep: #080e1c;
 
   /* Traffic-accent functional colors (warnings, legal-citation highlights,
      progress/correct-answer indicators) — literal Stitch spec values, kept as-is
      in dark mode since they already read at AA+ contrast against this background. */
   --safety-yellow: #facc15;
   --caution-orange: #fb923c;
-  --regulatory-blue: #3b82f6;
-  --go-green: #22c55e;
+  --regulatory-blue: #22d3ee;
+  --go-green: #34d399;
 
   /* Home hero background image (app/page.tsx, public/bg.png — a near-black asphalt
      HUD illustration, see skill "Brand & mood"). It's a single dark asset with no
@@ -410,7 +418,7 @@ html.dark .holographic-divider {
  * so they are promoted here to real tokens with `--color-*` exposure rather
  * than left as one-off hexes that would silently drift.
  */
-.editorial {
+html:not(.dark) .editorial {
   /* Editorial's four signature colours, now first-class. */
   --sand: #f1d089;
   --sage: #b3c6c4;
@@ -500,8 +508,8 @@ html.dark .holographic-divider {
 /* Editorial has no glassmorphism: cards are solid white with a hairline and a
    soft shadow. Overrides the theme-level .glass-card so reused shared
    components (CategoryCard, DailyQuizCard) match without being forked. */
-.editorial .glass-card,
-.editorial .glass-panel {
+html:not(.dark) .editorial .glass-card,
+html:not(.dark) html:not(.dark) .editorial .glass-panel {
   background: #ffffff;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
@@ -511,7 +519,7 @@ html.dark .holographic-divider {
 }
 
 /* No ambient glow in this design — the deep blue fill is the emphasis. */
-.editorial .glow-primary {
+html:not(.dark) .editorial .glow-primary {
   box-shadow: 0 8px 20px -8px rgba(0, 44, 177, 0.45);
 }
 
@@ -524,24 +532,40 @@ html.dark .holographic-divider {
 
 /* The bento's four tiles each get a different weight — this is what stops the
    grid reading as four identical boxes, and it is the main reason this design
-   was chosen over the previous one. */
+   was chosen over the previous one.
+ *
+ * Retuned 2026-07-31: the tiles were straight off the Stitch export, which put
+ * the primary #002cb1 in at FULL saturation across a whole tile. A pure,
+ * fully-saturated blue over that much area vibrates against a warm light
+ * canvas and is genuinely tiring to look at — reported as such.
+ *
+ * The fix is tonal, not a new hue: every tile is now mixed toward the page's
+ * own navy/paper rather than sitting at 100% chroma, so the four still read as
+ * four distinct weights (which is the whole point) but none of them shouts.
+ * The filled tile keeps the brand blue, just deepened toward navy so it reads
+ * as ink rather than as a light source. */
 .editorial-tile-sage {
-  background: color-mix(in oklab, var(--sage) 28%, white);
+  background: color-mix(in oklab, var(--sage) 30%, var(--background));
   color: var(--navy);
 }
 .editorial-tile-sage:hover {
-  background: color-mix(in oklab, var(--sage) 48%, white);
+  background: color-mix(in oklab, var(--sage) 45%, var(--background));
 }
 .editorial-tile-primary {
-  background: var(--accent);
-  color: var(--accent-foreground);
+  /* 74% brand blue / 26% navy — same hue family, noticeably calmer surface.
+     White on it is still ~11:1. */
+  background: color-mix(in oklab, var(--accent) 74%, var(--navy));
+  color: #ffffff;
 }
 .editorial-tile-sand {
-  background: var(--sand);
+  /* The raw #f1d089 is a saturated golden yellow. Softened toward the paper
+     canvas it becomes a warm stone that sits with the sage instead of
+     competing with it. */
+  background: color-mix(in oklab, var(--sand) 62%, var(--background));
   color: var(--navy);
 }
 .editorial-tile-plain {
-  background: #ffffff;
+  background: var(--surface);
   color: var(--navy);
   border: 1px solid color-mix(in oklab, var(--border) 45%, transparent);
 }
@@ -552,12 +576,169 @@ html.dark .holographic-divider {
  * every token above; only the handful of chat-specific surfaces that were
  * tuned for the old glass look need adjusting here.
  */
-.editorial .glass-panel {
+html:not(.dark) .editorial .glass-panel {
   background: #ffffff;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   border: 1px solid color-mix(in oklab, var(--border) 45%, transparent);
   box-shadow: 0 1px 2px rgba(11, 36, 51, 0.04), 0 8px 24px -12px rgba(11, 36, 51, 0.12);
+}
+
+/*
+ * Dark mode inside an `.editorial` tree. The tokens themselves come from the
+ * global html.dark block (the learning palette) — nothing is rebound here.
+ * Only the two things the light rules hardcode need a dark counterpart: the
+ * four signature colours the bento tiles read, and the solid-white card
+ * treatment, which becomes a raised navy surface.
+ */
+html.dark .editorial {
+  --sand: #f1d089;
+  --sage: #34d399;
+  --teal-deep: #22d3ee;
+  --navy: #e8ecf3;
+}
+
+html.dark .editorial .glass-card,
+html.dark .editorial .glass-panel {
+  background: var(--surface);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 24px -14px rgba(0, 0, 0, 0.6);
+}
+
+/* The tiles keep their four distinct weights in dark mode, just rebuilt from
+   the navy surface rather than from white — the differentiation is the point
+   of the bento, and it would collapse if they all fell back to one fill. */
+html.dark .editorial-tile-sage {
+  background: color-mix(in oklab, var(--sage) 16%, var(--surface));
+  color: var(--foreground);
+}
+html.dark .editorial-tile-sage:hover {
+  background: color-mix(in oklab, var(--sage) 26%, var(--surface));
+}
+html.dark .editorial-tile-sand {
+  background: color-mix(in oklab, var(--sand) 18%, var(--surface));
+  color: var(--foreground);
+}
+/* In dark mode the accent is mint green, which at full strength across a whole
+   tile is the single brightest thing on the page — the same over-saturation
+   problem the light theme had, inverted. Pulled back to a tint with the mint
+   kept for text/icons only. */
+html.dark .editorial-tile-primary {
+  background: color-mix(in oklab, var(--accent) 22%, var(--surface));
+  color: var(--foreground);
+}
+html.dark .editorial-tile-plain {
+  background: var(--surface);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+}
+html.dark .editorial-seal {
+  background: color-mix(in oklab, var(--sand) 22%, var(--surface));
+  color: var(--foreground);
+}
+
+/*
+ * Virtual Qaraj showroom. The cars are emoji (car_tiers.emoji — 🚶🚗🚙🚘🏎️,
+ * seeded in 0083), and no amount of card chrome makes a glyph read as a
+ * vehicle. What DOES work is treating it like a product shot: put it on a lit
+ * pedestal, give it a shadow it can cast, and let the tier's colour wash the
+ * stage behind it.
+ *
+ * --stage-tone is set per card so each tier gets its own light.
+ */
+.car-stage {
+  position: relative;
+  background:
+    radial-gradient(120% 80% at 50% 15%, var(--stage-tone, transparent) 0%, transparent 62%),
+    linear-gradient(180deg, var(--surface) 0%, var(--background) 100%);
+}
+
+/* The floor the car sits on — an ellipse of light, not a hard line. */
+.car-stage::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 14%;
+  width: 62%;
+  height: 12px;
+  transform: translateX(-50%);
+  border-radius: 9999px;
+  background: radial-gradient(closest-side, rgba(11, 36, 51, 0.28), transparent);
+  pointer-events: none;
+}
+
+html.dark .car-stage::after {
+  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.6), transparent);
+}
+
+/* Lifts the glyph off the stage so the floor shadow reads as cast, not drawn. */
+.car-glyph {
+  filter: drop-shadow(0 10px 12px rgba(11, 36, 51, 0.25));
+  line-height: 1;
+}
+
+html.dark .car-glyph {
+  filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.6));
+}
+
+/* Unowned tiers read as "behind glass" rather than merely faded. */
+.car-locked .car-glyph {
+  filter: grayscale(0.65) drop-shadow(0 6px 8px rgba(11, 36, 51, 0.18));
+  opacity: 0.75;
+}
+
+/* Coin Qazan hero. Source: Stitch "Coin Qazan (Editorial)" screen
+   d739e5cf6f264ffebcfcddcde2093986 — a single deep-blue gradient slab carrying
+   the balance, which is the one number the page exists to show.
+   In dark mode the same slab is built from the raised surface plus a mint
+   wash, because a blue gradient on an already-navy canvas has nothing to
+   contrast against. */
+.balance-slab {
+  background: linear-gradient(
+    135deg,
+    color-mix(in oklab, var(--accent) 88%, var(--navy)) 0%,
+    var(--primary-container) 100%
+  );
+  color: #ffffff;
+}
+
+html.dark .balance-slab {
+  background: linear-gradient(
+    135deg,
+    color-mix(in oklab, var(--accent) 26%, var(--surface)) 0%,
+    var(--surface-tertiary) 100%
+  );
+  color: var(--foreground);
+  border: 1px solid var(--border);
+}
+
+/* Softer, wider shadow than the app default — the export's own value. */
+.editorial-shadow {
+  box-shadow: 0 10px 30px -10px rgba(11, 36, 51, 0.12);
+}
+
+html.dark .editorial-shadow {
+  box-shadow: 0 10px 30px -12px rgba(0, 0, 0, 0.55);
+}
+
+/* Stats band. In LIGHT mode it is a deliberate inversion — a dark navy strip
+   between two pale sections, which is the editorial rhythm device that stops
+   the page reading as one continuous sheet.
+   In DARK mode that inversion has nowhere to go: the page canvas is already
+   navy, so a navy band would disappear. It inverts the other way instead,
+   toward the raised surface, keeping the same "this strip is different"
+   function. */
+.editorial-stats-band {
+  background: var(--navy);
+  color: #ffffff;
+}
+
+html.dark .editorial-stats-band {
+  background: var(--surface-tertiary);
+  color: var(--foreground);
+  border: 1px solid var(--border);
 }
 
 /* Assistant bubble: white card with a deep-blue spine, matching the editorial
@@ -605,7 +786,7 @@ html.dark .holographic-divider {
 
 /* The composer is the one element that should stay visually lifted off the
    sand canvas, so it keeps a stronger shadow than a plain card. */
-.editorial .chat-composer {
+html:not(.dark) .editorial .chat-composer {
   background: #ffffff;
   border: 1px solid color-mix(in oklab, var(--border) 50%, transparent);
   box-shadow: 0 4px 24px -8px rgba(11, 36, 51, 0.18);
@@ -699,11 +880,24 @@ html.dark .holographic-divider {
 /* DailyQuizCard sits INSIDE the white split card, so its own card chrome would
    be a box drawn inside a box. Stripped back to plain content; the outer
    rounded-[40px] panel provides the frame. */
+/* DailyQuizCard draws its own card. Inside the section's card that would be a
+   box within a box, so its chrome is stripped and the outer card supplies the
+   surface and the padding. */
 .editorial .editorial-quiz .glass-card {
   background: transparent;
   border: none;
   box-shadow: none;
   padding: 0;
+}
+
+/* Its streak row is a second tinted box (caution-orange) nested inside. Two
+   different tints stacked inside one card was the rest of the "hamısı başqa
+   rəngdədir" problem — it becomes a quiet neutral inset instead, and the
+   orange survives only on the flame and the streak count where it carries
+   meaning. */
+.editorial .editorial-quiz .glass-card > div:nth-child(2) {
+  background: color-mix(in oklab, var(--surface-tertiary) 55%, transparent);
+  border-color: color-mix(in oklab, var(--border) 50%, transparent);
 }
 
 .editorial .holographic-divider {

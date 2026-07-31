@@ -4,33 +4,26 @@ import { useState } from 'react';
 import { Switch } from '@heroui/react';
 import { SettingsIcon } from '@/components/icons';
 import { useDarkMode } from '@/lib/theme/useDarkMode';
-import { useAppDesign } from '@/lib/design/useAppDesign';
 
 // Real: dark/light mode toggle shares lib/theme/useDarkMode.ts with
 // components/ThemeToggle.tsx (the NavBar icon) — a single source of truth,
 // so toggling either one updates both while both are mounted (NavBar is
 // global, so it's visible on this page at the same time as this switch).
 //
-// Disabled while the 3D design is active — that design is dark-only (no
-// light variant exists), same rule/reasoning as ThemeToggle.tsx. setDark
-// also refuses a light-while-3D request defensively, but disabling the
-// switch here is the primary UX so it's clear why toggling does nothing.
 function DarkModeRow() {
   const { isDark, setDark } = useDarkMode();
-  const { is3D } = useAppDesign();
 
   return (
     <Switch
       isSelected={isDark ?? false}
       onChange={setDark}
-      isDisabled={is3D === true}
       aria-label="Tünd rejim"
     >
       <Switch.Content className="flex w-full items-center justify-between py-3">
         <span className="flex flex-col text-left">
           <span className="text-body-md font-semibold text-on-surface">Tünd Rejim</span>
           <span className="text-label-sm text-on-surface-variant">
-            {is3D ? 'Yeni dizaynda yalnız qaranlıq rejim aktivdir' : 'Göz yorğunluğunu azaldın'}
+            Göz yorğunluğunu azaldın
           </span>
         </span>
         <Switch.Control>

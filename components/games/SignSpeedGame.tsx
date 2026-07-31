@@ -25,6 +25,92 @@ interface SignSpeedGameProps {
   onSettled: (balance: number, energy: number) => void;
 }
 
+/**
+ * Post-round review of one question. Only rendered in the 'result' phase, and
+ * only from data the server hands back AFTER settling — the answer key is not
+ * present client-side at any point during play (see lib/coins/signSpeed.ts).
+ */
+function ReviewCard({
+  question,
+  picked,
+  correctIndex,
+  isCorrect,
+  index,
+}: {
+  question: SignSpeedQuestion;
+  picked: number;
+  correctIndex: number | undefined;
+  isCorrect: boolean;
+  index: number;
+}) {
+  return (
+    <div
+      className={`w-full rounded-2xl border p-4 text-left ${
+        isCorrect ? 'border-go-green/40 bg-go-green/5' : 'border-error/40 bg-error/5'
+      }`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-legal-citation text-on-surface-variant">
+          Sual {index + 1} · {question.code}
+        </span>
+        <span
+          className={`flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide ${
+            isCorrect ? 'text-go-green' : 'text-error'
+          }`}
+        >
+          {isCorrect ? <CheckIcon width={12} height={12} /> : <CloseIcon width={12} height={12} />}
+          {isCorrect ? 'Düzgün' : 'Səhv'}
+        </span>
+      </div>
+
+      {question.imageUrl && (
+        // eslint-disable-next-line @next/next/no-img-element -- Supabase public storage URL.
+        <img
+          src={question.imageUrl}
+          alt=""
+          className="mx-auto mt-3 size-20 rounded-xl border border-outline-variant/40 bg-surface object-contain"
+        />
+      )}
+
+      <ul className="mt-3 space-y-1.5">
+        {question.options.map((option, i) => {
+          const isPicked = i === picked;
+          const isAnswer = i === correctIndex;
+          return (
+            <li
+              key={i}
+              className={`flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-[13px] ${
+                isAnswer
+                  ? 'bg-go-green/12 font-semibold text-go-green'
+                  : isPicked
+                    ? 'bg-error/12 text-error line-through'
+                    : 'text-on-surface-variant'
+              }`}
+            >
+              <span className="mt-0.5 shrink-0">
+                {isAnswer ? (
+                  <CheckIcon width={12} height={12} />
+                ) : isPicked ? (
+                  <CloseIcon width={12} height={12} />
+                ) : (
+                  <span className="inline-block size-3" />
+                )}
+              </span>
+              <span>{option}</span>
+            </li>
+          );
+        })}
+      </ul>
+
+      {!isCorrect && picked === UNANSWERED && (
+        <p className="mt-2 text-legal-citation text-on-surface-variant">
+          Bu suala cavab verilmədi — vaxt bitdi.
+        </p>
+      )}
+    </div>
+  );
+}
+
 type Phase = 'idle' | 'starting' | 'playing' | 'submitting' | 'result';
 
 /**
@@ -38,26 +124,36 @@ function QuestionBoxes({
   currentIndex,
   answers,
   correctFlags,
+  onReview,
+  reviewIndex,
 }: {
   count: number;
   currentIndex?: number;
   answers?: number[];
   correctFlags?: boolean[];
+  /** Only passed in the result phase — makes each box open that question. */
+  onReview?: (index: number) => void;
+  reviewIndex?: number | null;
 }) {
   return (
     <div className="grid w-full grid-cols-10 gap-1">
       {Array.from({ length: count }, (_, i) => {
         if (correctFlags) {
           const isCorrect = correctFlags[i];
+          const isOpen = reviewIndex === i;
           return (
-            <span
+            <button
               key={i}
-              className={`flex size-6 items-center justify-center rounded-md text-[10px] ${
+              type="button"
+              onClick={() => onReview?.(i)}
+              aria-label={`Sual ${i + 1} — ${isCorrect ? 'düzgün' : 'səhv'}, baxmaq üçün toxun`}
+              aria-pressed={isOpen}
+              className={`flex size-6 items-center justify-center rounded-md text-[10px] transition ${
                 isCorrect ? 'bg-go-green/15 text-go-green' : 'bg-error/15 text-error'
-              }`}
+              } ${isOpen ? 'ring-2 ring-primary ring-offset-1 ring-offset-surface' : 'hover:opacity-75'}`}
             >
               {isCorrect ? <CheckIcon width={10} height={10} /> : <CloseIcon width={10} height={10} />}
-            </span>
+            </button>
           );
         }
 
@@ -85,6 +181,8 @@ export default function SignSpeedGame({ energy, onSettled }: SignSpeedGameProps)
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [questions, setQuestions] = useState<SignSpeedQuestion[]>([]);
   const [answers, setAnswers] = useState<number[]>([]);
+  // Which question the result screen is showing, or null. Result phase only.
+  const [reviewIndex, setReviewIndex] = useState<number | null>(null);
   const [remainingMs, setRemainingMs] = useState(ROUND_DURATION_MS);
   const [note, setNote] = useState<string | null>(null);
   const [unavailable, setUnavailable] = useState(false);
@@ -92,6 +190,7 @@ export default function SignSpeedGame({ energy, onSettled }: SignSpeedGameProps)
     correctCount: number;
     reward: number;
     correctFlags: boolean[];
+    correctIndices: number[];
   } | null>(null);
 
   const deadlineRef = useRef(0);
@@ -114,6 +213,7 @@ export default function SignSpeedGame({ energy, onSettled }: SignSpeedGameProps)
           correctCount: res.correctCount ?? 0,
           reward: res.reward ?? 0,
           correctFlags: res.correctFlags ?? Array(10).fill(false),
+          correctIndices: res.correctIndices ?? [],
         });
         setPhase('result');
         if (typeof res.balance === 'number' && typeof res.energy === 'number') {
@@ -251,7 +351,28 @@ export default function SignSpeedGame({ energy, onSettled }: SignSpeedGameProps)
         <p className="text-body-md font-semibold text-go-green" aria-live="polite">
           {result.correctCount}/10 doğru!
         </p>
-        <QuestionBoxes count={result.correctFlags.length} correctFlags={result.correctFlags} />
+        {/* Tapping a box opens that question below. Reviewing what you got
+            wrong is the only way this game teaches anything — before, the row
+            told you the score and nothing else. */}
+        <QuestionBoxes
+          count={result.correctFlags.length}
+          correctFlags={result.correctFlags}
+          onReview={(i) => setReviewIndex((prev) => (prev === i ? null : i))}
+          reviewIndex={reviewIndex}
+        />
+        <p className="text-legal-citation text-on-surface-variant">
+          Cavaba baxmaq üçün qutuya toxun
+        </p>
+
+        {reviewIndex !== null && questions[reviewIndex] && (
+          <ReviewCard
+            question={questions[reviewIndex]}
+            picked={answers[reviewIndex]}
+            correctIndex={result.correctIndices[reviewIndex]}
+            isCorrect={result.correctFlags[reviewIndex]}
+            index={reviewIndex}
+          />
+        )}
         <span className="flex items-center gap-1.5 rounded-full bg-safety-yellow/15 px-3 py-1 text-safety-yellow">
           <CoinIcon width={16} height={16} />
           <AnimatedNumber

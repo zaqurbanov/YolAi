@@ -6,6 +6,8 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { logError } from '@/lib/logging/logError';
 import { EXAM_IMAGE_BUCKET, examImageUrl } from '@/lib/exam/examPool';
 import {
+  createQuestion,
+  type NewQuestionInput,
   updateQuestion,
   publishQuestion,
   deleteQuestion,
@@ -122,4 +124,24 @@ export async function deleteQuestionAction(id: string): Promise<QuizActionResult
 
   revalidatePath('/admin/quiz');
   return { ok: true };
+}
+
+/**
+ * Creates one hand-authored question. This is now the ONLY way anything reaches
+ * the Rəsmi İmtahan pool — 0092 defaults every existing (LLM-drafted) row to
+ * is_exam = false, so /imtahan draws exclusively from questions made here.
+ *
+ * Created as a draft; it enters the exam only after an explicit publish.
+ */
+export async function createQuestionAction(
+  input: NewQuestionInput
+): Promise<QuizActionResult & { id?: string }> {
+  const admin = await requireAdmin();
+  if (!admin.ok) return { ok: false, error: admin.message };
+
+  const result = await createQuestion(input, admin.userId);
+  if (!result.ok) return { ok: false, error: result.error };
+
+  revalidatePath('/admin/quiz');
+  return { ok: true, id: result.question.id };
 }

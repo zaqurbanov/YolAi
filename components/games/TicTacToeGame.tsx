@@ -190,18 +190,15 @@ export default function TicTacToeGame({
     if (outcome === 'win') return reward > 0 ? `Qazandın! +${reward} coin 🎉` : 'Qazandın! 🎉';
     if (outcome === 'draw') return 'Heç-heçə 🤝';
     if (outcome === 'loss') return 'Uduzdun. Növbəti dəfə!';
-    if (difficulty === 'easy') return 'Bu turda udmaq asandır 🎯';
+    // No difficulty hint. "Bu turda udmaq asandır" announced the easy round of
+    // the every-third-game ramp, which both spoiled the challenge and made the
+    // other rounds read as rigged. The ramp itself is unchanged — it is just no
+    // longer narrated.
     return 'Sənin növbən (X)';
   })();
 
   const statusTone =
-    outcome === 'win'
-      ? 'text-go-green'
-      : outcome === 'loss'
-        ? 'text-error'
-        : difficulty === 'easy' && !gameOver && !noEnergy
-          ? 'text-go-green'
-          : 'text-on-surface-variant';
+    outcome === 'win' ? 'text-go-green' : outcome === 'loss' ? 'text-error' : 'text-on-surface-variant';
 
   const boardDisabled = pending || gameOver || noEnergy;
 

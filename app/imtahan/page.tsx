@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { getCoinBalanceStatus } from '@/lib/chat/coins';
 import { getEnergyStatus } from '@/lib/coins/games';
 import { getExamEntryPricing } from '@/lib/exam/examPricing';
+import { getExamHistory } from '@/lib/exam/examHistory';
 import OfficialExamClient from './OfficialExamClient';
 
 export const metadata: Metadata = {
@@ -41,10 +42,11 @@ export default async function ImtahanPage() {
   // energy — so there is nothing here they can meaningfully do.
   if (profile?.role === 'admin') redirect('/account');
 
-  const [coinStatus, energyStatus, pricing] = await Promise.all([
+  const [coinStatus, energyStatus, pricing, history] = await Promise.all([
     getCoinBalanceStatus(user.id),
     getEnergyStatus(user.id),
     getExamEntryPricing(),
+    getExamHistory(user.id),
   ]);
 
   return (
@@ -55,6 +57,7 @@ export default async function ImtahanPage() {
       coinPrice={pricing.coinPrice}
       energyCost={pricing.energyCost}
       passThreshold={pricing.passThreshold}
+      history={history}
     />
   );
 }

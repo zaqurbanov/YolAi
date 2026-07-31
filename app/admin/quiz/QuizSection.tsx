@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { requireAdmin } from '@/lib/auth/requireAdmin';
 import { listQuestions } from '@/lib/admin/quizQuestions';
 import QuizPdfUploadForm from './QuizPdfUploadForm';
+import NewQuestionForm from './NewQuestionForm';
 import QuestionEditor from './QuestionEditor';
 
 export default async function QuizSection() {
@@ -13,6 +14,11 @@ export default async function QuizSection() {
   return (
     <div className="pt-6 space-y-8">
       <h1 className="text-2xl font-semibold">Test sualları</h1>
+
+      {/* Manual authoring first: since 0092 this is the only path into the
+          Rəsmi İmtahan pool, while the PDF extractor below feeds lesson
+          questions. */}
+      <NewQuestionForm />
 
       <QuizPdfUploadForm />
 

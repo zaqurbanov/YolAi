@@ -4,10 +4,11 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { isMissingRelationError } from '@/lib/supabase/missingRelation';
 import { logError } from '@/lib/logging/logError';
 
-// Question pool for "Sınaq İmtahanı" (exam simulator) — unlike
-// lib/quiz/topicTest.ts's readPool(), this draws from the FULL published
-// quiz_questions pool across ALL topics (no topic_id filter), since the whole
-// point of this feature is an all-topics-mixed mock exam. Only
+// Question pool for the exam — unlike lib/quiz/topicTest.ts's readPool(), this
+// applies no topic_id filter (the point is an all-topics-mixed exam) but DOES
+// require is_exam (0092): only questions an admin authored by hand are
+// eligible. Falls below QUESTIONS_PER_EXAM -> returns null -> the UI shows
+// "əlçatan deyil" rather than padding the exam with lesson questions. Only
 // `id, question, options` are selected — correct_index is never read here,
 // mirroring topicTest.ts's readPool() exactly (it is read separately, later
 // and narrower, in lib/exam/examSession.ts, and never returned to a caller).
@@ -86,6 +87,10 @@ export async function drawExamQuestions(): Promise<ExamQuestion[] | null> {
     .from('quiz_questions')
     .select('id, question, options, is_fine_amount, image_path, option_image_paths')
     .eq('status', 'published')
+    // Only hand-authored exam questions (0092). Without this the exam drew from
+    // the whole LLM-drafted lesson pool, which is what it was doing before and
+    // what the admin asked to stop.
+    .eq('is_exam', true)
     .returns<PoolRow[]>();
 
   if (error) {

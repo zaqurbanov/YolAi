@@ -23,6 +23,7 @@ import PreferencesCard from '@/components/account/PreferencesCard';
 import PushNotificationOptIn from '@/components/account/PushNotificationOptIn';
 import SecurityQuickView from '@/components/account/SecurityQuickView';
 import DesignSwitch from '@/components/design3d/DesignSwitch';
+import MobileBottomTabBar from '@/components/home/MobileBottomTabBar';
 import AccountPage3D from '@/components/design3d/AccountPage3D';
 import { getServerDesign } from '@/lib/design/getServerDesign';
 
@@ -129,9 +130,9 @@ export default async function AccountPage() {
     <DesignSwitch
       design={design}
       simple={
-        <div className="space-y-8 px-4 pt-8 pb-16 md:px-8">
-          <section className="glass-panel relative grid grid-cols-1 gap-6 overflow-hidden rounded-3xl p-6 md:grid-cols-12 md:items-center md:gap-8 md:p-8">
-            <div className="pointer-events-none absolute -top-20 -right-20 size-64 rounded-full bg-primary/10 blur-[100px]" />
+        <div className="editorial flex flex-col space-y-10 px-5 pt-8 pb-24 md:space-y-14 md:px-12 md:pb-16">
+          <section className="editorial-shadow relative grid grid-cols-1 gap-6 overflow-hidden rounded-[2rem] border border-border/40 bg-surface p-6 md:grid-cols-12 md:items-center md:gap-8 md:p-8">
+            <div aria-hidden className="pointer-events-none absolute -top-20 -right-20 size-64 rounded-full bg-primary/10 blur-[100px]" />
 
             <div className="relative z-10 flex flex-col items-center gap-4 text-center md:col-span-4 md:items-start md:text-left">
               <div className="relative">
@@ -165,7 +166,7 @@ export default async function AccountPage() {
             <div className="relative z-10 md:col-span-8">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 {statTiles.map((tile) => (
-                  <div key={tile.label} className="glass-card rounded-2xl p-4">
+                  <div key={tile.label} className="rounded-2xl border border-border/40 bg-background p-4">
                     <div className="text-label-sm uppercase text-on-surface-variant">{tile.label}</div>
                     <div className={`mt-2 text-headline-md ${tile.accent}`}>{tile.value}</div>
                   </div>
@@ -204,7 +205,7 @@ export default async function AccountPage() {
           </div>
 
           {coins ? (
-            <div className="glass-card rounded-2xl p-6">
+            <div className="editorial-shadow rounded-[1.5rem] border border-border/40 bg-surface p-6">
               <div className="flex items-center gap-3">
                 <div className="flex size-10 items-center justify-center rounded-xl bg-safety-yellow/15 text-safety-yellow">
                   <CoinIcon />
@@ -247,7 +248,7 @@ export default async function AccountPage() {
             {securityForms}
           </div>
 
-          <div className="space-y-4 rounded-2xl border border-error/30 bg-error-container/10 p-6">
+          <div className="space-y-4 rounded-[1.5rem] border border-error/30 bg-error/5 p-6">
             <div className="flex items-center gap-3 border-b border-error/20 pb-4">
               <div className="flex size-10 items-center justify-center rounded-xl bg-error/15 text-error">
                 <TrashIcon width={18} height={18} />
@@ -266,6 +267,11 @@ export default async function AccountPage() {
           <AdSlot />
 
           <Footer />
+
+          {/* Every other mobile screen carries the tab bar; without it /account
+              was the one page you could land on and lose the app's navigation.
+              pb-24 on the root above reserves its height. */}
+          <MobileBottomTabBar />
         </div>
       }
       threeD={

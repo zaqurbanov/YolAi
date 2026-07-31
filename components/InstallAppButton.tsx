@@ -24,7 +24,18 @@ function isStandalone() {
   );
 }
 
-export default function InstallAppButton() {
+interface InstallAppButtonProps {
+  /**
+   * Overrides the default full-width secondary button styling, so the same
+   * component can sit in the sidebar footer AND as a row inside the mobile
+   * account menu. The install logic (beforeinstallprompt capture, the iOS and
+   * Android fallback modals, the standalone/secure-context detection) is not
+   * worth a second implementation just to change how the trigger looks.
+   */
+  className?: string;
+}
+
+export default function InstallAppButton({ className }: InstallAppButtonProps) {
   const deferredEventRef = useRef<BeforeInstallPromptEvent | null>(null);
   const [visible, setVisible] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
@@ -107,9 +118,12 @@ export default function InstallAppButton() {
       <button
         type="button"
         onClick={handleClick}
-        className={buttonVariants({ variant: 'secondary', size: 'md' }) + ' w-full justify-center gap-2'}
+        className={
+          className ??
+          buttonVariants({ variant: 'secondary', size: 'md' }) + ' w-full justify-center gap-2'
+        }
       >
-        <DownloadIcon className="shrink-0" />
+        <DownloadIcon className="shrink-0" width={16} height={16} />
         Tətbiqi quraşdır
       </button>
 

@@ -12,13 +12,13 @@ import {
   type StartExamState,
 } from '@/app/coin-qazan/actions';
 import type { ExamQuestion } from '@/lib/exam/examPool';
+import type { ExamHistorySummary } from '@/lib/exam/examHistory';
 import {
   ArrowRightIcon,
   ArrowLeftIcon,
   CheckIcon,
   CloseIcon,
   ClockIcon,
-  CoinIcon,
   RulesIcon,
   TrophyIcon,
   LockIcon,
@@ -40,7 +40,25 @@ interface OfficialExamClientProps {
   coinPrice: number;
   energyCost: number;
   passThreshold: number;
+  history: ExamHistorySummary;
 }
+
+// The two modes on the roadmap but not built. Shown as real cards rather than
+// hidden, so the page communicates where it is going — locked, not fake.
+const LOCKED_MODES = [
+  {
+    title: 'Öyrənmə Rejimi',
+    desc: 'Vaxt məhdudiyyəti olmadan, hər sualın izahı ilə birlikdə.',
+    icon: RulesIcon,
+    tone: 'bg-sand/45',
+  },
+  {
+    title: 'Zəif Nöqtələr',
+    desc: 'Əvvəlki imtahanlarda səhv etdiyin suallar üzərində cəmləş.',
+    icon: TrophyIcon,
+    tone: 'bg-sage/30',
+  },
+];
 
 type Phase = 'idle' | 'running' | 'finished';
 
@@ -58,6 +76,7 @@ export default function OfficialExamClient({
   coinPrice,
   energyCost,
   passThreshold,
+  history,
 }: OfficialExamClientProps) {
   const [phase, setPhase] = useState<Phase>('idle');
   const [balance, setBalance] = useState(initialBalance);
@@ -201,7 +220,7 @@ export default function OfficialExamClient({
     return (
       // No bottom tab bar and no exit link on purpose: this is meant to feel
       // like a real exam room. The only ways out are finishing or the timer.
-      <div className="flex min-h-full flex-col bg-background">
+      <div className="editorial flex min-h-full flex-col bg-background">
         <header className="sticky top-0 z-20 border-b border-outline-variant/40 bg-surface/85 backdrop-blur-xl">
           <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-4 px-5 py-3">
             <div>
@@ -228,7 +247,7 @@ export default function OfficialExamClient({
           <div className="h-1 w-full bg-surface-secondary">
             <div
               className={`h-full transition-[width] duration-1000 ease-linear ${
-                isLow ? 'bg-danger' : 'ethereal-gradient'
+                isLow ? 'bg-danger' : 'bg-primary'
               }`}
               style={{ width: `${timeProgress}%` }}
             />
@@ -265,7 +284,7 @@ export default function OfficialExamClient({
                       : verdict === false
                         ? 'bg-danger text-white'
                         : i === current
-                          ? 'ethereal-gradient text-white'
+                          ? 'bg-primary text-on-primary'
                           : reachable
                             ? 'bg-surface-secondary text-on-surface-variant'
                             : 'bg-surface-secondary text-on-surface-variant/40'
@@ -379,7 +398,7 @@ export default function OfficialExamClient({
                 variant="primary"
                 onPress={() => setCurrent((i) => Math.min(questions.length - 1, i + 1))}
                 isDisabled={!isLocked || isAnswering}
-                className="ethereal-gradient glow-primary flex-1 gap-2 rounded-full border-0 text-white disabled:opacity-45"
+                className="glow-primary flex-1 gap-2 rounded-full border-0 text-white disabled:opacity-45"
               >
                 {isAnswering ? <Spinner size="sm" tone="current" /> : null}
                 {isLocked ? 'Növbəti' : 'Cavab seçin'}
@@ -391,7 +410,7 @@ export default function OfficialExamClient({
                 onPress={() => void finish(answers)}
                 isDisabled={!isLocked || isAnswering}
                 isPending={isSubmitting}
-                className="ethereal-gradient glow-primary flex-1 gap-2 rounded-full border-0 text-white disabled:opacity-45"
+                className="glow-primary flex-1 gap-2 rounded-full border-0 text-white disabled:opacity-45"
               >
                 {({ isPending }) => (
                   <>
@@ -411,16 +430,16 @@ export default function OfficialExamClient({
   if (phase === 'finished' && result) {
     const passed = result.score >= passThreshold;
     return (
-      <div className="flex flex-col pb-24">
+      <div className="editorial flex flex-col pb-24">
         <div className="mx-auto w-full max-w-2xl px-5 py-10">
           <div
-            className={`glass-card relative overflow-hidden rounded-[2rem] p-8 text-center ${
-              passed ? 'luminous-shadow-teal' : 'luminous-shadow-violet'
-            }`}
+            className="editorial-shadow relative overflow-hidden rounded-[2rem] border border-border/40 bg-surface p-8 text-center"
           >
             <div
-              className={`ethereal-orb -right-16 -top-16 size-56 ${passed ? 'bg-secondary/25' : 'bg-danger/15'}`}
               aria-hidden
+              className={`pointer-events-none absolute -right-16 -top-16 size-56 rounded-full blur-3xl ${
+                passed ? 'bg-go-green/20' : 'bg-danger/15'
+              }`}
             />
             <div className="relative z-10">
               <div
@@ -431,7 +450,7 @@ export default function OfficialExamClient({
                 {passed ? <TrophyIcon width={30} height={30} /> : <RulesIcon width={30} height={30} />}
               </div>
               <p className="text-legal-citation text-on-surface-variant">Nəticə</p>
-              <p className="ethereal-gradient-text mt-1 text-6xl font-extrabold tabular-nums">
+              <p className="mt-1 text-6xl font-bold tabular-nums text-primary">
                 {result.score}
                 <span className="text-3xl text-on-surface-variant">/{result.total}</span>
               </p>
@@ -451,7 +470,7 @@ export default function OfficialExamClient({
                     setPhase('idle');
                     setResult(null);
                   }}
-                  className="ethereal-gradient glow-primary gap-2 rounded-full border-0 text-white"
+                  className="glow-primary gap-2 rounded-full border-0 text-white"
                 >
                   Yenidən cəhd et
                 </Button>
@@ -481,164 +500,251 @@ export default function OfficialExamClient({
   // ------------------------------------------------------------------ landing
   const canAffordCoins = balance >= coinPrice;
   const canAffordEnergy = energy >= energyCost;
+  const lastPct =
+    history.lastScore != null && history.lastTotal
+      ? Math.round((history.lastScore / history.lastTotal) * 100)
+      : null;
 
   return (
-    <div className="relative flex flex-col overflow-hidden pb-24">
-      {/* Ambient orbs from the Stitch "İmtahan (Ethereal)" screen. */}
-      <div className="ethereal-orb -right-24 -top-24 size-96 bg-primary/10" aria-hidden />
-      <div className="ethereal-orb -left-24 top-1/2 size-80 bg-secondary/10" aria-hidden />
-
-      <div className="relative z-10 mx-auto w-full max-w-[1280px] px-5 pt-10 md:px-12">
-        <section className="text-center">
-          <span className="text-legal-citation inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-4 py-1.5 text-primary">
-            <TrophyIcon width={14} height={14} />
-            PREMİUM SİMULYASİYA
-          </span>
-          <h1 className="mx-auto mt-6 max-w-2xl text-[28px] font-extrabold leading-tight tracking-tight text-on-surface md:text-[40px]">
-            Yol Hərəkəti Qaydaları
-            <br />
-            <span className="ethereal-gradient-text">İmtahan Simulyasiyası</span>
-          </h1>
-          <p className="mx-auto mt-4 max-w-2xl text-body-md text-on-surface-variant">
-            Real imtahan mühitində özünüzü sınayın — {QUESTION_COUNT} sual, 15 dəqiqə, geri sayım.
-            Suallar dərc edilmiş bazadan hər dəfə yenidən seçilir.
-          </p>
-
-          <div className="mt-8 flex flex-col items-center gap-3">
-            <Button
-              variant="primary"
-              onPress={() => void start('energy')}
-              isDisabled={isStarting || !canAffordEnergy}
-              className="ethereal-gradient glow-primary gap-3 rounded-full border-0 px-10 py-6 text-[16px] font-bold text-white"
-            >
-              {isStarting ? <Spinner size="sm" tone="current" /> : null}
-              Sınaq İmtahanına Başla
-              <ArrowRightIcon width={18} height={18} />
-            </Button>
-            <p className="text-label-sm text-on-surface-variant">
-              {energyCost} enerji ({energy}/{maxEnergy} qalıb)
+    <div className="editorial relative flex flex-col overflow-hidden pb-24">
+      <div className="relative z-10 mx-auto w-full max-w-[1280px] px-5 pt-8 md:px-12 md:pt-14">
+        {/* Split hero. Left: the pitch. Right: the user's own last result as a
+            circular badge — the export's centrepiece, and the one number that
+            makes the page personal rather than promotional. */}
+        <section className="grid grid-cols-1 items-center gap-10 lg:grid-cols-12">
+          <div className="lg:col-span-7">
+            <span className="text-[12px] font-bold uppercase tracking-[0.1em] text-primary">
+              Rəsmi format
+            </span>
+            <h1 className="mt-4 max-w-2xl text-[32px] font-semibold leading-[1.15] tracking-tight text-navy md:text-[44px]">
+              Sürücülük imtahanına <span className="italic text-primary">real</span> hazırlıq
+            </h1>
+            <p className="mt-5 max-w-xl text-[17px] leading-relaxed text-on-surface-variant">
+              {QUESTION_COUNT} sual, 15 dəqiqə, geri sayım. Suallar hər dəfə yenidən seçilir və
+              nəticə serverdə hesablanır.
             </p>
 
-            <button
-              type="button"
-              onClick={() => void start('coin')}
-              disabled={isStarting || !canAffordCoins}
-              className="mt-1 inline-flex items-center gap-1.5 text-label-sm font-semibold text-primary transition hover:gap-2.5 disabled:opacity-45"
-            >
-              <CoinIcon width={14} height={14} />
-              və ya {coinPrice} coin ilə başla ({balance} coin)
-            </button>
-
-            {!canAffordEnergy && !canAffordCoins && (
-              <Link
-                href="/coin-qazan"
-                className="text-label-sm font-semibold text-secondary hover:underline"
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              <Button
+                variant="primary"
+                onPress={() => void start('energy')}
+                isDisabled={isStarting || !canAffordEnergy}
+                className="glow-primary gap-2 rounded-full px-8 py-4 text-[12px] font-bold uppercase tracking-[0.1em]"
               >
-                Coin qazan →
-              </Link>
-            )}
-          </div>
-        </section>
-
-        <section className="mt-16">
-          <div className="mb-6 flex items-center gap-6">
-            <h2 className="text-headline-md text-on-surface">Rejim Seçimi</h2>
-            <div className="holographic-divider flex-1" />
-          </div>
-
-          <div className="grid gap-5 md:grid-cols-3">
-            <div className="glass-card luminous-shadow-violet group relative flex flex-col justify-between overflow-hidden rounded-[2rem] p-7">
-              <div className="ethereal-orb -right-8 -top-8 size-32 bg-primary/15" aria-hidden />
-              <div className="relative z-10">
-                <div className="mb-5 flex size-14 items-center justify-center rounded-2xl bg-primary/12 text-primary">
-                  <ClockIcon width={26} height={26} />
-                </div>
-                <h3 className="text-[20px] font-semibold text-on-surface">Standart İmtahan</h3>
-                <p className="mt-2 text-label-sm leading-relaxed text-on-surface-variant">
-                  15 dəqiqə • {QUESTION_COUNT} sual • keçid həddi {passThreshold}. Real imtahan
-                  formatı.
-                </p>
-              </div>
-              <span className="relative z-10 mt-6 inline-flex items-center gap-1.5 text-label-sm font-semibold text-primary">
-                AKTİV REJİM
-                <CheckIcon width={14} height={14} />
-              </span>
+                {isStarting ? <Spinner size="sm" tone="current" /> : null}
+                İmtahana başla
+                <ArrowRightIcon width={15} height={15} />
+              </Button>
+              <button
+                type="button"
+                onClick={() => void start('coin')}
+                disabled={isStarting || !canAffordCoins}
+                className="rounded-full border border-border px-8 py-4 text-[12px] font-bold uppercase tracking-[0.1em] text-on-surface transition hover:bg-surface-tertiary disabled:opacity-45"
+              >
+                {coinPrice} coin ilə
+              </button>
             </div>
 
-            {[
-              {
-                title: 'Öyrənmə Rejimi',
-                desc: 'Vaxt məhdudiyyəti yoxdur. Hər sualdan sonra izahlı cavablar.',
-                icon: RulesIcon,
-              },
-              {
-                title: 'Zəif Nöqtələr',
-                desc: 'Ən çox səhv etdiyin suallar üzərində fokuslanma.',
-                icon: TrophyIcon,
-              },
-            ].map((mode) => {
-              const Icon = mode.icon;
-              return (
-                <div
-                  key={mode.title}
-                  aria-disabled="true"
-                  className="glass-card relative flex flex-col justify-between overflow-hidden rounded-[2rem] p-7 opacity-60"
-                >
-                  <div>
-                    <div className="mb-5 flex size-14 items-center justify-center rounded-2xl bg-surface-secondary text-on-surface-variant">
-                      <Icon width={26} height={26} />
+            <p className="mt-4 text-[13px] text-on-surface-variant">
+              {energyCost} enerji ({energy}/{maxEnergy} qalıb) · {balance} coin
+              {!canAffordEnergy && !canAffordCoins && (
+                <>
+                  {' · '}
+                  <Link href="/coin-qazan" className="font-semibold text-primary hover:underline">
+                    Coin qazan
+                  </Link>
+                </>
+              )}
+            </p>
+          </div>
+
+          <div className="lg:col-span-5">
+            <div className="relative mx-auto flex aspect-square w-full max-w-[340px] items-center justify-center rounded-full bg-sage/25">
+              {/* Dotted field from the export — decorative, static. */}
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-0 rounded-full opacity-[0.14]"
+                style={{
+                  backgroundImage: 'radial-gradient(circle, var(--accent) 1px, transparent 1px)',
+                  backgroundSize: '20px 20px',
+                }}
+              />
+              <div className="relative z-10 text-center">
+                {lastPct != null ? (
+                  <>
+                    <div className="editorial-display text-[64px] font-bold leading-none text-primary">
+                      {lastPct}%
                     </div>
-                    <h3 className="text-[20px] font-semibold text-on-surface">{mode.title}</h3>
-                    <p className="mt-2 text-label-sm leading-relaxed text-on-surface-variant">
-                      {mode.desc}
-                    </p>
-                  </div>
-                  <span className="mt-6 inline-flex items-center gap-1.5 text-label-sm font-semibold text-on-surface-variant">
-                    <LockIcon width={13} height={13} />
-                    Tezliklə
-                  </span>
-                </div>
-              );
-            })}
+                    <div className="mt-2 text-[11px] font-bold uppercase tracking-[0.14em] text-on-surface-variant">
+                      Son nəticə
+                    </div>
+                    <div className="mt-4 inline-block rounded-full bg-primary px-4 py-1 text-[13px] font-bold tabular-nums text-on-primary">
+                      {history.lastScore} / {history.lastTotal}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <TrophyIcon width={44} height={44} className="mx-auto text-primary" />
+                    <div className="mt-3 text-[15px] font-semibold text-navy">
+                      Hələ imtahan verməmisən
+                    </div>
+                    <div className="mt-1 text-[12px] text-on-surface-variant">
+                      İlk nəticən burada görünəcək
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
         </section>
 
-        <section className="mt-16">
-          <div className="glass-card luminous-shadow-teal relative overflow-hidden rounded-[2rem] p-7 md:p-10">
-            <div className="ethereal-orb -bottom-16 -left-16 size-56 bg-secondary/20" aria-hidden />
-            <div className="relative z-10 grid gap-8 md:grid-cols-2">
-              <div>
-                <h2 className="text-headline-md text-on-surface">İmtahan qaydaları</h2>
-                <p className="mt-2 text-body-md text-on-surface-variant">
-                  Başladıqdan sonra geri sayım dayanmır. Sualların arasında sərbəst hərəkət edə,
-                  cavabını dəyişə bilərsən — nəticə yalnız sonda hesablanır.
-                </p>
+        {/* Bento: the active mode, the two planned ones, and the user's real
+            attempt history. The export puts a per-subject competency chart in
+            this slot; nothing records which category an answered exam question
+            belonged to, so that is deliberately not shown — see the note in
+            lib/exam/examHistory.ts. */}
+        <section className="mt-14 grid grid-cols-1 gap-5 md:grid-cols-4 lg:grid-cols-6">
+          <div className="editorial-shadow relative overflow-hidden rounded-[2rem] border border-primary/25 bg-primary/[0.06] p-7 md:col-span-2">
+            <div className="mb-6 flex size-12 items-center justify-center rounded-full bg-primary text-on-primary">
+              <ClockIcon width={22} height={22} />
+            </div>
+            <h3 className="text-[20px] font-semibold text-navy">Standart İmtahan</h3>
+            <p className="mt-2 text-[13px] leading-relaxed text-on-surface-variant">
+              15 dəqiqə · {QUESTION_COUNT} sual · keçid həddi {passThreshold}. Real imtahan formatı.
+            </p>
+            <span className="mt-6 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.1em] text-primary">
+              Aktiv rejim
+              <CheckIcon width={14} height={14} />
+            </span>
+          </div>
+
+          {LOCKED_MODES.map((mode) => {
+            const Icon = mode.icon;
+            return (
+              <div
+                key={mode.title}
+                aria-disabled="true"
+                className={`relative overflow-hidden rounded-[2rem] p-7 opacity-70 md:col-span-2 ${mode.tone}`}
+              >
+                <div className="mb-6 flex size-12 items-center justify-center rounded-full bg-surface text-on-surface-variant">
+                  <Icon width={22} height={22} />
+                </div>
+                <h3 className="text-[20px] font-semibold text-navy">{mode.title}</h3>
+                <p className="mt-2 text-[13px] leading-relaxed text-navy/70">{mode.desc}</p>
+                <span className="mt-6 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.1em] text-navy/60">
+                  <LockIcon width={13} height={13} />
+                  Tezliklə
+                </span>
               </div>
-              <ul className="space-y-4">
-                {[
-                  {
-                    title: 'Server tərəfli qiymətləndirmə',
-                    desc: 'Düzgün cavablar heç vaxt brauzerə göndərilmir — nəticə serverdə hesablanır.',
-                  },
-                  {
-                    title: 'Hər dəfə yeni suallar',
-                    desc: `Dərc edilmiş bütün sualların içindən təsadüfi ${QUESTION_COUNT} sual seçilir.`,
-                  },
-                ].map((item) => (
-                  <li key={item.title} className="flex items-start gap-3">
-                    <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-secondary-container/60 text-on-secondary-container">
-                      <CheckIcon width={13} height={13} />
-                    </span>
-                    <span>
-                      <span className="block text-body-md font-semibold text-on-surface">
-                        {item.title}
+            );
+          })}
+
+          {/* Per-subject competency — the export's chart, on real data.
+              Computed from stored per-question answers joined to each
+              question's category (see lib/exam/examHistory.ts). Categories with
+              fewer than 3 answers are omitted rather than shown as 0%/100%. */}
+          {history.competency.length > 0 && (
+            <div className="editorial-shadow rounded-[2rem] border border-border/40 bg-surface p-7 md:col-span-4 lg:col-span-3">
+              <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-on-surface-variant">
+                Mövzu üzrə güc
+              </h3>
+              <ul className="mt-6 space-y-5">
+                {history.competency.map((row) => (
+                  <li key={row.category}>
+                    <div className="mb-2 flex items-baseline justify-between gap-3">
+                      <span className="min-w-0 truncate text-[13px] font-bold text-on-surface">
+                        {row.category}
                       </span>
-                      <span className="block text-label-sm text-on-surface-variant">{item.desc}</span>
-                    </span>
+                      <span
+                        className={`shrink-0 text-[13px] font-bold tabular-nums ${
+                          row.percent >= 80
+                            ? 'text-go-green'
+                            : row.percent >= 50
+                              ? 'text-primary'
+                              : 'text-caution-orange'
+                        }`}
+                      >
+                        {row.percent}%
+                      </span>
+                    </div>
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-tertiary">
+                      <div
+                        className={`h-full rounded-full ${
+                          row.percent >= 80
+                            ? 'bg-go-green'
+                            : row.percent >= 50
+                              ? 'bg-primary'
+                              : 'bg-caution-orange'
+                        }`}
+                        style={{ width: `${row.percent}%` }}
+                      />
+                    </div>
+                    <p className="mt-1 text-[11px] text-on-surface-variant tabular-nums">
+                      {row.correct}/{row.answered} düzgün
+                    </p>
                   </li>
                 ))}
               </ul>
             </div>
+          )}
+
+          {/* Real attempt history in the export's analytics slot. */}
+          <div
+            className={`editorial-shadow rounded-[2rem] border border-border/40 bg-surface p-7 md:col-span-4 ${
+              history.competency.length > 0 ? 'lg:col-span-3' : 'lg:col-span-6'
+            }`}
+          >
+            <div className="flex flex-wrap items-baseline justify-between gap-3 border-b border-border/40 pb-4">
+              <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-on-surface-variant">
+                Nəticələrin
+              </h3>
+              {history.attempts > 0 && (
+                <span className="text-[13px] text-on-surface-variant">
+                  {history.attempts} cəhd · ən yaxşı{' '}
+                  <span className="font-bold tabular-nums text-primary">
+                    {history.bestScore}/{history.lastTotal ?? QUESTION_COUNT}
+                  </span>
+                </span>
+              )}
+            </div>
+
+            {history.recent.length === 0 ? (
+              <p className="pt-5 text-[14px] text-on-surface-variant">
+                İlk imtahanını verəndən sonra nəticələrin burada toplanacaq.
+              </p>
+            ) : (
+              <ul className="mt-5 space-y-4">
+                {history.recent.map((attempt, i) => {
+                  const pct = Math.round((attempt.score / attempt.total) * 100);
+                  const passedAttempt = attempt.score >= passThreshold;
+                  return (
+                    <li key={i}>
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <span className="text-[13px] font-semibold text-on-surface">
+                          {new Date(attempt.at).toLocaleDateString('az-AZ', {
+                            day: 'numeric',
+                            month: 'short',
+                          })}
+                        </span>
+                        <span
+                          className={`text-[13px] font-bold tabular-nums ${
+                            passedAttempt ? 'text-go-green' : 'text-on-surface-variant'
+                          }`}
+                        >
+                          {attempt.score}/{attempt.total} · {pct}%
+                        </span>
+                      </div>
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-tertiary">
+                        <div
+                          className={`h-full rounded-full ${passedAttempt ? 'bg-go-green' : 'bg-primary'}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </div>
         </section>
       </div>

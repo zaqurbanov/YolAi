@@ -8,8 +8,8 @@ import { logout } from '@/app/(auth)/actions';
 import { useNavState } from '@/components/useNavState';
 import { useTour } from '@/components/onboarding/TourProvider';
 import { useDarkMode } from '@/lib/theme/useDarkMode';
-import { useAppDesign } from '@/lib/design/useAppDesign';
-import { CoinIcon, CubeIcon, MoonIcon, SunIcon } from '@/components/icons';
+import InstallAppButton from '@/components/InstallAppButton';
+import { CoinIcon, MoonIcon, SunIcon } from '@/components/icons';
 
 function initialsFrom(name: string | null | undefined, email: string | null): string {
   const source = name?.trim() || email || '';
@@ -51,7 +51,6 @@ export default function MobileAccountMenu() {
   const [isOpen, setIsOpen] = useState(false);
   const { start: startTour } = useTour();
   const { isDark, setDark } = useDarkMode();
-  const { is3D, setDesign3D } = useAppDesign();
 
   if (!nav?.user) return null;
 
@@ -129,20 +128,6 @@ export default function MobileAccountMenu() {
               </button>
             )}
 
-            {is3D !== null && (
-              <button
-                type="button"
-                className={`${itemClass} sm:hidden`}
-                onClick={() => {
-                  setDesign3D(!is3D);
-                  closeMenu();
-                }}
-              >
-                <CubeIcon width={16} height={16} />
-                {is3D ? 'Sadə dizayna qayıt' : 'Yeni dizayna keç'}
-              </button>
-            )}
-
             <Link href="/chat" className={itemClass} onClick={closeMenu}>
               Chat
             </Link>
@@ -156,6 +141,17 @@ export default function MobileAccountMenu() {
             <Link href="/account" className={itemClass} onClick={closeMenu}>
               Hesab
             </Link>
+
+            {/* The install button previously only existed in the sidebar footer,
+                and the sidebar's toggle is `hidden md:inline-flex` — so on
+                mobile, the one place a PWA install actually matters, it was
+                unreachable. It renders nothing when the app is already
+                installed or the browser can't offer an install.
+
+                Deliberately does NOT call closeMenu: its iOS/Android fallback
+                modals live inside the component, and closing the popover would
+                unmount them before they could show. */}
+            <InstallAppButton className={itemClass} />
 
             <button
               type="button"

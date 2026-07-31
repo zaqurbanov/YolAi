@@ -109,8 +109,8 @@ export default async function TopicPage({
     <DesignSwitch
       design={design}
       simple={
-        <div id="top" className="flex flex-1 flex-col">
-          <section className="relative overflow-hidden px-6 pt-10 pb-6">
+        <div id="top" className="editorial flex flex-1 flex-col pb-24 md:pb-0">
+          <section className="relative overflow-hidden px-4 pt-6 pb-6 md:px-6 md:pt-10">
             <div className="absolute inset-0 z-0 bg-gradient-to-b from-primary/10 via-transparent to-transparent" />
             <div className="relative z-10 mx-auto flex max-w-5xl flex-col gap-4">
               <nav className="flex flex-wrap items-center gap-1.5 text-label-sm text-on-surface-variant">

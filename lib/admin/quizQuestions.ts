@@ -19,6 +19,8 @@ export interface QuizQuestionRow {
   createdAt: string;
   updatedAt: string;
   isFineAmount: boolean;
+  /** True only for hand-authored questions in the Rəsmi İmtahan pool (0092). */
+  isExam: boolean;
   /** Storage path (not URL) of the illustration above the question, or null. */
   imagePath: string | null;
   /**
@@ -42,6 +44,7 @@ interface QuizQuestionsSelectRow {
   created_at: string;
   updated_at: string;
   is_fine_amount: boolean;
+  is_exam: boolean;
   image_path: string | null;
   option_image_paths: unknown;
 }
@@ -60,6 +63,7 @@ function mapRow(row: QuizQuestionsSelectRow): QuizQuestionRow {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     isFineAmount: row.is_fine_amount,
+    isExam: Boolean(row.is_exam),
     imagePath: row.image_path ?? null,
     optionImagePaths:
       Array.isArray(row.option_image_paths) && row.option_image_paths.length === 4
@@ -71,7 +75,7 @@ function mapRow(row: QuizQuestionsSelectRow): QuizQuestionRow {
 }
 
 const SELECT_COLUMNS =
-  'id, category, question, options, correct_index, explanation, status, source_title, created_by, created_at, updated_at, is_fine_amount, image_path, option_image_paths';
+  'id, category, question, options, correct_index, explanation, status, source_title, created_by, created_at, updated_at, is_fine_amount, is_exam, image_path, option_image_paths';
 
 export async function listQuestions(status?: 'draft' | 'published'): Promise<QuizQuestionRow[]> {
   let query = createAdminClient()
@@ -155,6 +159,7 @@ export interface QuestionPatch {
   category?: string;
   explanation?: string | null;
   isFineAmount?: boolean;
+  isExam?: boolean;
   /** Storage path, or null to clear the question illustration. */
   imagePath?: string | null;
   /** 4-element path array, or null to clear all answer images. */
@@ -182,6 +187,7 @@ export async function updateQuestion(
   if (patch.category !== undefined) update.category = patch.category;
   if (patch.explanation !== undefined) update.explanation = patch.explanation;
   if (patch.isFineAmount !== undefined) update.is_fine_amount = patch.isFineAmount;
+  if (patch.isExam !== undefined) update.is_exam = patch.isExam;
   if (patch.imagePath !== undefined) update.image_path = patch.imagePath;
   if (patch.optionImagePaths !== undefined) {
     // Collapse an all-null array back to NULL so "no answer images" has one
@@ -240,4 +246,68 @@ export async function deleteQuestion(
   }
 
   return { ok: true };
+}
+
+export interface NewQuestionInput {
+  question: string;
+  options: string[];
+  correctIndex: number;
+  category: string;
+  explanation?: string | null;
+  /** Defaults true — this path exists precisely to author exam questions. */
+  isExam?: boolean;
+  isFineAmount?: boolean;
+}
+
+/**
+ * Creates ONE hand-authored question. Distinct from createDraftQuestions,
+ * which ingests an LLM batch extracted from a PDF: this is the admin typing a
+ * question themselves, which is now the only way anything reaches the Rəsmi
+ * İmtahan pool (see 0092).
+ *
+ * Inserted as `draft` like every other question — publishing stays a separate,
+ * deliberate action, so a half-typed question can never appear in a live exam.
+ */
+export async function createQuestion(
+  input: NewQuestionInput,
+  createdBy: string | null
+): Promise<{ ok: true; question: QuizQuestionRow } | { ok: false; error: string }> {
+  const question = input.question.trim();
+  if (!question) return { ok: false, error: 'Sual mətni boş ola bilməz' };
+
+  const options = input.options.map((option) => option.trim());
+  if (options.length !== 4 || options.some((option) => !option)) {
+    return { ok: false, error: 'Hər sualın dolu 4 variantı olmalıdır' };
+  }
+  if (
+    !Number.isInteger(input.correctIndex) ||
+    input.correctIndex < 0 ||
+    input.correctIndex > 3
+  ) {
+    return { ok: false, error: 'Düzgün cavab 0-3 aralığında olmalıdır' };
+  }
+
+  const { data, error } = await createAdminClient()
+    .from('quiz_questions')
+    .insert({
+      question,
+      options,
+      correct_index: input.correctIndex,
+      category: input.category,
+      explanation: input.explanation?.trim() || null,
+      status: 'draft',
+      is_exam: input.isExam ?? true,
+      is_fine_amount: input.isFineAmount ?? false,
+      created_by: createdBy,
+    })
+    .select(SELECT_COLUMNS)
+    .single<QuizQuestionsSelectRow>();
+
+  if (error || !data) {
+    void logError('admin.quizQuestions.create', error);
+    console.error('[admin/quizQuestions] createQuestion failed:', error);
+    return { ok: false, error: 'Sualı yaratmaq uğursuz oldu' };
+  }
+
+  return { ok: true, question: mapRow(data) };
 }

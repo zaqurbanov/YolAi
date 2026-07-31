@@ -10,7 +10,6 @@ import CoinBadge from '@/components/CoinBadge';
 import NotificationBell from '@/components/NotificationBell';
 import MobileAccountMenu from '@/components/MobileAccountMenu';
 import ThemeToggle from '@/components/ThemeToggle';
-import DesignToggle from '@/components/DesignToggle';
 import { CoinIcon } from '@/components/icons';
 import { useNavState } from '@/components/useNavState';
 
@@ -99,9 +98,6 @@ export default function NavBar() {
             )}
           </>
         )}
-        <span className="hidden sm:inline-flex">
-          <DesignToggle />
-        </span>
         <span className="hidden sm:inline-flex">
           <ThemeToggle />
         </span>

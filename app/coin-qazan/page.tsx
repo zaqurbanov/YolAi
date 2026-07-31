@@ -15,8 +15,6 @@ import { getWeeklyLeaderboard } from '@/lib/coins/leaderboard';
 import { getCoinBalanceStatus } from '@/lib/chat/coins';
 import {
   getEnergyStatus,
-  getTicTacToeTodayCount,
-  getTicTacToeWinReward,
   getEnergyPurchaseConfig,
 } from '@/lib/coins/games';
 import { getWheelStatus } from '@/lib/coins/wheel';
@@ -25,7 +23,7 @@ import { getCarTiers } from '@/lib/garage/carTiers';
 import { getUserGarage } from '@/lib/garage/garage';
 import { getActiveGaragePerk } from '@/lib/garage/perks';
 import { ensureFreePlate, getUserPlate, getVipPlatePrice } from '@/lib/garage/plates';
-import GamesSection from '@/components/games/GamesSection';
+import GamesShowcase from '@/components/games/GamesShowcase';
 import WheelGame from '@/components/games/WheelGame';
 import DailyQuizCard from '@/components/account/DailyQuizCard';
 import DailyQuestCard from '@/components/coins/DailyQuestCard';
@@ -73,8 +71,6 @@ export default async function CoinQazanPage() {
     weeklyLeaderboard,
     coinStatus,
     energyStatus,
-    ticTacToeTodayCount,
-    ticTacToeWinReward,
     wheelStatus,
     energyPurchaseConfig,
     dailyQuestStatus,
@@ -96,8 +92,6 @@ export default async function CoinQazanPage() {
     getWeeklyLeaderboard(user.id),
     getCoinBalanceStatus(user.id),
     getEnergyStatus(user.id),
-    getTicTacToeTodayCount(user.id),
-    getTicTacToeWinReward(),
     getWheelStatus(user.id),
     getEnergyPurchaseConfig(),
     getDailyQuestStatus(user.id),
@@ -164,13 +158,14 @@ export default async function CoinQazanPage() {
       durationSeconds={adViewDurationSeconds}
     />
   );
+  // The three games no longer render inline behind a tab strip — each opens
+  // its own page at /coin-qazan/<slug>. ticTacToeTodayCount / ticTacToeWinReward
+  // are read by that route now, not here.
   const gamesSection = (
-    <GamesSection
+    <GamesShowcase
       initialBalance={coinStatus.balance}
       initialEnergy={energyStatus.balance}
       maxEnergy={energyStatus.max}
-      initialTodayCount={ticTacToeTodayCount}
-      winReward={ticTacToeWinReward}
       energyPurchaseCoinCost={energyPurchaseConfig.coinCost}
       energyPurchaseEnergyAmount={energyPurchaseConfig.energyAmount}
     />

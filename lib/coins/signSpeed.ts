@@ -167,7 +167,16 @@ export type SignSpeedSubmitError =
   | 'error';
 
 export type SignSpeedSubmitResult =
-  | { ok: true; correctCount: number; correctFlags: boolean[]; reward: number; energy: number; balance: number }
+  | {
+      ok: true;
+      correctCount: number;
+      correctFlags: boolean[];
+      /** The right option per question. Only ever returned AFTER settling. */
+      correctIndices: number[];
+      reward: number;
+      energy: number;
+      balance: number;
+    }
   | { ok: false; error: SignSpeedSubmitError };
 
 // Energy was already spent atomically inside startSignSpeedRound — settling a
@@ -239,6 +248,26 @@ export async function submitSignSpeedRound(
 
   const energy = await readCurrentEnergyBalance(userId);
 
+  // Read the round's correct answers back AFTER settling, so the result screen
+  // can show which option was right on the ones the player missed. Safe at this
+  // point and only at this point: settle_sign_speed_round has already flipped
+  // the session to used, so these can no longer influence a score. They are
+  // never read on the start path (see drawSignSpeedQuestions, which selects the
+  // options but never the answer key).
+  //
+  // Read separately rather than added to the RPC's return so this needs no new
+  // migration — migrations here are applied by hand and already lag the code.
+  let correctIndices: number[] = [];
+  const { data: sessionRow } = await createAdminClient()
+    .from('sign_speed_sessions')
+    .select('correct_indices')
+    .eq('id', sessionId)
+    .eq('user_id', userId)
+    .maybeSingle<{ correct_indices: number[] | null }>();
+  if (Array.isArray(sessionRow?.correct_indices)) {
+    correctIndices = sessionRow.correct_indices.map((n) => Number(n));
+  }
+
   // correctFlags is only present once 0088 is applied — fail safe (not
   // throw) against a DB that's still only on 0071, since migrations here are
   // applied by hand and may lag the code.
@@ -253,6 +282,7 @@ export async function submitSignSpeedRound(
     ok: true,
     correctCount: Number(result.correctCount ?? 0),
     correctFlags,
+    correctIndices,
     reward: Number(result.reward ?? 0),
     energy,
     balance: Number(result.balance ?? 0),

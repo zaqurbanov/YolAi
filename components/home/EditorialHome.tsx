@@ -135,7 +135,7 @@ export default function EditorialHome({
 
               {/* The single dominant number on the page — 64px against 16px
                   body. That 4:1 ratio is what gives the screen a focal point. */}
-              <div className="space-y-4 rounded-3xl border border-border/40 bg-white p-6 shadow-sm">
+              <div className="space-y-4 rounded-3xl border border-border/40 bg-surface p-6 shadow-sm">
                 <div className="flex items-end justify-between gap-4">
                   <span className="text-[12px] font-bold uppercase tracking-[0.1em] text-navy">
                     Hazırlıq tərəqqisi
@@ -293,38 +293,32 @@ export default function EditorialHome({
           })}
         </section>
 
-        {/* Günün Sualı — split card, image side replaced by a typographic panel
-            (the export used a stock photo we don't have). DailyQuizCard is
-            mounted unmodified: it owns the claim server action and the streak
-            state, and must not be re-drawn here. */}
+        {/* Günün Sualı — ONE card.
+            It used to be a split panel: an outer white card holding a coloured
+            left panel and a right panel, with DailyQuizCard's own tinted
+            sub-boxes inside that. Four nested backgrounds in four different
+            colours, and the innermost lost its padding when the card chrome was
+            stripped. The heading now sits outside as a normal section header,
+            like every other section, and there is exactly one surface below it.
+
+            DailyQuizCard is still mounted unmodified — it owns the claim server
+            action and the streak state and must not be re-drawn here; the
+            `editorial-quiz` scope only neutralises its own card chrome so it
+            doesn't draw a second box inside this one. */}
         {dailyQuiz && (
-          <section className="border-t border-border/30 pt-12">
-            <div className="grid overflow-hidden rounded-[40px] border border-border/30 bg-white shadow-sm md:grid-cols-2">
-              {/* Deep editorial blue, moved up from the closing CTA that used
-                  to sit at the bottom of the page. With that section gone this
-                  is now the page's one full-bleed colour block, which is what
-                  the rhythm needs — a light page with a single strong panel,
-                  rather than colour scattered across several. */}
-              <div className="editorial-tile-primary flex flex-col justify-center gap-3 p-8 md:p-12">
-                <span className="text-[12px] font-bold uppercase tracking-[0.1em] opacity-70">
-                  Günün Sualı
-                </span>
-                <p className="editorial-display text-[28px] font-semibold leading-tight md:text-[32px]">
-                  Bir sual, bir dəqiqə, bir coin.
-                </p>
-                <p className="text-[15px] leading-relaxed opacity-80">
-                  Hər gün bir sual. Düzgün cavabla seriyanı davam etdir.
-                </p>
-              </div>
-              <div className="editorial-quiz p-6 md:p-10">
-                <DailyQuizCard
-                  question={dailyQuiz.question}
-                  options={dailyQuiz.options}
-                  alreadyClaimed={dailyQuiz.alreadyClaimed}
-                  reward={dailyQuiz.reward}
-                  streakStatus={streakStatus}
-                />
-              </div>
+          <section>
+            <Eyebrow>Günün Sualı</Eyebrow>
+            <h2 className="mt-2 text-[28px] font-semibold leading-tight text-navy md:text-[40px]">
+              Bir sual, bir dəqiqə, bir coin.
+            </h2>
+            <div className="editorial-quiz mt-6 rounded-[32px] border border-border/40 bg-surface p-6 shadow-sm md:p-8">
+              <DailyQuizCard
+                question={dailyQuiz.question}
+                options={dailyQuiz.options}
+                alreadyClaimed={dailyQuiz.alreadyClaimed}
+                reward={dailyQuiz.reward}
+                streakStatus={streakStatus}
+              />
             </div>
           </section>
         )}
@@ -347,7 +341,7 @@ export default function EditorialHome({
                 return (
                   <div
                     key={feature.title}
-                    className="flex h-full flex-col gap-3 rounded-3xl border border-border/40 bg-white p-6 transition hover:shadow-md"
+                    className="flex h-full flex-col gap-3 rounded-3xl border border-border/40 bg-surface p-6 transition hover:shadow-md"
                   >
                     {feature.iconSrc ? (
                       <Image
@@ -381,14 +375,14 @@ export default function EditorialHome({
         {/* Stats — full-bleed navy band. A dark strip between two light sections
             is the editorial rhythm device the export uses for its featured
             block; here it carries the numbers. */}
-        <section className="rounded-[40px] bg-navy px-8 py-12 text-white md:px-16 md:py-16">
+        <section className="editorial-stats-band rounded-[40px] px-8 py-12 md:px-16 md:py-16">
           <div className="grid gap-10 text-center sm:grid-cols-3">
             {stats.map((stat) => (
               <div key={stat.label}>
                 <p className="editorial-display text-[48px] font-bold leading-none text-sand tabular-nums md:text-[56px]">
                   {stat.value}
                 </p>
-                <p className="mt-2 text-[12px] font-bold uppercase tracking-[0.1em] text-white/60">
+                <p className="mt-2 text-[12px] font-bold uppercase tracking-[0.1em] opacity-60">
                   {stat.label}
                 </p>
               </div>

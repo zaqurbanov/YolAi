@@ -40,7 +40,7 @@ export default function MobileCoursePage({
   const unlockedCount = topics.filter((t) => t.isUnlocked).length;
 
   return (
-    <div className="flex flex-col pb-24">
+    <div className="editorial flex flex-col pb-24">
       {/* No <header> here on purpose: the global NavBar is the single top bar
           on mobile (back button, "Akademiya" label, coin badge, account menu).
           This used to render a second stacked one. The course name lives in

@@ -82,6 +82,7 @@ export default function QuestionEditor({ question, accent }: QuestionEditorProps
   const [category, setCategory] = useState(question.category);
   const [explanation, setExplanation] = useState(question.explanation ?? '');
   const [isFineAmount, setIsFineAmount] = useState(question.isFineAmount);
+  const [isExam, setIsExam] = useState(question.isExam);
   // Image state is the storage PATH (what gets persisted); previewUrls holds
   // the public URL purely for display, so the editor can show a freshly
   // uploaded image without a round trip through the server component.
@@ -150,6 +151,7 @@ export default function QuestionEditor({ question, accent }: QuestionEditorProps
         category,
         explanation: explanation.trim() ? explanation : null,
         isFineAmount,
+        isExam,
         imagePath,
         optionImagePaths,
       });
@@ -199,6 +201,11 @@ export default function QuestionEditor({ question, accent }: QuestionEditorProps
         >
           {accent === 'draft' ? 'Layihə — baxış tələb olunur' : 'Dərc edilib'}
         </span>
+        {isExam && (
+          <span className="text-legal-citation rounded-full bg-primary/15 px-2.5 py-1 text-primary">
+            İmtahan
+          </span>
+        )}
         {isFineAmount && (
           <span className="text-legal-citation rounded-full bg-danger/15 px-2.5 py-1 text-danger">Cərimə</span>
         )}
@@ -279,6 +286,16 @@ export default function QuestionEditor({ question, accent }: QuestionEditorProps
           ))}
         </select>
       </div>
+
+      <Checkbox isSelected={isExam} onChange={setIsExam}>
+        <Checkbox.Content>
+          <Checkbox.Control>
+            <Checkbox.Indicator />
+          </Checkbox.Control>
+          Rəsmi İmtahan sualı
+        </Checkbox.Content>
+        <Description>Yalnız işarələnmiş suallar /imtahan-da çıxır</Description>
+      </Checkbox>
 
       <Checkbox isSelected={isFineAmount} onChange={setIsFineAmount}>
         <Checkbox.Content>

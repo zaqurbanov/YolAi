@@ -4,6 +4,11 @@ import { Children, useRef, useState, type ReactNode } from 'react';
 
 interface FeatureRailProps {
   /**
+   * Grid classes for the desktop layout. Defaults to 2 columns (the home
+   * page's four pillars); the games showcase passes 3.
+   */
+  desktopClassName?: string;
+  /**
    * Already-rendered cards. Passed as children rather than as data because the
    * cards carry icon COMPONENTS, which cannot cross a server/client boundary
    * as props — the server renders them, this client component only owns the
@@ -36,7 +41,10 @@ interface FeatureRailProps {
  * would reload the app. Forcing `overflow-y: hidden` fails that test so the
  * walk continues up to <main>, which is the real scroller.
  */
-export default function FeatureRail({ children }: FeatureRailProps) {
+export default function FeatureRail({
+  children,
+  desktopClassName = 'md:grid-cols-2',
+}: FeatureRailProps) {
   const slides = Children.toArray(children);
   const railRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);
@@ -99,7 +107,7 @@ export default function FeatureRail({ children }: FeatureRailProps) {
         </div>
       </div>
 
-      <div className="hidden gap-4 md:grid md:grid-cols-2">{children}</div>
+      <div className={`hidden gap-4 md:grid ${desktopClassName}`}>{children}</div>
     </>
   );
 }

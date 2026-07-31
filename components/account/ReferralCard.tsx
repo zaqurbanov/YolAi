@@ -47,11 +47,25 @@ export default function ReferralCard({ code, bonusAmount }: ReferralCardProps) {
 
       <TextField>
         <Label>Dəvət linkin</Label>
+        {/* min-w-0 is the fix: a flex child defaults to min-width:auto, so the
+            input refused to shrink below the full referral URL and pushed the
+            row past the card on narrow screens. It lives on a wrapper rather
+            than on <Input> so it can't be lost inside HeroUI's own markup.
+            The button keeps a fixed label width so the row doesn't jump when
+            "Kopyala" becomes "Kopyalandı". */}
         <div className="flex items-center gap-2">
-          <Input value={displayLink} readOnly className="flex-1" />
-          <Button variant="secondary" size="sm" onPress={handleCopy} className="shrink-0 gap-1.5">
+          <div className="min-w-0 flex-1">
+            <Input value={displayLink} readOnly className="w-full" />
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            onPress={handleCopy}
+            className="shrink-0 gap-1.5"
+            aria-label="Dəvət linkini kopyala"
+          >
             <CopyIcon width={16} height={16} />
-            {copied ? 'Kopyalandı' : 'Kopyala'}
+            <span className="hidden xs:inline">{copied ? 'Kopyalandı' : 'Kopyala'}</span>
           </Button>
         </div>
         <Description>Bu linklə qeydiyyatdan keçən dostun sənə və ona {bonusAmount} coin qazandırar.</Description>

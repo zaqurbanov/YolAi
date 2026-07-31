@@ -343,6 +343,7 @@ export interface SubmitSignSpeedState {
   message: string;
   correctCount?: number;
   correctFlags?: boolean[];
+  correctIndices?: number[];
   reward?: number;
   energy?: number;
   balance?: number;
@@ -399,6 +400,7 @@ export async function submitSignSpeedRoundAction(
     message: `${result.correctCount}/10 doğru! +${result.reward} coin`,
     correctCount: result.correctCount,
     correctFlags: result.correctFlags,
+    correctIndices: result.correctIndices,
     reward: result.reward,
     energy: result.energy,
     balance: result.balance,
