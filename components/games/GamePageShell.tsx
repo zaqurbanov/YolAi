@@ -4,7 +4,7 @@ import { useCallback, useState } from 'react';
 import Link from 'next/link';
 import MobileBottomTabBar from '@/components/home/MobileBottomTabBar';
 import AnimatedNumber from '@/components/AnimatedNumber';
-import { ArrowLeftIcon, CoinIcon } from '@/components/icons';
+import { ArrowLeftIcon, CoinIcon, EnergyIcon } from '@/components/icons';
 import type { GameMeta } from '@/lib/coins/gameCatalog';
 import TicTacToeGame from './TicTacToeGame';
 import SignSpeedGame from './SignSpeedGame';
@@ -96,12 +96,17 @@ export default function GamePageShell({
           </p>
         </header>
 
-        {/* Meter row — the shared energy pool and the live coin balance. */}
+        {/* Meter row — the shared energy pool and the live coin balance.
+            Energy ACCUMULATES across days since 0094 (grant_daily_energy adds
+            rather than resets), so `energy` can exceed `maxEnergy`, which is
+            only the daily top-up size. The true balance is always shown; the
+            "/max" denominator is dropped once it has been passed, because
+            "14/10" reads as broken. */}
         <div className="mx-auto mt-8 flex flex-wrap items-center justify-center gap-3">
-          <span className="flex items-center gap-2 rounded-full border border-border/40 bg-surface px-4 py-2.5">
-            <span aria-hidden>⚡</span>
+          <span className="flex items-center gap-2 rounded-full border border-border/40 bg-surface px-4 py-2.5 text-caution-orange">
+            <EnergyIcon width={15} height={15} />
             <span className="text-[15px] font-bold tabular-nums text-on-surface">
-              {energy}/{maxEnergy}
+              {energy > maxEnergy ? energy : `${energy}/${maxEnergy}`}
             </span>
             <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-on-surface-variant">
               enerji
@@ -121,8 +126,9 @@ export default function GamePageShell({
             {meta.cost}
           </span>
           {meta.slug === 'xo' && winReward > 0 && (
-            <span className="rounded-full bg-go-green/12 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-go-green">
-              Qələbə +{winReward} coin
+            <span className="flex items-center gap-1.5 rounded-full bg-go-green/12 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-go-green">
+              <EnergyIcon width={12} height={12} />
+              Qələbə +{winReward} enerji
             </span>
           )}
         </div>
@@ -156,11 +162,7 @@ export default function GamePageShell({
               <SignSpeedGame energy={energy} onSettled={handleSettled} />
             )}
             {meta.slug === 'imtahan' && (
-              <ExamSimulatorGame
-                balance={balance}
-                energy={energy}
-                onBalanceChange={handleSettled}
-              />
+              <ExamSimulatorGame energy={energy} onSettled={handleSettled} />
             )}
           </div>
         </div>

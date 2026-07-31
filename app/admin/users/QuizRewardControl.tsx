@@ -75,7 +75,7 @@ export default function QuizRewardControl() {
   return (
     <div className="glass-card rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center gap-4 sm:justify-between">
       <div>
-        <div className="mono-label text-on-surface-variant uppercase">Bugünkü sual mükafatı</div>
+        <div className="mono-label text-on-surface-variant uppercase">Bugünkü sual mükafatı (enerji)</div>
         {loading ? (
           <Skeleton className="h-6 w-32 mt-2 rounded-full" />
         ) : (

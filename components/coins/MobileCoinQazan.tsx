@@ -7,6 +7,7 @@ export interface MobileCoinQazanProps {
   coinBalance: number;
   streakDays: number;
   longestStreak: number;
+  dailyGrantCard: ReactNode;
   dailyQuestCard: ReactNode;
   dailyQuizCard: ReactNode;
   gamesSection: ReactNode;
@@ -70,6 +71,7 @@ export default function MobileCoinQazan({
   coinBalance,
   streakDays,
   longestStreak,
+  dailyGrantCard,
   dailyQuestCard,
   dailyQuizCard,
   gamesSection,
@@ -136,6 +138,7 @@ export default function MobileCoinQazan({
         <section>
           <SectionHeader title="Gündəlik tapşırıqlar" />
           <div className="space-y-4">
+            {dailyGrantCard}
             {dailyQuestCard}
             {dailyQuizCard}
             {adWatchCard}

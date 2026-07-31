@@ -1,5 +1,5 @@
 /**
- * The three coin games, as data. Shared by the showcase on /coin-qazan and the
+ * The three energy games, as data. Shared by the showcase on /coin-qazan and the
  * single dynamic route that renders them, so a slug, title or description can
  * never drift between the card and the page it opens.
  *
@@ -32,7 +32,7 @@ export const GAMES: Record<GameSlug, GameMeta> = {
     title: 'Yol XO',
     tagline: 'Kəsişmədə "Dayan" və ya "Keç" — kompüterə qarşı oyna.',
     description:
-      'Kompüterə qarşı XO. Qalib gələndə coin qazanırsan, hər oyun bir enerji aparır. Gün ərzində oynadıqca çətinlik artır.',
+      'Kompüterə qarşı XO. Qalib gələndə enerji qazanırsan, hər oyun bir enerji aparır. Gün ərzində oynadıqca çətinlik artır.',
     emoji: '❌',
     cost: '1 enerji',
     tone: 'regulatory-blue',
@@ -42,7 +42,7 @@ export const GAMES: Record<GameSlug, GameMeta> = {
     title: 'Nişan Sürəti',
     tagline: 'Nişanı tanı, vaxt bitməmiş cavabla.',
     description:
-      'Yol nişanlarını vaxta qarşı tanı. Hər düzgün cavab coin gətirir — nə qədər sürətli olsan, o qədər çox.',
+      'Yol nişanlarını vaxta qarşı tanı. Hər düzgün cavab enerji gətirir — nə qədər sürətli olsan, o qədər çox.',
     emoji: '🚸',
     cost: '1 enerji',
     tone: 'go-green',
@@ -54,7 +54,7 @@ export const GAMES: Record<GameSlug, GameMeta> = {
     description:
       'Bütün mövzulardan qarışıq 10 sual. Mükafat yoxdur — bu, özünü yoxlamaq üçündür, imtahana hazırlıq alətidir.',
     emoji: '🎓',
-    cost: '100 coin və ya 1 enerji',
+    cost: '1 enerji',
     tone: 'safety-yellow',
   },
 };

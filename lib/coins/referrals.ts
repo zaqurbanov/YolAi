@@ -8,8 +8,11 @@ import { logError } from '@/lib/logging/logError';
 // separate lib/referrals/ tree) for consistency with the rest of the coin
 // economy's file layout.
 
+// Referral stays a COIN payout after the two-currency split (0094) — it is one
+// of the few remaining coin income paths, so the default was lowered 5 -> 2 to
+// match coins' new premium-currency scarcity. Owner will retune via app_settings.
 const REFERRAL_BONUS_KEY = 'referral_bonus_amount';
-const DEFAULT_REFERRAL_BONUS_AMOUNT = 5;
+const DEFAULT_REFERRAL_BONUS_AMOUNT = 2;
 
 // Max PAID referrals one referrer may collect in a rolling 30-day window
 // (0059_security_hardening.sql, section D.1). Before this, referrer_id was

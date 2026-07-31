@@ -75,7 +75,7 @@ export default function DailyChestRewardControl() {
   return (
     <div className="glass-card rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center gap-4 sm:justify-between">
       <div>
-        <div className="mono-label text-on-surface-variant uppercase">Sandıq mükafatı (gündəlik missiyalar)</div>
+        <div className="mono-label text-on-surface-variant uppercase">Sandıq mükafatı — enerji (gündəlik missiyalar)</div>
         {loading ? (
           <Skeleton className="h-6 w-32 mt-2 rounded-full" />
         ) : (

@@ -45,6 +45,13 @@ export async function getGlobalMessagePrice(): Promise<number> {
 // Reads the admin-configurable global daily coin grant from app_settings,
 // falling back to DEFAULT_DAILY_LIMIT when no row exists or the query errors
 // — same fail-open bias as getGlobalMessagePrice above.
+//
+// 0 IS A VALID CONFIGURED VALUE (`value >= 0`, not `> 0`). This top-up is the
+// app's oldest and largest coin income — check_and_reserve_coins raises the
+// balance to it once per Baku day — and coins are money-equivalent since the
+// two-currency split (0094). Rejecting 0 as "not configured" meant the owner
+// literally could not switch this income off. The fallback still applies to a
+// MISSING or non-numeric value, so an infra hiccup can't silently zero it.
 export async function getGlobalDailyCoinGrant(): Promise<number> {
   const { data, error } = await createAdminClient()
     .from('app_settings')
@@ -55,7 +62,7 @@ export async function getGlobalDailyCoinGrant(): Promise<number> {
   if (error || !data) return DEFAULT_DAILY_LIMIT;
 
   const value = typeof data.value === 'number' ? data.value : Number(data.value);
-  if (!Number.isFinite(value) || value <= 0) return DEFAULT_DAILY_LIMIT;
+  if (!Number.isFinite(value) || value < 0) return DEFAULT_DAILY_LIMIT;
   return value;
 }
 

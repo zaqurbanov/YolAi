@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react';
 import { Button } from '@heroui/react';
 import AnimatedNumber from '@/components/AnimatedNumber';
-import { ChestIcon, ChestOpenIcon, CoinIcon } from '@/components/icons';
+import { ChestIcon, ChestOpenIcon, EnergyIcon } from '@/components/icons';
 
 interface ChestOpenOverlayProps {
   reward: number;
@@ -12,7 +12,10 @@ interface ChestOpenOverlayProps {
 }
 
 const AUTO_CLOSE_MS = 3000;
-const COIN_BURST_COUNT = 6;
+// The burst glyph follows the payout: the chest pays ENERGY since 0094, so
+// these are bolts, not coins. The `chest-coin-burst` animation name is unchanged
+// (it is a generic radial burst, reused rather than duplicated).
+const BURST_COUNT = 6;
 
 // Full-screen celebratory reveal shown after DailyQuestCard's claim succeeds.
 // Purely presentational — the reward/balance are already authoritative from
@@ -38,17 +41,17 @@ export default function ChestOpenOverlay({ reward, open, onClose }: ChestOpenOve
       <div className="glass-panel relative flex w-full max-w-sm flex-col items-center gap-6 rounded-3xl p-8 text-center">
         <div className="relative flex h-28 w-28 items-center justify-center">
           <div className="pointer-events-none absolute inset-0">
-            {Array.from({ length: COIN_BURST_COUNT }).map((_, i) => (
+            {Array.from({ length: BURST_COUNT }).map((_, i) => (
               <span
                 key={i}
-                className="chest-coin-burst motion-reduce:animate-none absolute left-1/2 top-1/2 text-safety-yellow"
+                className="chest-coin-burst motion-reduce:animate-none absolute left-1/2 top-1/2 text-caution-orange"
               >
-                <CoinIcon width={16} height={16} />
+                <EnergyIcon width={16} height={16} />
               </span>
             ))}
           </div>
 
-          <div className="chest-shake-open motion-reduce:animate-none relative flex h-20 w-20 items-center justify-center text-safety-yellow">
+          <div className="chest-shake-open motion-reduce:animate-none relative flex h-20 w-20 items-center justify-center text-caution-orange">
             <span className="chest-lid-hide motion-reduce:animate-none absolute inset-0 flex items-center justify-center">
               <ChestIcon width={56} height={56} />
             </span>
@@ -60,11 +63,12 @@ export default function ChestOpenOverlay({ reward, open, onClose }: ChestOpenOve
 
         <div className="space-y-1">
           <p className="text-headline-md text-on-surface">Sandıq açıldı!</p>
-          <p className="flex items-center justify-center gap-1.5 text-display-lg text-safety-yellow">
+          <p className="flex items-center justify-center gap-1.5 text-display-lg text-caution-orange">
             <span>+</span>
             <AnimatedNumber value={reward} durationMs={900} />
-            <CoinIcon width={22} height={22} />
+            <EnergyIcon width={22} height={22} />
           </p>
+          <p className="text-legal-citation text-on-surface-variant">enerji</p>
         </div>
 
         <Button variant="primary" className="glow-primary w-full" onPress={onClose}>

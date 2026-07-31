@@ -1,7 +1,68 @@
-# Roadmap: peer-to-peer coin transfer + coin-earning mechanisms
+# Coin & energy economy
 
-Status: planned, not yet implemented. This is a phased roadmap — Phase 1 ships
-first, Phase 2 (ads) is deferred pending a product decision.
+## CURRENT MODEL — two currencies (2026-08-01, `0094_two_currency_economy.sql`)
+
+**This section supersedes everything below it.** The rest of this file is the
+original single-currency roadmap, kept as history — most of it shipped, but its
+currency assignments are now wrong. Read this section first.
+
+The economy was split into two currencies with deliberately separate roles:
+
+| | **Coin** | **Energy** |
+|---|---|---|
+| Role | Premium / scarce | Gameplay |
+| Sinks | Chat messages, garage cars, VIP plates | All games, official exam |
+| Income | Daily grant (3) + ad watch | Daily grant (10) + every game reward |
+| Accumulates | Yes | Yes (since 0094 — see below) |
+| Future | **Sold for real money** (~50 coins ≈ 20 AZN) | Never sold |
+
+### The one invariant: energy must NEVER convert back into coins
+
+Coin → energy purchase is allowed and is now a legitimate money sink. The
+inverse must not exist in any form, direct or indirect. This single rule is what
+dissolves the farming loop that existed before 0094 (5 coins → 10 energy → up to
+20 coins from the sign-speed game), and it does so *structurally* rather than by
+tuning numbers — no game pays coins any more, so there is nothing to farm back
+into.
+
+Verified at 0094 time: the only `user_coins` writes in the migration are inside
+`claim_daily_grant` (which grants, never converts). `settle_tictactoe`,
+`settle_sign_speed_round`, `start_exam_session`, `claim_wheel_spin`,
+`claim_daily_quiz_*` and `claim_daily_chest` read coins only for the shared UI
+meter. **Any future change that makes a game or an energy-spending path credit
+coins reopens the loop — re-run that check.**
+
+### What moved to energy
+
+Daily quiz, daily chest, wheel of fortune, daily quests, sign-speed game, XO
+wins, streak milestones. Ad watch and referral stayed on coins.
+
+### Bounded income (per user, per Baku day, at defaults)
+
+- **Energy: 144/day absolute worst case**, 69 on a normal (non-milestone) day —
+  10 grant + 3 quiz + 75 day-30 streak milestone + 20 wheel max + 10 chest +
+  6 XO + 20 sign-speed. Games are allowed to be net-positive for a skilled
+  player; that is safe **only because every game has a server-enforced daily
+  earning cap.** Adding a game without one breaks the bound.
+- **Coin: 13–18/day recurring** — 10 legacy top-up + 3 daily grant + 5 ad watch.
+
+### Open decisions (owner's call, not yet made)
+
+1. **`daily_coin_grant` (the legacy free-allowance top-up, default 10) overlaps
+   the new 3-coin daily grant** and undercuts coin scarcity. 0094 changed
+   `getGlobalDailyCoinGrant()` to accept `0`, which it previously rejected — so
+   it can now be switched off. Setting it to `0` also removes the free chat
+   allowance, so it is a deliberate product choice.
+2. **Legacy balances were intentionally not wiped or converted.** Coins earned
+   at the old 10–20/day rate are worth considerably more under the new scarcity.
+
+---
+
+# (Historical) Roadmap: peer-to-peer coin transfer + coin-earning mechanisms
+
+Status: **shipped**, and partly superseded — the transfer and daily-quiz
+mechanics below are live, but the quiz now pays **energy**, not coins. Kept for
+the design rationale and the anti-abuse reasoning, which still apply.
 
 ## Context
 

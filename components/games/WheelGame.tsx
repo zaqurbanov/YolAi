@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { Button } from '@heroui/react';
-import { CoinIcon } from '@/components/icons';
+import { EnergyIcon } from '@/components/icons';
 import { useResetCountdown } from '@/components/useResetCountdown';
 import { spinWheelAction } from '@/app/coin-qazan/actions';
 import type { WheelPrize } from '@/lib/coins/wheel';
@@ -47,6 +47,9 @@ function buildSegmentAngles(prizes: WheelPrize[]): { start: number; end: number;
 // The daily free prize wheel. The SERVER decides the winning segment (crypto
 // RNG) and returns its index; this only animates the wheel to that index and
 // shows the server's prize. It never picks or computes a prize.
+//
+// Since 0094 the prizes are ENERGY, not coins — every glyph and label here must
+// say so (WheelPrize.value is an energy amount).
 export default function WheelGame({ prizes, initialStatus }: WheelGameProps) {
   const [status, setStatus] = useState(initialStatus);
   const [rotation, setRotation] = useState(0);
@@ -117,7 +120,9 @@ export default function WheelGame({ prizes, initialStatus }: WheelGameProps) {
         </div>
         <div>
           <h2 className="text-headline-md text-[18px]">Çarx</h2>
-          <p className="text-legal-citation text-on-surface-variant">Gündə 1 pulsuz fırlatma</p>
+          <p className="text-legal-citation text-on-surface-variant">
+            Gündə 1 pulsuz fırlatma · enerji qazanırsan
+          </p>
         </div>
       </div>
 
@@ -161,14 +166,17 @@ export default function WheelGame({ prizes, initialStatus }: WheelGameProps) {
             ))}
             {/* Hub */}
             <div className="absolute left-1/2 top-1/2 flex size-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-primary/50 bg-background text-primary wheel-hud-hub">
-              <CoinIcon width={18} height={18} />
+              <EnergyIcon width={18} height={18} />
             </div>
           </div>
         </div>
 
         {status === 'spun' && wonPrize !== null && (
-          <p className="text-body-md font-semibold text-go-green" aria-live="polite">
-            +{wonPrize} coin qazandın! 🎉
+          <p
+            className="flex items-center gap-1.5 text-body-md font-semibold text-go-green"
+            aria-live="polite"
+          >
+            <EnergyIcon width={16} height={16} />+{wonPrize} enerji qazandın! 🎉
           </p>
         )}
         {note && status !== 'spun' && <p className="text-label-sm text-caution-orange">{note}</p>}

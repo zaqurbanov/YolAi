@@ -5,7 +5,7 @@ import DailyQuizCard from '@/components/account/DailyQuizCard';
 import MobileBottomTabBar from '@/components/home/MobileBottomTabBar';
 import MobileAccountMenu from '@/components/MobileAccountMenu';
 import ThemeToggle from '@/components/ThemeToggle';
-import { CoinIcon, ArrowRightIcon, ArrowUpIcon, FlameIcon } from '@/components/icons';
+import { CoinIcon, EnergyIcon, ArrowRightIcon, ArrowUpIcon, FlameIcon } from '@/components/icons';
 import type { RuleCategory } from '@/lib/content/ruleCategories';
 import type { StreakStatus } from '@/lib/coins/quiz';
 
@@ -162,13 +162,13 @@ export default function MobileHome({
         ) : (
           <div className="glass-card space-y-3 rounded-2xl p-6">
             <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-xl bg-go-green/15 text-go-green">
-                <CoinIcon />
+              <div className="flex size-10 items-center justify-center rounded-xl bg-caution-orange/15 text-caution-orange">
+                <EnergyIcon />
               </div>
               <h2 className="text-headline-md text-[18px]">Bugünkü sual</h2>
             </div>
             <p className="text-body-md text-on-surface-variant">
-              Gündəlik sualı cavablayıb coin qazanmaq üçün daxil olun.
+              Gündəlik sualı cavablayıb enerji qazanmaq üçün daxil olun.
             </p>
             <Link
               href="/login"

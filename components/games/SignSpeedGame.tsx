@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@heroui/react';
-import { CheckIcon, CloseIcon, CoinIcon } from '@/components/icons';
+import { CheckIcon, CloseIcon, EnergyIcon } from '@/components/icons';
 import AnimatedNumber from '@/components/AnimatedNumber';
 import { useResetCountdown } from '@/components/useResetCountdown';
 import { startSignSpeedRoundAction, submitSignSpeedRoundAction } from '@/app/coin-qazan/actions';
@@ -373,13 +373,15 @@ export default function SignSpeedGame({ energy, onSettled }: SignSpeedGameProps)
             index={reviewIndex}
           />
         )}
-        <span className="flex items-center gap-1.5 rounded-full bg-safety-yellow/15 px-3 py-1 text-safety-yellow">
-          <CoinIcon width={16} height={16} />
+        {/* result.reward is ENERGY since 0094 — same field, different currency. */}
+        <span className="flex items-center gap-1.5 rounded-full bg-caution-orange/15 px-3 py-1 text-caution-orange">
+          <EnergyIcon width={16} height={16} />
           <AnimatedNumber
             value={result.reward}
             format={(n) => `+${Math.round(n)}`}
             className="text-body-md font-semibold tabular-nums"
           />
+          <span className="text-legal-citation">enerji</span>
         </span>
         {noEnergy ? (
           <div className="flex flex-col items-center gap-1">
@@ -401,7 +403,7 @@ export default function SignSpeedGame({ energy, onSettled }: SignSpeedGameProps)
   return (
     <div className="flex flex-col items-center gap-4">
       <p className="text-body-md font-medium text-on-surface-variant">
-        Nişanın kodunu gör, düzgün izahını seç · 10 sual, 1 tur
+        Nişanın kodunu gör, düzgün izahını seç · 10 sual, 1 tur · hər düzgün cavab enerji gətirir
       </p>
 
       {note && <p className="text-label-sm text-caution-orange">{note}</p>}

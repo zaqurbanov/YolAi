@@ -12,6 +12,33 @@
 
 ---
 
+## ⚠️ 2026-08-01 — iki valyutalı iqtisadiyyat bu sənədin əsas fərziyyəsini pozur
+
+`0094_two_currency_economy.sql` coin və enerjini ayırdı (bax `docs/PLATFORM_OVERVIEW.md` § 4).
+
+**Qaraj və VIP nömrələr coin-də qaldı** — bu qəsdən belədir, çünki onlar uzunmüddətli status
+məqsədidir və yığılan valyuta buna uyğundur. Mərhələ 1–4-ün kodu dəyişmədi.
+
+**Amma aşağıdakı 1-ci bölmədəki əsas motivasiya cümləsi artıq doğru deyil:**
+
+> ~~"coin qazanmağın yeganə yolu isə qaydaları öyrənmək, AI ilə danışmaq və test həll etməkdir"~~
+
+Yeni modeldə test həll etmək, oyun oynamaq və dərs keçmək **enerji** qazandırır, coin yox. Coin
+gəliri yalnız gündəlik pay (3) + reklam izləmədir, və gələcəkdə coin real pula satılacaq.
+
+**Nəticə — həll olunmamış dizayn gərginliyi:** "öyrən → maşın al" döngəsi qırılıb. İstifadəçi
+qaydaları nə qədər öyrənsə də, bu onu maşına yaxınlaşdırmır; maşın üçün ya günlərlə gözləməli, ya da
+coin almalıdır. Bu, monetizasiya baxımından qəsdən ola bilər (maşın = ödənişli status), amma
+sənədin 1-ci bölməsindəki "daily habit" məntiqi ilə ziddiyyət təşkil edir. **Mərhələ 5–6-ya
+başlamazdan əvvəl həll edilməlidir.** Üç mümkün yol:
+
+1. Qaraj coin-də qalsın, maşın açıq şəkildə **premium/ödənişli status** kimi mövqeləndirilsin.
+2. Ucuz tier-lər enerji ilə, bahalı tier-lər coin ilə alınsın (qarışıq model).
+3. Öyrənmə/imtahan üçün ayrıca, az miqdarda coin mükafatı geri qaytarılsın — **amma bu, ferma
+   səthini yenidən açır** və coin pula bərabər olduğuna görə gündəlik tavan məcburidir.
+
+---
+
 ## 1. Strateji xülasə
 
 Hazırkı YOL tətbiqi **utility** formatındadır: istifadəçi lazım olanda gəlir, sual verir/test

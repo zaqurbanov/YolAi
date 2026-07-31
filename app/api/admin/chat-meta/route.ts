@@ -18,6 +18,11 @@ import {
 } from '@/lib/notifications/notifications';
 import { GLOBAL_DEFAULT_SETTING_KEY, ENV_DEFAULT_MAX_PER_WINDOW } from '@/lib/chat/rateLimit';
 import {
+  DAILY_LLM_MESSAGE_CAP_KEY,
+  DEFAULT_DAILY_LLM_MESSAGE_CAP,
+  readGlobalLlmUsageToday,
+} from '@/lib/chat/globalLimit';
+import {
   COIN_PRICE_SETTING_KEY,
   DEFAULT_MESSAGE_PRICE,
   DAILY_COIN_GRANT_SETTING_KEY,
@@ -77,6 +82,7 @@ import {
 } from '@/lib/garage/perks';
 import { VIP_PLATE_PRICE_KEY, DEFAULT_VIP_PLATE_PRICE } from '@/lib/garage/plates';
 import { WHEEL_PRIZES_KEY, getWheelPrizes, type WheelPrize } from '@/lib/coins/wheel';
+import { bakuTodayDate } from '@/lib/date/baku';
 
 // Inherited from the folded-in documents/quiz-questions routes: PDF ingestion
 // and LLM question extraction over a full PDF are both slow. This applies to
@@ -632,6 +638,34 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       maxPerDay: isTableConfigured ? tableValue : ENV_DEFAULT_MAX_PER_WINDOW,
       source: isTableConfigured ? 'table' : 'env',
+    });
+  }
+
+  // Global daily LLM circuit breaker (0093). Read-only: readGlobalLlmUsageToday
+  // calls the non-incrementing peek RPC, so refreshing this panel can never
+  // consume budget.
+  if (type === 'llm-circuit-breaker') {
+    const { data, error } = await createAdminClient()
+      .from('app_settings')
+      .select('value')
+      .eq('key', DAILY_LLM_MESSAGE_CAP_KEY)
+      .maybeSingle();
+
+    if (error) return serverError(error, 'Ayarları oxumaq uğursuz oldu');
+
+    const tableValue = data ? Number(data.value) : null;
+    const isTableConfigured = tableValue !== null && Number.isFinite(tableValue) && tableValue > 0;
+
+    // `used` is null when the counter can't be read (most likely: 0093 not
+    // applied yet) — surfaced as-is rather than coerced to 0, so the UI shows
+    // "unknown" instead of a confidently wrong zero.
+    const { used } = await readGlobalLlmUsageToday();
+
+    return NextResponse.json({
+      cap: isTableConfigured ? tableValue : DEFAULT_DAILY_LLM_MESSAGE_CAP,
+      source: isTableConfigured ? 'table' : 'default',
+      usedToday: used,
+      date: bakuTodayDate(),
     });
   }
 
@@ -1921,6 +1955,37 @@ export async function PATCH(request: NextRequest) {
     }
 
     return NextResponse.json({ profile, coins });
+  }
+
+  // Global daily LLM circuit breaker cap (0093). Mirrors the rate-limit branch
+  // below: null resets to the TS/env default by deleting the app_settings row.
+  if (type === 'llm-circuit-breaker') {
+    const body = await request.json().catch(() => null);
+    const cap = body?.cap;
+
+    if (
+      cap !== null &&
+      cap !== undefined &&
+      (typeof cap !== 'number' || !Number.isInteger(cap) || cap <= 0 || cap > MAX_ALLOWED)
+    ) {
+      return apiError(400, `cap null və ya 1-${MAX_ALLOWED} arasında tam ədəd olmalıdır`);
+    }
+
+    const admin = createAdminClient();
+
+    if (cap === null || cap === undefined) {
+      const { error } = await admin.from('app_settings').delete().eq('key', DAILY_LLM_MESSAGE_CAP_KEY);
+      if (error) return serverError(error, 'Ayarı sıfırlamaq uğursuz oldu');
+      return NextResponse.json({ cap: DEFAULT_DAILY_LLM_MESSAGE_CAP, source: 'default' });
+    }
+
+    const { error } = await admin
+      .from('app_settings')
+      .upsert({ key: DAILY_LLM_MESSAGE_CAP_KEY, value: cap, updated_at: new Date().toISOString() });
+
+    if (error) return serverError(error, 'Ayarı yeniləmək uğursuz oldu');
+
+    return NextResponse.json({ cap, source: 'table' });
   }
 
   if (type !== 'rate-limit') {

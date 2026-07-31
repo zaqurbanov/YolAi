@@ -13,6 +13,11 @@ import { logError } from '@/lib/logging/logError';
 // index to the client; grading happens server-side against the stored
 // answers. Energy is spent ONCE per round-start (not per question, not at
 // settle) — see the migration's top comment for why.
+//
+// CURRENCY: the per-correct reward pays ENERGY since
+// 0094_two_currency_economy.sql. This RPC paying COINS while the round cost
+// energy was the profitable half of the old coin->energy->coin farming loop;
+// the two-currency split closes it. Never move this payout back to coins.
 
 // ---------------------------------------------------------------------------
 // Config — app_settings with TS-side defaults (house convention, no seed rows).
@@ -173,30 +178,14 @@ export type SignSpeedSubmitResult =
       correctFlags: boolean[];
       /** The right option per question. Only ever returned AFTER settling. */
       correctIndices: number[];
+      /** ENERGY paid for this round (since 0094). */
       reward: number;
+      /** New ENERGY balance, after the round's cost AND its reward. */
       energy: number;
+      /** Coin balance — unchanged by a round, returned for the shared meter. */
       balance: number;
     }
   | { ok: false; error: SignSpeedSubmitError };
-
-// Energy was already spent atomically inside startSignSpeedRound — settling a
-// round never touches user_energy. This is a plain, no-grant read of the
-// CURRENT balance purely so the frontend's shared energy meter can refresh
-// after a round without a second RPC round-trip. Fails open to 0 (display
-// only; the authoritative spend already happened at start).
-async function readCurrentEnergyBalance(userId: string): Promise<number> {
-  try {
-    const { data, error } = await createAdminClient()
-      .from('user_energy')
-      .select('balance')
-      .eq('user_id', userId)
-      .maybeSingle();
-    if (error || !data) return 0;
-    return Number(data.balance ?? 0);
-  } catch {
-    return 0;
-  }
-}
 
 export async function submitSignSpeedRound(
   userId: string,
@@ -244,9 +233,13 @@ export async function submitSignSpeedRound(
   }
 
   if (typeof data !== 'object' || data === null) return { ok: false, error: 'error' };
-  const result = data as { balance?: number; correctCount?: number; reward?: number; correctFlags?: unknown };
-
-  const energy = await readCurrentEnergyBalance(userId);
+  const result = data as {
+    balance?: number;
+    energy?: number;
+    correctCount?: number;
+    reward?: number;
+    correctFlags?: unknown;
+  };
 
   // Read the round's correct answers back AFTER settling, so the result screen
   // can show which option was right on the ones the player missed. Safe at this
@@ -284,7 +277,7 @@ export async function submitSignSpeedRound(
     correctFlags,
     correctIndices,
     reward: Number(result.reward ?? 0),
-    energy,
+    energy: Number(result.energy ?? 0),
     balance: Number(result.balance ?? 0),
   };
 }

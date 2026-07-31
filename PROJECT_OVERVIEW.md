@@ -48,17 +48,22 @@ Yalnız giriş etmiş istifadəçilər üçün görünür: **Coin Qazan** və **
 
 ## Coin Qazan səhifəsi (`/coin-qazan`) — nələr var?
 
-Bu, tətbiqin ən zəngin səhifəsidir. Aşağıdakı kartlar/bloklar mövcuddur:
-- **Gündəlik test sualı** (quiz) — düzgün cavaba görə coin, səhv cavab da qeydə alınır (növbəti cəhd üçün)
-- **Reklam izləmə** — reklama baxıb coin qazanmaq (server tərəfindən təsdiqlənən müddət və tək-istifadəlik token ilə qorunur)
-- **Gündəlik tapşırıqlar (Daily Quests)**
-- **Referans (dəvət) sistemi** — dostunu dəvət et, o, ilk mesajı göndərəndə coin qazanırsan
-- **Həftəlik liderlik lövhəsi** kartı
-- **Oyunlar** — Xaç-Nought (tic-tac-toe), Çarx (Wheel) oyunu, enerji sistemi
-- **Virtual Qaraj** — avtomobil "tier"ləri, aktiv perklər
-- **Nömrə bazarı (Plate Market)** — VIP avtomobil nömrələri almaq
+Bu, tətbiqin ən zəngin səhifəsidir. **İki valyuta var** (`0094`-dən sonra): **coin** premium
+valyutadır və yalnız chat mesajlarına, qaraja və VIP nömrələrə xərclənir; **enerji** isə oyun
+valyutasıdır və bütün oyunlara və rəsmi imtahana gedir. Enerji heç vaxt coin-ə çevrilmir — detallar:
+`docs/PLATFORM_OVERVIEW.md` § 4.
 
-Bütün coin qazanma yolları server tərəfində təsdiqlənir (client heç vaxt məbləğ və ya "doğrudur" bayrağı göndərmir) — hesab yaratmağın pulsuz olduğu mühitdə sui-istifadəyə qarşı qorunma üçün.
+- **Gündəlik pay** — gündə bir dəfə **3 coin + 10 enerji**
+- **Gündəlik test sualı** (quiz) — düzgün cavaba görə **enerji**, səhv cavab da qeydə alınır (növbəti cəhd üçün)
+- **Reklam izləmə** — reklama baxıb **coin** qazanmaq (server tərəfindən təsdiqlənən müddət və tək-istifadəlik token ilə qorunur)
+- **Gündəlik tapşırıqlar (Daily Quests)** — enerji
+- **Referans (dəvət) sistemi** — dostunu dəvət et, o, ilk mesajı göndərəndə **coin** qazanırsan
+- **Həftəlik liderlik lövhəsi** kartı
+- **Oyunlar** — XO (tic-tac-toe), Çarx (Wheel), Nişan Sürəti — enerji xərcləyir və enerji qazandırır
+- **Virtual Qaraj** — avtomobil "tier"ləri, aktiv perklər (**coin** ilə alınır)
+- **Nömrə bazarı (Plate Market)** — VIP avtomobil nömrələri (**coin** ilə alınır)
+
+Bütün coin/enerji qazanma yolları server tərəfində təsdiqlənir (client heç vaxt məbləğ və ya "doğrudur" bayrağı göndərmir) — hesab yaratmağın pulsuz olduğu mühitdə sui-istifadəyə qarşı qorunma üçün. Coin gələcəkdə real pula satılacağı üçün bu qayda xüsusilə coin verən yollara aiddir.
 
 ## Öyrənmə səhifəsi (`/oyrenme`)
 

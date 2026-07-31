@@ -7,11 +7,8 @@ import { playTicTacToe, purchaseEnergy } from '@/lib/coins/games';
 import { spinWheel } from '@/lib/coins/wheel';
 import { startSignSpeedRound, submitSignSpeedRound, type SignSpeedQuestion } from '@/lib/coins/signSpeed';
 import { claimDailyChest } from '@/lib/coins/dailyQuests';
-import {
-  startExamSession,
-  submitExamSession,
-  type ExamPaymentMethod,
-} from '@/lib/exam/examSession';
+import { claimDailyGrant } from '@/lib/coins/dailyGrant';
+import { startExamSession, submitExamSession } from '@/lib/exam/examSession';
 import { generateExamShareLink } from '@/lib/exam/examShare';
 import type { ExamQuestion } from '@/lib/exam/examPool';
 import { purchaseCarTier } from '@/lib/garage/garage';
@@ -111,10 +108,10 @@ export async function claimAdWatchRewardAction(nonce: string): Promise<AdWatchCl
 
 export type GamePlayStatus = 'success' | 'no_energy' | 'invalid_input' | 'unavailable' | 'error';
 
-// Win credits a reward, draw/loss nothing — no wager, so a loss costs no coins
-// (only the 1 energy the play already spent).
+// Win credits an ENERGY reward, draw/loss nothing — no wager, so a loss costs
+// only the 1 energy the play already spent.
 function outcomeMessage(outcome: 'win' | 'draw' | 'loss', reward: number): string {
-  if (outcome === 'win') return reward > 0 ? `Qazandın! +${reward} coin 🎉` : 'Qazandın! 🎉';
+  if (outcome === 'win') return reward > 0 ? `Qazandın! +${reward} enerji 🎉` : 'Qazandın! 🎉';
   if (outcome === 'draw') return 'Heç-heçə.';
   return 'Uduzdun. Növbəti dəfə uğurlar!';
 }
@@ -248,8 +245,11 @@ export interface WheelSpinState {
   // The winning segment index (so the client animates the wheel to it) and the
   // prize — both SERVER-decided; the action takes no input at all.
   prizeIndex?: number;
+  /** ENERGY won (since 0094). */
   prize?: number;
   balance?: number;
+  /** New ENERGY balance. */
+  energy?: number;
 }
 
 export async function spinWheelAction(): Promise<WheelSpinState> {
@@ -276,10 +276,11 @@ export async function spinWheelAction(): Promise<WheelSpinState> {
   revalidatePath('/coin-qazan');
   return {
     status: 'success',
-    message: `+${result.prize} coin! 🎉`,
+    message: `+${result.prize} enerji! 🎉`,
     prizeIndex: result.prizeIndex,
     prize: result.prize,
     balance: result.balance,
+    energy: result.energy,
   };
 }
 
@@ -397,7 +398,7 @@ export async function submitSignSpeedRoundAction(
   revalidatePath('/coin-qazan');
   return {
     status: 'success',
-    message: `${result.correctCount}/10 doğru! +${result.reward} coin`,
+    message: `${result.correctCount}/10 doğru! +${result.reward} enerji`,
     correctCount: result.correctCount,
     correctFlags: result.correctFlags,
     correctIndices: result.correctIndices,
@@ -415,20 +416,23 @@ export async function submitSignSpeedRoundAction(
 export interface DailyChestClaimState {
   status: 'success' | 'already_claimed' | 'quests_incomplete' | 'unavailable' | 'error';
   message: string;
+  /** ENERGY paid by the chest (since 0094). */
   reward?: number;
   balance?: number;
+  /** New ENERGY balance. */
+  energy?: number;
 }
 
 // ---------------------------------------------------------------------------
 // Sınaq İmtahanı — real exam simulator (0082_exam_simulator.sql,
 // lib/exam/examSession.ts). A 15-minute, 10-question, all-topics-mixed timed
-// mock exam. Entry costs EITHER 100 coins OR 1 energy, the user's choice —
-// pure coin/energy SINK, no reward on completion (unlike the mini-games
-// above). Result can be shared via a link.
+// mock exam. Entry costs ENERGY only (the coin path was removed in 0094) —
+// pure SINK, no reward on completion (unlike the mini-games above). Result can
+// be shared via a link.
 // ---------------------------------------------------------------------------
 
 export interface StartExamState {
-  status: 'success' | 'no_energy' | 'insufficient_coins' | 'pool_too_small' | 'unavailable' | 'error';
+  status: 'success' | 'no_energy' | 'pool_too_small' | 'unavailable' | 'error';
   message: string;
   sessionId?: string;
   questions?: ExamQuestion[];
@@ -436,7 +440,8 @@ export interface StartExamState {
   energy?: number;
 }
 
-export async function startExamSessionAction(paymentMethod: ExamPaymentMethod): Promise<StartExamState> {
+// Takes NO payment method since 0094: the exam is energy-funded, full stop.
+export async function startExamSessionAction(): Promise<StartExamState> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -446,17 +451,10 @@ export async function startExamSessionAction(paymentMethod: ExamPaymentMethod): 
     return { status: 'error', message: 'Giriş tələb olunur' };
   }
 
-  if (paymentMethod !== 'coin' && paymentMethod !== 'energy') {
-    return { status: 'error', message: 'Yanlış ödəniş üsulu' };
-  }
-
-  const result = await startExamSession(user.id, paymentMethod);
+  const result = await startExamSession(user.id);
   if (!result.ok) {
     if (result.error === 'no_energy') {
       return { status: 'no_energy', message: 'Enerjin bitib. Sabah yenilənəcək' };
-    }
-    if (result.error === 'insufficient_coins') {
-      return { status: 'insufficient_coins', message: 'Kifayət qədər coin yoxdur' };
     }
     if (result.error === 'pool_too_small') {
       return { status: 'pool_too_small', message: 'İmtahan hazırda əlçatan deyil' };
@@ -850,8 +848,66 @@ export async function claimDailyChestAction(): Promise<DailyChestClaimState> {
   revalidatePath('/coin-qazan');
   return {
     status: 'success',
-    message: `Sandıq açıldı! +${result.reward} coin`,
+    message: `Sandıq açıldı! +${result.reward} enerji`,
     reward: result.reward,
     balance: result.balance,
+    energy: result.energy,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Günlük hədiyyə — the daily grant (0094_two_currency_economy.sql,
+// lib/coins/dailyGrant.ts). A COIN-granting path: takes no input at all, the
+// amounts come from app_settings server-side, and the once-per-Baku-day
+// guarantee is a unique-index violation inside claim_daily_grant, so repeated
+// or concurrent POSTs cannot pay twice.
+// ---------------------------------------------------------------------------
+export interface DailyGrantClaimState {
+  status: 'success' | 'already_claimed' | 'unavailable' | 'error';
+  message: string;
+  /** Coins credited. */
+  coins?: number;
+  /** Energy actually added (0 if today's top-up had already fired). */
+  energyGranted?: number;
+  /** New coin balance. */
+  balance?: number;
+  /** New energy balance. */
+  energy?: number;
+}
+
+export async function claimDailyGrantAction(): Promise<DailyGrantClaimState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { status: 'error', message: 'Giriş tələb olunur' };
+  }
+
+  const result = await claimDailyGrant(user.id);
+  if (!result.ok) {
+    if (result.error === 'already_claimed') {
+      return { status: 'already_claimed', message: 'Bugünkü hədiyyəni artıq almısan' };
+    }
+    if (result.error === 'unavailable') {
+      return { status: 'unavailable', message: 'Bu funksiya hazırda əlçatan deyil' };
+    }
+    return { status: 'error', message: 'Xəta baş verdi. Bir az sonra yenidən cəhd edin' };
+  }
+
+  revalidatePath('/coin-qazan');
+  revalidatePath('/account');
+
+  const parts = [`+${result.coins} coin`];
+  if (result.energyGranted > 0) parts.push(`+${result.energyGranted} enerji`);
+
+  return {
+    status: 'success',
+    message: `Günlük hədiyyə alındı! ${parts.join(', ')}`,
+    coins: result.coins,
+    energyGranted: result.energyGranted,
+    balance: result.balance,
+    energy: result.energy,
   };
 }

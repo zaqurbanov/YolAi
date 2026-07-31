@@ -18,7 +18,9 @@ interface GarageCardProps {
 }
 
 function perkLine(perk: ActiveGaragePerk): string | null {
-  if (perk.xoBonusPct > 0) return `🎁 Aktiv perk: XO-da +${perk.xoBonusPct}% coin`;
+  // The XO win reward became ENERGY in 0094, so this percentage bonus applies
+  // to energy now — not coins.
+  if (perk.xoBonusPct > 0) return `🎁 Aktiv perk: XO-da +${perk.xoBonusPct}% enerji`;
   if (perk.energyBonus > 0) return `🎁 Aktiv perk: +${perk.energyBonus} gündəlik enerji`;
   if (perk.chatDailyBonus > 0) return `🎁 Aktiv perk: +${perk.chatDailyBonus} gündəlik pulsuz sual`;
   return null;

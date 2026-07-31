@@ -17,9 +17,14 @@ import { getDailyQuestionForUser } from '@/lib/quiz/questions';
 export interface QuizClaimState {
   status: 'idle' | 'correct' | 'incorrect' | 'already_claimed' | 'error';
   message: string;
+  /** Coin balance — unchanged by the quiz since 0094, kept for the shared meter. */
   balance?: number;
+  /** New ENERGY balance. */
+  energy?: number;
+  /** ENERGY paid for a correct answer (since 0094). */
   reward?: number;
   streak?: number;
+  /** ENERGY paid for a streak milestone (since 0094). */
   milestoneBonus?: number;
 }
 
@@ -62,13 +67,14 @@ export async function claimDailyQuizReward(selectedIndex: number): Promise<QuizC
 
   const message =
     result.milestoneBonus > 0
-      ? `Düz cavab! ${result.reward} coin qazandınız — ${result.currentStreak} günlük seriya! +${result.milestoneBonus} bonus coin`
-      : `Düz cavab! ${result.reward} coin qazandınız`;
+      ? `Düz cavab! ${result.reward} enerji qazandınız — ${result.currentStreak} günlük seriya! +${result.milestoneBonus} bonus enerji`
+      : `Düz cavab! ${result.reward} enerji qazandınız`;
 
   return {
     status: 'correct',
     message,
     balance: result.balance,
+    energy: result.energy,
     reward: result.reward,
     streak: result.currentStreak,
     milestoneBonus: result.milestoneBonus,

@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react';
 import Link from 'next/link';
 import AnimatedNumber from '@/components/AnimatedNumber';
-import { ArrowRightIcon, CoinIcon } from '@/components/icons';
+import { ArrowRightIcon, CoinIcon, EnergyIcon } from '@/components/icons';
 import { purchaseEnergyAction } from '@/app/coin-qazan/actions';
 import { GAME_SLUGS, GAMES } from '@/lib/coins/gameCatalog';
 import FeatureRail from '@/components/home/FeatureRail';
@@ -68,13 +68,16 @@ export default function GamesShowcase({
   return (
     <div className="flex min-h-[80svh] flex-col">
       {/* Shared meters. Same two-line layout the old header ended up with, so
-          the convert button never overflows a narrow screen. */}
+          the convert button never overflows a narrow screen.
+          Energy accumulates across days since 0094, so it can exceed maxEnergy
+          (the daily top-up size) — show the true balance and drop the "/max"
+          denominator once it no longer bounds it. */}
       <div className="flex flex-col gap-2 rounded-2xl border border-border/40 bg-surface p-4">
         <div className="flex flex-wrap items-center gap-2">
           <span className="flex items-center gap-1.5 rounded-full bg-caution-orange/15 px-3 py-1 text-caution-orange">
-            <span aria-hidden>⚡</span>
+            <EnergyIcon width={16} height={16} />
             <span className="text-body-md font-semibold tabular-nums">
-              {energy}/{maxEnergy}
+              {energy > maxEnergy ? energy : `${energy}/${maxEnergy}`}
             </span>
           </span>
           <span className="flex items-center gap-1.5 rounded-full bg-safety-yellow/15 px-3 py-1 text-safety-yellow">
@@ -91,7 +94,7 @@ export default function GamesShowcase({
             <span className="text-body-md font-semibold tabular-nums">{energyPurchaseCoinCost}</span>
             <CoinIcon width={14} height={14} />
             <span aria-hidden>→</span>
-            <span aria-hidden>⚡</span>
+            <EnergyIcon width={14} height={14} />
             <span className="text-body-md font-semibold tabular-nums">
               +{energyPurchaseEnergyAmount}
             </span>

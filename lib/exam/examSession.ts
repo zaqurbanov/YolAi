@@ -10,10 +10,13 @@ import { maybeApplyFine } from '@/lib/garage/fines';
 // "Sınaq İmtahanı" (real exam simulator) — SERVER-AUTHORITATIVE, same posture
 // as sign speed / XO: the server picks the 10-question set + correct answers
 // at start and never sends the correct index to the client; grading happens
-// server-side against the stored answers. Entry costs EITHER 100 coins OR 1
-// energy (the user's choice) — see lib/coins/games.ts's purchaseEnergy() for
-// the closest existing "coin sink" precedent. Unlike sign speed / XO, this
-// pays NO reward on completion — pure sink, not a new earning path.
+// server-side against the stored answers. Unlike sign speed / XO, this pays NO
+// reward on completion — pure sink, not a new earning path.
+//
+// ENTRY COSTS ENERGY ONLY since 0094_two_currency_economy.sql. The old "100
+// coins OR 1 energy" choice is gone end-to-end (TS, server action, RPC
+// signature): the exam is gameplay, and gameplay is energy-funded. Do not
+// reintroduce a coin entry path without re-reading 0094's INVARIANT header.
 
 // ---------------------------------------------------------------------------
 // Config — app_settings with TS-side defaults (house convention, no seed
@@ -21,9 +24,6 @@ import { maybeApplyFine } from '@/lib/garage/fines';
 // (GAME_DAILY_ENERGY_KEY) — one shared energy pool for the whole games
 // section, not a second one for this feature.
 // ---------------------------------------------------------------------------
-const EXAM_COIN_PRICE_KEY = 'exam_coin_price';
-const DEFAULT_EXAM_COIN_PRICE = 100;
-
 const EXAM_ENERGY_COST_KEY = 'exam_energy_cost';
 const DEFAULT_EXAM_ENERGY_COST = 1;
 
@@ -31,8 +31,6 @@ const EXAM_SESSION_TTL_SECONDS_KEY = 'exam_session_ttl_seconds';
 const DEFAULT_EXAM_SESSION_TTL_SECONDS = 1200;
 
 export {
-  EXAM_COIN_PRICE_KEY,
-  DEFAULT_EXAM_COIN_PRICE,
   EXAM_ENERGY_COST_KEY,
   DEFAULT_EXAM_ENERGY_COST,
   EXAM_SESSION_TTL_SECONDS_KEY,
@@ -56,29 +54,21 @@ async function readNumericSetting(key: string, fallback: number): Promise<number
   return value;
 }
 
-export type ExamPaymentMethod = 'coin' | 'energy';
-
-export type ExamStartError =
-  | 'no_energy'
-  | 'insufficient_coins'
-  | 'pool_too_small'
-  | 'unavailable'
-  | 'error';
+export type ExamStartError = 'no_energy' | 'pool_too_small' | 'unavailable' | 'error';
 
 export type ExamStartResult =
   | {
       ok: true;
       sessionId: string;
       questions: ExamQuestion[];
+      /** Coin balance — never debited by the exam, returned for the shared meter. */
       balance: number;
+      /** New ENERGY balance after the entry cost. */
       energy: number;
     }
   | { ok: false; error: ExamStartError };
 
-export async function startExamSession(
-  userId: string,
-  paymentMethod: ExamPaymentMethod
-): Promise<ExamStartResult> {
+export async function startExamSession(userId: string): Promise<ExamStartResult> {
   const questions = await drawExamQuestions();
   if (!questions) {
     return { ok: false, error: 'pool_too_small' };
@@ -107,8 +97,7 @@ export async function startExamSession(
     return { ok: false, error: 'error' };
   }
 
-  const [coinPrice, energyCost, baseDailyEnergyGrant] = await Promise.all([
-    readNumericSetting(EXAM_COIN_PRICE_KEY, DEFAULT_EXAM_COIN_PRICE),
+  const [energyCost, baseDailyEnergyGrant] = await Promise.all([
     readNumericSetting(EXAM_ENERGY_COST_KEY, DEFAULT_EXAM_ENERGY_COST),
     readNumericSetting(GAME_DAILY_ENERGY_KEY, DEFAULT_GAME_DAILY_ENERGY),
   ]);
@@ -118,8 +107,6 @@ export async function startExamSession(
     p_user_id: userId,
     p_question_ids: questionIds,
     p_correct_indices: correctIndices,
-    p_payment_method: paymentMethod,
-    p_coin_price: coinPrice,
     p_energy_cost: Math.round(energyCost),
     p_daily_energy_grant: Math.round(dailyEnergyGrant),
   });
@@ -127,7 +114,6 @@ export async function startExamSession(
   if (error) {
     const message = error.message ?? '';
     if (message.includes('no_energy')) return { ok: false, error: 'no_energy' };
-    if (message.includes('insufficient_coins')) return { ok: false, error: 'insufficient_coins' };
     if (isMissingRelationError(error)) return { ok: false, error: 'unavailable' };
     void logError('exam.examSession.start', error, { userId });
     console.error('[exam] start_exam_session RPC failed:', {

@@ -28,7 +28,7 @@ const FIELDS: {
   {
     param: 'tictactoeWinReward',
     label: 'XO qazanma mükafatı',
-    hint: 'Kompüterə qarşı XO oyununu udduqda qazanılan coin.',
+    hint: 'Kompüterə qarşı XO oyununu udduqda qazanılan ENERJİ (0094-dən sonra coin deyil).',
     integerOnly: false,
     min: 0.01,
     max: 10000,
@@ -36,7 +36,7 @@ const FIELDS: {
   {
     param: 'signSpeedPerCorrectReward',
     label: 'Nişan Sürəti — düzgün cavab mükafatı',
-    hint: 'Nişan Sürəti oyununda hər düzgün cavab üçün qazanılan coin.',
+    hint: 'Nişan Sürəti oyununda hər düzgün cavab üçün qazanılan ENERJİ (0094-dən sonra coin deyil).',
     integerOnly: false,
     min: 0.01,
     max: 10000,

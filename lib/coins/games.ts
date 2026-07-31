@@ -5,8 +5,9 @@ import { logError } from '@/lib/logging/logError';
 import { getEffectiveEnergyGrant, getActiveGaragePerk } from '@/lib/garage/perks';
 
 // XO (tic-tac-toe) — NO-WAGER reward model (0067_xo_energy_rewards.sql). The old
-// betting games (rps, coinflip) were removed. Playing costs 1 ENERGY (a daily
-// allowance, never coins); winning credits a small, daily-capped coin reward.
+// betting games (rps, coinflip) were removed. Playing costs 1 ENERGY; winning
+// credits a small, daily-capped ENERGY reward (coins until
+// 0094_two_currency_economy.sql — see that file's INVARIANT header).
 // SERVER-AUTHORITATIVE: the client submits only its own board moves; the server
 // re-simulates the game against a DETERMINISTIC AI, derives the outcome, and
 // settles energy + reward. Fail-CLOSED on the play path; fail-OPEN on the
@@ -15,6 +16,10 @@ import { getEffectiveEnergyGrant, getActiveGaragePerk } from '@/lib/garage/perks
 // ---------------------------------------------------------------------------
 // Config — app_settings with TS-side defaults (house convention, no seed rows).
 // ---------------------------------------------------------------------------
+// The once-per-Baku-day energy top-up. Since 0094 this is ADDITIVE — earned
+// energy accumulates instead of being wiped at the day boundary — so it is a
+// daily INCOME, not a ceiling. getEnergyStatus still reports it as `max` for
+// the meter's scale, which is why a balance can now exceed `max`.
 const GAME_DAILY_ENERGY_KEY = 'game_daily_energy';
 const DEFAULT_GAME_DAILY_ENERGY = 10;
 
@@ -103,9 +108,9 @@ export async function getEnergyStatus(userId: string): Promise<EnergyStatus> {
   }
 }
 
-// The current XO win reward (for display). Resolves the admin override, fails
-// open to the TS default. The authoritative amount used to credit is resolved
-// again inside playTicTacToe and re-checked by the RPC.
+// The current XO win reward in ENERGY (for display). Resolves the admin
+// override, fails open to the TS default. The authoritative amount used to
+// credit is resolved again inside playTicTacToe and re-checked by the RPC.
 export async function getTicTacToeWinReward(): Promise<number> {
   return readNumericSetting(TICTACTOE_WIN_REWARD_KEY, DEFAULT_TICTACTOE_WIN_REWARD);
 }
@@ -278,8 +283,11 @@ export type TicTacToeResult =
       aiMoves: number[];
       sequence: TicTacToeMoveStep[];
       board: Cell[];
+      /** ENERGY paid for a win (since 0094). */
       reward: number;
+      /** New ENERGY balance, after the play cost AND any win reward. */
       energy: number;
+      /** Coin balance — unchanged by a game, returned for the shared meter. */
       balance: number;
     }
   | { ok: false; error: TicTacToeSettleError | 'invalid_moves' };

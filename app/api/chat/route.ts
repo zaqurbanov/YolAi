@@ -22,6 +22,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { apiError, notFound, serverError, unauthorized } from '@/lib/api/errors';
 import { checkChatRateLimit } from '@/lib/chat/rateLimit';
+import { consumeGlobalLlmBudget } from '@/lib/chat/globalLimit';
 import {
   checkAndReserveCoins,
   debitCoins,
@@ -302,6 +303,38 @@ export async function POST(request: Request) {
     }
     coinPrice = price;
     coinBalance = balance;
+  }
+
+  // GLOBAL daily circuit breaker (0093). Deliberately OUTSIDE the
+  // `if (user && !isAdmin)` block above: admins are exempt from the COIN COST,
+  // which is a different concern — a breaker that any admin session can bypass
+  // isn't a breaker, and an attacker who ever obtained an admin account would
+  // walk straight past the only deployment-wide bound.
+  //
+  // Placed here, after the per-user spacing/coin gates (so a request already
+  // rejected for those reasons doesn't burn global budget) and before
+  // identifySignFromImage, the query rewrite, the query embedding, retrieval,
+  // rerank and the chat completion — nothing is spent once it trips. The coin
+  // gate above only RESERVES/tops-up; the actual debit happens in onFinish, so
+  // tripping at this point costs the user nothing either.
+  //
+  // Fails OPEN on any RPC/infra error (including the RPC not existing yet,
+  // since migrations are applied by hand) — the reasoning is written out in
+  // lib/chat/globalLimit.ts.
+  const globalBudget = await consumeGlobalLlmBudget(user.id);
+  if (!globalBudget.allowed) {
+    // The alarm half of the feature: a trip is an incident, not routine, so it
+    // is written to error_logs and shows up in the admin logs dashboard.
+    void logError('chat.globalLimit.tripped', 'Global daily LLM cap reached', {
+      userId: user.id,
+      requestId,
+      details: { used: globalBudget.used, cap: globalBudget.cap },
+    });
+    return apiError(
+      503,
+      'Sistem bu gün üçün ümumi sorğu limitinə çatıb. Zəhmət olmasa sabah yenidən cəhd edin.',
+      { code: 'global_limit_reached' },
+    );
   }
 
   // Kicked off only after coin gating has passed (or been bypassed for

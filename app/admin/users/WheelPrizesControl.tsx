@@ -59,7 +59,7 @@ export default function WheelPrizesControl() {
       const value = Number(row.value);
       const weight = Number(row.weight);
       if (!Number.isFinite(value) || value <= 0 || !Number.isFinite(weight) || weight <= 0) {
-        setError('Hər sətirdə coin dəyəri və faiz müsbət ədəd olmalıdır');
+        setError('Hər sətirdə enerji dəyəri və faiz müsbət ədəd olmalıdır');
         return;
       }
       parsed.push({ value, weight });
@@ -97,7 +97,7 @@ export default function WheelPrizesControl() {
         </span>
       </div>
       <p className="mt-1 text-label-sm text-on-surface-variant">
-        10 slot — hər birinin öz coin dəyəri və qazanma faizi. Faizlərin cəmi dəqiq 100% olmalıdır.
+        10 slot — hər birinin öz ENERJİ dəyəri və qazanma faizi (çarx 0094-dən sonra coin yox, enerji verir). Faizlərin cəmi dəqiq 100% olmalıdır.
       </p>
 
       {loading || !rows ? (
@@ -116,11 +116,11 @@ export default function WheelPrizesControl() {
                 value={row.value}
                 onChange={(v) => updateRow(i, 'value', v)}
                 className="w-24"
-                aria-label={`Slot ${i + 1} coin dəyəri`}
+                aria-label={`Slot ${i + 1} enerji dəyəri`}
               >
                 <Input min={0.01} step={0.01} />
               </TextField>
-              <span className="text-label-sm text-on-surface-variant">coin</span>
+              <span className="text-label-sm text-on-surface-variant">enerji</span>
               <TextField
                 type="number"
                 value={row.weight}

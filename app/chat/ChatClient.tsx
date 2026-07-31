@@ -102,6 +102,13 @@ function extractApiErrorCode(err: Error): string | null {
   }
 }
 
+// The global daily circuit breaker (lib/chat/globalLimit.ts) is a SYSTEM-WIDE
+// condition, not the user's own limit and not a coin shortfall — so it gets an
+// explicit note and deliberately no coin/contact call to action, which would
+// mislead the user into paying for something that buying coins cannot fix.
+const GLOBAL_LIMIT_NOTE =
+  'Bu, sizin şəxsi limitiniz deyil — sistem üzrə ümumi gündəlik hədddir və coin almaqla açılmır. Sabah avtomatik bərpa olunur.';
+
 function formatTokens(log: RequestLog): string {
   if (log.total_tokens == null) return '—';
   if (log.prompt_tokens == null || log.completion_tokens == null) return `${log.total_tokens}`;
@@ -660,7 +667,15 @@ export default function ChatClient({
     transport,
     onError: (err) => {
       console.error('Chat error:', err);
-      toast.danger(extractApiErrorMessage(err) ?? 'Cavab alınmadı, yenidən cəhd edin.');
+      const errorCode = extractApiErrorCode(err);
+      // Mobile has no inline error panel (MobileChat is presentational and gets
+      // no `error` prop), so this toast is the ONLY surface there — the
+      // system-wide note has to ride along with it, not just live in the
+      // desktop panel below.
+      toast.danger(
+        extractApiErrorMessage(err) ?? 'Cavab alınmadı, yenidən cəhd edin.',
+        errorCode === 'global_limit_reached' ? { description: GLOBAL_LIMIT_NOTE, timeout: 10000 } : undefined,
+      );
       void reportClientError({
         context: 'chat.useChat',
         message: String(err?.message ?? err),
@@ -673,7 +688,7 @@ export default function ChatClient({
           // made image-specific failures indistinguishable from text ones in
           // the logs.
           hasAttachedImage: lastSendHadImageRef.current,
-          apiErrorCode: extractApiErrorCode(err),
+          apiErrorCode: errorCode,
         },
       });
     },
@@ -1393,6 +1408,9 @@ export default function ChatClient({
         {error && !isBusy && (
           <div className="glass-panel mt-6 max-w-[85%] rounded-2xl rounded-tl-none border-l-2 border-error px-4 py-3 text-sm text-error">
             <p>{extractApiErrorMessage(error) ?? 'Cavab alınmadı, yenidən cəhd edin.'}</p>
+            {extractApiErrorCode(error) === 'global_limit_reached' && (
+              <p className="mt-2 text-on-surface-variant">{GLOBAL_LIMIT_NOTE}</p>
+            )}
             {extractApiErrorCode(error) === 'insufficient_coins' && (
               <div className="mt-2 flex flex-wrap items-center gap-2 text-on-surface-variant">
                 <a href={`mailto:${ADMIN_CONTACT_EMAIL}`} className="text-primary hover:underline">

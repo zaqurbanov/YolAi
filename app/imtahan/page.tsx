@@ -1,7 +1,6 @@
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import { createClient } from '@/lib/supabase/server';
-import { getCoinBalanceStatus } from '@/lib/chat/coins';
 import { getEnergyStatus } from '@/lib/coins/games';
 import { getExamEntryPricing } from '@/lib/exam/examPricing';
 import { getExamHistory } from '@/lib/exam/examHistory';
@@ -37,13 +36,12 @@ export default async function ImtahanPage() {
     .eq('id', user.id)
     .maybeSingle();
 
-  // Admins are exempt from the coin economy everywhere else in the app
-  // (app/coin-qazan/page.tsx redirects them), and the exam costs coins or
-  // energy — so there is nothing here they can meaningfully do.
+  // Admins are exempt from the coin/energy economy everywhere else in the app
+  // (app/coin-qazan/page.tsx redirects them), and the exam costs energy — so
+  // there is nothing here they can meaningfully do.
   if (profile?.role === 'admin') redirect('/account');
 
-  const [coinStatus, energyStatus, pricing, history] = await Promise.all([
-    getCoinBalanceStatus(user.id),
+  const [energyStatus, pricing, history] = await Promise.all([
     getEnergyStatus(user.id),
     getExamEntryPricing(),
     getExamHistory(user.id),
@@ -51,10 +49,8 @@ export default async function ImtahanPage() {
 
   return (
     <OfficialExamClient
-      initialBalance={coinStatus.balance}
       initialEnergy={energyStatus.balance}
       maxEnergy={energyStatus.max}
-      coinPrice={pricing.coinPrice}
       energyCost={pricing.energyCost}
       passThreshold={pricing.passThreshold}
       history={history}

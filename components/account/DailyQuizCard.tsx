@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { RadioGroup, Radio, Button, Alert, toast } from '@heroui/react';
 import { Spinner } from '@/components/Spinner';
 import { claimDailyQuizReward, type QuizClaimState } from '@/app/chat/actions';
-import { FlameIcon } from '@/components/icons';
+import { EnergyIcon, FlameIcon } from '@/components/icons';
 import type { StreakStatus } from '@/lib/coins/quiz';
 
 interface DailyQuizCardProps {
@@ -47,9 +47,10 @@ export default function DailyQuizCard({ question, options, alreadyClaimed, rewar
     startTransition(async () => {
       const state = await claimDailyQuizReward(Number(selected));
       setResult(state);
-      // Live-updates the navbar CoinBadge without a page refresh — same
-      // contract app/chat/ChatClient.tsx uses after each message's coin
-      // spend (see components/CoinBadge.tsx's window listener).
+      // Live-updates the navbar CoinBadge without a page refresh. Since 0094
+      // the quiz pays ENERGY, so this balance is unchanged by the claim — it is
+      // still forwarded so the badge re-syncs with the server's latest value
+      // (same contract app/chat/ChatClient.tsx uses after a message's spend).
       if (state.status === 'correct' && state.balance != null) {
         window.dispatchEvent(new CustomEvent('coin-balance-update', { detail: { balance: state.balance } }));
       }
@@ -60,7 +61,7 @@ export default function DailyQuizCard({ question, options, alreadyClaimed, rewar
       // mounted in app/layout.tsx) — same mechanism ChatClient/ReferralCard use.
       if (state.status === 'correct' && state.milestoneBonus && state.milestoneBonus > 0) {
         toast.success(`🔥 ${state.streak} günlük seriya!`, {
-          description: `+${state.milestoneBonus} bonus coin qazandınız`,
+          description: `+${state.milestoneBonus} bonus enerji qazandınız`,
           indicator: <FlameIcon />,
         });
       }
@@ -84,8 +85,8 @@ export default function DailyQuizCard({ question, options, alreadyClaimed, rewar
           <h2 className="text-headline-md text-[18px]">Bugünkü sual</h2>
         </div>
         {!isLocked && (
-          <span className="text-legal-citation rounded-full bg-safety-yellow/15 px-2.5 py-1 text-safety-yellow">
-            +{reward} coin
+          <span className="text-legal-citation inline-flex items-center gap-1 rounded-full bg-caution-orange/15 px-2.5 py-1 text-caution-orange">
+            <EnergyIcon width={12} height={12} />+{reward} enerji
           </span>
         )}
       </div>
@@ -131,8 +132,8 @@ export default function DailyQuizCard({ question, options, alreadyClaimed, rewar
             </div>
             <p className="text-legal-citation text-on-surface-variant">
               {remaining > 0
-                ? `${remaining} gün sonra +${nextMilestoneBonus} bonus coin`
-                : `+${nextMilestoneBonus} bonus coin hazırdır!`}
+                ? `${remaining} gün sonra +${nextMilestoneBonus} bonus enerji`
+                : `+${nextMilestoneBonus} bonus enerji hazırdır!`}
             </p>
           </div>
         )}

@@ -38,6 +38,9 @@ export const MISSION_POOL: MissionDef[] = [
 const MISSIONS_PER_DAY = 3;
 const ROTATION_HISTORY_ROWS = 7;
 
+// CURRENCY: the chest pays ENERGY since 0094_two_currency_economy.sql. Its
+// per-day bound is daily_quest_claims.chest_claimed, flipped under a row lock
+// inside claim_daily_chest — one chest per user per Baku day.
 const DAILY_CHEST_REWARD_KEY = 'daily_chest_reward';
 const DEFAULT_DAILY_CHEST_REWARD = 10;
 
@@ -303,7 +306,15 @@ export async function getDailyQuestStatus(userId: string): Promise<DailyQuestSta
 export type ClaimDailyChestError = 'already_claimed' | 'quests_incomplete' | 'unavailable' | 'error';
 
 export type ClaimDailyChestResult =
-  | { ok: true; balance: number; reward: number }
+  | {
+      ok: true;
+      /** Coin balance — unchanged by the chest, returned for the shared meter. */
+      balance: number;
+      /** New ENERGY balance. */
+      energy: number;
+      /** ENERGY paid by the chest (since 0094). */
+      reward: number;
+    }
   | { ok: false; error: ClaimDailyChestError };
 
 // One claim per Baku day per user — enforced by claim_daily_chest's row lock
@@ -334,9 +345,14 @@ export async function claimDailyChest(userId: string): Promise<ClaimDailyChestRe
   }
 
   if (typeof data !== 'object' || data === null) return { ok: false, error: 'error' };
-  const result = data as { balance?: number; reward?: number };
+  const result = data as { balance?: number; energy?: number; reward?: number };
 
-  return { ok: true, balance: Number(result.balance ?? 0), reward: Number(result.reward ?? reward) };
+  return {
+    ok: true,
+    balance: Number(result.balance ?? 0),
+    energy: Number(result.energy ?? 0),
+    reward: Number(result.reward ?? reward),
+  };
 }
 
 // Fire-and-forget counter bump, called from the hot chat path

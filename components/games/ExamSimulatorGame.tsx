@@ -2,24 +2,22 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, Chip, toast } from '@heroui/react';
-import { CoinIcon, ShareIcon, CopyIcon } from '@/components/icons';
+import { ShareIcon, CopyIcon, EnergyIcon } from '@/components/icons';
 import {
   startExamSessionAction,
   submitExamSessionAction,
   generateExamShareLinkAction,
 } from '@/app/coin-qazan/actions';
 import type { ExamQuestion } from '@/lib/exam/examPool';
-import type { ExamPaymentMethod } from '@/lib/exam/examSession';
 
-// 15-minute, 10-question, all-topics-mixed mock exam — pure coin/energy SINK,
-// no reward on completion (unlike SignSpeedGame/TicTacToeGame). Entry price
-// (100 coin OR 1 energy) is fixed by the backend contract
-// (startExamSessionAction/lib/exam/examSession.ts's DEFAULT_EXAM_*
-// constants); this component never invents or overrides that number, it only
-// mirrors it in the button labels.
+// 15-minute, 10-question, all-topics-mixed mock exam — pure ENERGY SINK, no
+// reward on completion (unlike SignSpeedGame/TicTacToeGame). The coin entry
+// path was removed in 0094_two_currency_economy.sql. Entry price (1 energy) is
+// fixed by the backend contract (startExamSessionAction/lib/exam/
+// examSession.ts's DEFAULT_EXAM_ENERGY_COST); this component never invents or
+// overrides that number, it only mirrors it in the button label.
 const EXAM_DURATION_MS = 15 * 60_000;
 const UNANSWERED = -1;
-const EXAM_COIN_PRICE = 100;
 const EXAM_ENERGY_COST = 1;
 
 // Frontend-only pass/fail badge threshold — NOT enforced server-side. Per
@@ -38,14 +36,14 @@ function formatTime(ms: number): string {
 }
 
 interface ExamSimulatorGameProps {
-  balance: number;
   energy: number;
-  onBalanceChange: (balance: number, energy: number) => void;
+  /** Reports the server's post-start (coins, energy) back to the shared meters. */
+  onSettled: (balance: number, energy: number) => void;
 }
 
 type Phase = 'idle' | 'starting' | 'playing' | 'submitting' | 'result';
 
-export default function ExamSimulatorGame({ balance, energy, onBalanceChange }: ExamSimulatorGameProps) {
+export default function ExamSimulatorGame({ energy, onSettled }: ExamSimulatorGameProps) {
   const [phase, setPhase] = useState<Phase>('idle');
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [questions, setQuestions] = useState<ExamQuestion[]>([]);
@@ -114,7 +112,7 @@ export default function ExamSimulatorGame({ balance, energy, onBalanceChange }: 
   }, [phase, answers, submit]);
 
   const start = useCallback(
-    async (paymentMethod: ExamPaymentMethod) => {
+    async () => {
       setPhase('starting');
       setNote(null);
       setResult(null);
@@ -122,13 +120,13 @@ export default function ExamSimulatorGame({ balance, energy, onBalanceChange }: 
       setCopied(false);
       submittedRef.current = false;
 
-      const res = await startExamSessionAction(paymentMethod);
+      const res = await startExamSessionAction();
 
       if (res.status !== 'success' || !res.sessionId || !res.questions) {
         if (res.status === 'pool_too_small' || res.status === 'unavailable') {
           setUnavailable(true);
         } else {
-          // no_energy / insufficient_coins / error
+          // no_energy / error
           setNote(res.message);
         }
         setPhase('idle');
@@ -136,7 +134,7 @@ export default function ExamSimulatorGame({ balance, energy, onBalanceChange }: 
       }
 
       if (typeof res.balance === 'number' && typeof res.energy === 'number') {
-        onBalanceChange(res.balance, res.energy);
+        onSettled(res.balance, res.energy);
       }
 
       setSessionId(res.sessionId);
@@ -146,7 +144,7 @@ export default function ExamSimulatorGame({ balance, energy, onBalanceChange }: 
       setRemainingMs(EXAM_DURATION_MS);
       setPhase('playing');
     },
-    [onBalanceChange]
+    [onSettled]
   );
 
   const selectOption = useCallback(
@@ -282,7 +280,6 @@ export default function ExamSimulatorGame({ balance, energy, onBalanceChange }: 
   }
 
   // idle / starting / submitting
-  const noCoin = balance < EXAM_COIN_PRICE;
   const noEnergy = energy < EXAM_ENERGY_COST;
 
   return (
@@ -298,22 +295,12 @@ export default function ExamSimulatorGame({ balance, energy, onBalanceChange }: 
           variant="primary"
           size="sm"
           isPending={phase === 'starting' || phase === 'submitting'}
-          isDisabled={busy || noCoin}
-          onPress={() => void start('coin')}
+          isDisabled={busy || noEnergy}
+          onPress={() => void start()}
           className="glow-primary gap-1.5"
         >
-          <CoinIcon width={16} height={16} />
-          {EXAM_COIN_PRICE} coin ilə başla
-        </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          isDisabled={busy || noEnergy}
-          onPress={() => void start('energy')}
-          className="gap-1.5"
-        >
-          <span aria-hidden>⚡</span>
-          {EXAM_ENERGY_COST} ilə başla
+          <EnergyIcon width={15} height={15} />
+          {EXAM_ENERGY_COST} enerji ilə başla
         </Button>
       </div>
     </div>

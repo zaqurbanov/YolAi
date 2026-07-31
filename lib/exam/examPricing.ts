@@ -1,11 +1,6 @@
 import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
-import {
-  EXAM_COIN_PRICE_KEY,
-  DEFAULT_EXAM_COIN_PRICE,
-  EXAM_ENERGY_COST_KEY,
-  DEFAULT_EXAM_ENERGY_COST,
-} from '@/lib/exam/examSession';
+import { EXAM_ENERGY_COST_KEY, DEFAULT_EXAM_ENERGY_COST } from '@/lib/exam/examSession';
 
 // Read-only view of the exam's entry cost, for pages that need to SHOW the
 // price before the user commits (the /imtahan landing screen). The actual
@@ -19,15 +14,15 @@ import {
 const EXAM_PASS_THRESHOLD_KEY = 'exam_pass_threshold';
 const DEFAULT_EXAM_PASS_THRESHOLD = 8;
 
+// coinPrice was removed in 0094_two_currency_economy.sql — the exam has no
+// coin entry path at all any more, so there is no coin price to display.
 export interface ExamEntryPricing {
-  coinPrice: number;
   energyCost: number;
   passThreshold: number;
 }
 
 export async function getExamEntryPricing(): Promise<ExamEntryPricing> {
   const fallback: ExamEntryPricing = {
-    coinPrice: DEFAULT_EXAM_COIN_PRICE,
     energyCost: DEFAULT_EXAM_ENERGY_COST,
     passThreshold: DEFAULT_EXAM_PASS_THRESHOLD,
   };
@@ -38,7 +33,7 @@ export async function getExamEntryPricing(): Promise<ExamEntryPricing> {
   const { data, error } = await createAdminClient()
     .from('app_settings')
     .select('key, value')
-    .in('key', [EXAM_COIN_PRICE_KEY, EXAM_ENERGY_COST_KEY, EXAM_PASS_THRESHOLD_KEY]);
+    .in('key', [EXAM_ENERGY_COST_KEY, EXAM_PASS_THRESHOLD_KEY]);
 
   if (error || !data) return fallback;
 
@@ -50,7 +45,6 @@ export async function getExamEntryPricing(): Promise<ExamEntryPricing> {
   };
 
   return {
-    coinPrice: read(EXAM_COIN_PRICE_KEY, DEFAULT_EXAM_COIN_PRICE),
     energyCost: Math.round(read(EXAM_ENERGY_COST_KEY, DEFAULT_EXAM_ENERGY_COST)),
     passThreshold: Math.round(read(EXAM_PASS_THRESHOLD_KEY, DEFAULT_EXAM_PASS_THRESHOLD)),
   };

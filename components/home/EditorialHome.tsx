@@ -309,7 +309,7 @@ export default function EditorialHome({
           <section>
             <Eyebrow>Günün Sualı</Eyebrow>
             <h2 className="mt-2 text-[28px] font-semibold leading-tight text-navy md:text-[40px]">
-              Bir sual, bir dəqiqə, bir coin.
+              Bir sual, bir dəqiqə, bir enerji.
             </h2>
             <div className="editorial-quiz mt-6 rounded-[32px] border border-border/40 bg-surface p-6 shadow-sm md:p-8">
               <DailyQuizCard

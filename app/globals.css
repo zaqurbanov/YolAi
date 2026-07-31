@@ -887,7 +887,9 @@ html:not(.dark) .editorial .chat-composer {
   background: transparent;
   border: none;
   box-shadow: none;
-  padding: 0;
+  /* Not 0: the wrapper's own p-6/p-8 sets the outer gutter, but the card's
+     contents still need a little breathing room off that edge. */
+  padding: 12px;
 }
 
 /* Its streak row is a second tinted box (caution-orange) nested inside. Two

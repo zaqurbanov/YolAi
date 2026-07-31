@@ -93,35 +93,81 @@ bunlar avtomatik çıxarılıb kodla (`Kod 1.3` kimi) uyğunlaşdırılır və S
 
 ---
 
-## 4. Coin iqtisadiyyatı
+## 4. İki valyutalı iqtisadiyyat (yenidən qurulub, 2026-08-01 — `0094`)
 
-Pulsuz gündəlik AI mesaj limitindən sonra istifadəçi coin xərcləyərək davam edə bilər (`lib/chat/coins.ts`).
-Coin qazanmaq yolları (`app/coin-qazan`):
+Əvvəllər coin universal valyuta idi, enerji isə ikinci dərəcəli oyun resursu — və ikisi arasında
+**ferma döngəsi** vardı (5 coin → 10 enerji → Nişan Sürətindən 20 coin-ə qədər). `0094` onları iki
+ayrı valyutaya böldü:
 
-| Mexanizm | Fayl | Qeyd |
+| | **Coin** — premium | **Enerji** — oyun |
 |---|---|---|
-| Gündəlik sual (quiz) | `lib/coins/quiz.ts` | Səhv cavab da qeydə alınır (attempt itir), cəhd təkrarı ilə fırıldaq önlənir |
-| Ardıcıllıq (streak) bonusu | miqrasiya `0064` | Ardıcıl gün sayına görə artan bonus |
-| Dost dəvəti (referral) | `lib/coins/referrals.ts` | Yalnız **real istifadə**də (ilk uğurlu mesajda) ödəyir, qeydiyyatda yox — 30 günlük tavan var |
-| Reklam izləmə | `lib/coins/adWatch.ts` | Server-verilmiş bir-dəfəlik nonce, server saatı ilə vaxt yoxlanılır |
-| Push bildiriş aktivləşdirmə | `lib/coins/pushNotifications.ts` | Endpoint host allowlist yoxlanır + real test push tələb olunur |
-| XO oyunu | `lib/coins/games.ts`, `TicTacToeGame.tsx` | Enerji xərcləyir, gündəlik qazanc tavanı var |
-| Çarx (Wheel of Fortune) | `lib/coins/wheel.ts`, `WheelGame.tsx` | Gündə bir pulsuz fırlanma |
-| Nişan Sürəti (yeni) | `lib/coins/signSpeed.ts`, `signPool.ts`, `SignSpeedGame.tsx` | 10 sualdan ibarət tur, yol nişanı kodu→təsvir seçimi, düzgün cavab başına coin |
-| Coin transferi | `lib/coins/transfers.ts` | İstifadəçidən istifadəçiyə, minimum hesab yaşı + gündəlik qəbul tavanı ilə (ferma önləmi) |
-| Enerji satın alma | miqrasiya `0072` | Coin sink (coin xərcləyib enerji alma) — gündəlik reset zamanı yığılmır, günə keçmir |
+| Xərc yerləri | Chat mesajları, qaraj maşınları, VIP nömrələr | Bütün oyunlar, rəsmi imtahan |
+| Gəlir | Gündəlik pay (3) + reklam izləmə | Gündəlik pay (10) + bütün oyun mükafatları |
+| Gələcək | **Real pula satılacaq** (~50 coin ≈ 20 ₼) | Satılmır |
+
+### Dəyişməz qayda: enerji HEÇ VAXT coin-ə çevrilmir
+
+Coin → enerji alışı qalır (indi legitim pul sink-idir). Əks istiqamət nə birbaşa, nə dolayı yolla
+mövcud olmamalıdır. Ferma döngəsini *struktur olaraq* öldürən budur — heç bir oyun artıq coin
+vermir, ona görə geri fermalayacaq bir şey yoxdur. Yeni bir oyun və ya enerji-xərcləyən yol coin
+kreditləyirsə, döngə yenidən açılır.
+
+### Valyuta xəritəsi
+
+| Mexanizm | Fayl | Valyuta | Qeyd |
+|---|---|---|---|
+| **Gündəlik pay (yeni)** | `lib/coins/dailyGrant.ts` | **3 coin + 10 enerji** | Baku gününə görə idempotent, atomik claim |
+| Gündəlik sual (quiz) | `lib/coins/quiz.ts` | enerji | Səhv cavab da qeydə alınır (attempt itir) |
+| Ardıcıllıq (streak) bonusu | miqrasiya `0064` | enerji | Mərhələlər: 3/7/14/30 gün |
+| Günlük sandıq | miqrasiya `0085` | enerji | |
+| Çarx (Wheel of Fortune) | `lib/coins/wheel.ts` | enerji | Gündə bir pulsuz fırlanma |
+| XO oyunu | `lib/coins/games.ts` | enerji | Enerji xərcləyir, gündəlik qazanc tavanı var |
+| Nişan Sürəti | `lib/coins/signSpeed.ts` | enerji | Düzgün cavab başına, gündəlik tavan |
+| Günlük tapşırıqlar | miqrasiya `0081` | enerji | |
+| **Reklam izləmə** | `lib/coins/adWatch.ts` | **coin** | Server nonce + server saatı yoxlanışı |
+| **Dost dəvəti (referral)** | `lib/coins/referrals.ts` | **coin** | Yalnız real istifadədə ödəyir; 30 günlük tavan; məbləğ 5 → 2 azaldılıb |
+| Push bildiriş aktivləşdirmə | `lib/coins/pushNotifications.ts` | coin | Bir dəfəlik |
+| Rəsmi imtahan girişi | `lib/exam/examPricing.ts` | **yalnız enerji** | Coin yolu tam silinib |
+| Qaraj / VIP nömrə | `0083`, `0084` | **coin** | Uzunmüddətli status məqsədi |
+| Coin transferi | `lib/coins/transfers.ts` | coin | Min hesab yaşı + gündəlik qəbul tavanı |
+| Coin → enerji alışı | miqrasiya `0072` | coin sink | Tək istiqamətli, əksi yoxdur |
+
+### Məhdud gündəlik gəlir (defolt dəyərlərlə, istifadəçi başına)
+
+- **Enerji: ən pis halda 144/gün**, adi (mərhələsiz) gündə 69. Oyunlar mahir oyunçu üçün net müsbət
+  ola bilər — bu **yalnız ona görə təhlükəsizdir ki, hər oyunun server tərəfdə məcburi gündəlik
+  qazanc tavanı var.** Tavansız yeni oyun bu həddi pozar.
+- **Coin: təkrarlanan 13–18/gün** — 10 köhnə top-up + 3 gündəlik pay + 5 reklam.
+
+**Bütün məbləğlər `app_settings`-dədir**, TS tərəfdə default ilə — miqrasiya olmadan tənzimlənə bilir.
 
 **Abuse-a qarşı ümumi qayda (CLAUDE.md-dən):** email təsdiqi hazırda **deaktivdir** (SMTP
 qoşulmayıb), yəni istənilən sayda hesab pulsuz açıla bilər. Ona görə **bütün coin ödəyən yollar
 server-tərəfli təsdiqlənir** — heç bir server action client-in göndərdiyi məbləği/indeksi/uyğunluq
-bayrağını qəbul etmir, hamısı `app_settings`-dən server-side oxunur.
+bayrağını qəbul etmir, hamısı `app_settings`-dən server-side oxunur. Coin pula bərabər olduğuna görə
+bu qayda artıq daha ciddidir: pulsuz coin verən istənilən yeni yol birbaşa gəlir itkisidir.
+
+### Açıq qərarlar (sahibin qərarı, hələ verilməyib)
+
+1. **`daily_coin_grant` (köhnə pulsuz top-up, default 10)** yeni 3-coin-lik payla üst-üstə düşür və
+   coin qıtlığını mənasızlaşdırır. `0094` `getGlobalDailyCoinGrant()`-ı `0` qəbul edəcək şəkildə
+   dəyişdi (əvvəl rədd edirdi), yəni indi söndürmək **mümkündür**. `0` etmək eyni zamanda pulsuz
+   chat payını da silir.
+2. **Köhnə balanslar qəsdən silinməyib/çevrilməyib** — 10–20 coin/gün dövründə qazanılmış balans
+   yeni qıtlıq şəraitində xeyli dəyərlidir.
 
 ---
 
 ## 5. Oyunlar
 
-`components/games/GamesSection.tsx` altında üç oyun, ortaq **enerji** hovuzu (`user_energy`,
-gündəlik reset) ilə:
+`components/games/GamesShowcase.tsx` (siyahı) + `GamePageShell.tsx` (oyun səhifəsi) altında üç oyun,
+ortaq **enerji** hovuzu (`user_energy`) ilə. Hər oyunun öz route-u var — `app/coin-qazan/[game]`,
+tək dinamik route (Vercel funksiya büdcəsinə görə üç ayrı route yox).
+
+**Enerji semantikası `0094`-də dəyişdi:** əvvəl gündəlik pay balansı *sıfırlayıb yenidən təyin
+edirdi*; indi Baku gününə görə bir dəfə **üstünə əlavə edilir**. Əks halda oyunçunun qazandığı bütün
+enerji gecə yarısı silinərdi. Nəticə: enerji balansı `game_daily_energy`-dən çox ola bilər, ona görə
+UI ölçüləri həqiqi balansı göstərir və hədd aşılanda `/10` məxrəcini gizlədir.
 
 1. **XO (Tic-Tac-Toe)** — kompüterə qarşı, `settle_tictactoe` RPC-si server-side qrading edir.
 2. **Wheel of Fortune (Çarx)** — gündə bir pulsuz fırlanma, mükafat server-side seçilir.

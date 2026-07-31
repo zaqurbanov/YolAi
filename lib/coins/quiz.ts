@@ -10,10 +10,13 @@ import { logError } from '@/lib/logging/logError';
 // claim is a deliberate reward action, any DB error means no reward, never
 // a silent success assumption.
 
+// CURRENCY: since 0094_two_currency_economy.sql the daily quiz pays ENERGY,
+// not coins — both the base reward and the streak milestone bonuses. The
+// app_settings keys are unchanged, they just denominate energy now.
 const QUIZ_REWARD_KEY = 'daily_quiz_reward';
 const DEFAULT_QUIZ_REWARD = 3;
 
-// Streak milestone bonuses: consecutive-correct-day -> extra coins credited on
+// Streak milestone bonuses: consecutive-correct-day -> extra energy credited on
 // exactly that day. Resolved server-side (never client-supplied). The RPC
 // (0064_daily_streak.sql) only APPLIES the map it is handed; this is the
 // authoritative default, overridable via app_settings.streak_milestone_bonuses.
@@ -109,10 +112,15 @@ export async function hasClaimedToday(userId: string): Promise<boolean> {
 type ClaimResult =
   | {
       ok: true;
+      /** Coin balance — unchanged by this claim, returned for the shared meter. */
       balance: number;
+      /** New ENERGY balance after the reward + any milestone bonus. */
+      energy: number;
+      /** ENERGY paid for the correct answer. */
       reward: number;
       currentStreak: number;
       longestStreak: number;
+      /** ENERGY paid for hitting a streak milestone today. */
       milestoneBonus: number;
     }
   | { ok: false; error: 'already_claimed' | 'incorrect' | 'error' };
@@ -176,6 +184,7 @@ export async function claimDailyQuizReward(
 
   const result = data as {
     balance?: number;
+    energy?: number;
     current_streak?: number;
     longest_streak?: number;
     milestone_bonus?: number;
@@ -184,6 +193,7 @@ export async function claimDailyQuizReward(
   return {
     ok: true,
     balance: Number(result.balance ?? 0),
+    energy: Number(result.energy ?? 0),
     reward,
     currentStreak: Number(result.current_streak ?? 0),
     longestStreak: Number(result.longest_streak ?? 0),
@@ -192,8 +202,8 @@ export async function claimDailyQuizReward(
 }
 
 // Pre-0064 fallback: credits the base reward via the still-present
-// claim_daily_quiz_reward RPC (returns numeric balance). No streak state, so
-// the streak fields report 0 until the migration is applied.
+// claim_daily_quiz_reward RPC (jsonb since 0094). No streak state, so the
+// streak fields report 0 until the migration is applied.
 async function claimViaLegacyRpc(
   userId: string,
   isCorrect: boolean,
@@ -220,12 +230,15 @@ async function claimViaLegacyRpc(
     return { ok: false, error: 'error' };
   }
 
-  if (typeof data !== 'number') return { ok: false, error: 'error' };
+  if (typeof data !== 'object' || data === null) return { ok: false, error: 'error' };
   if (!isCorrect) return { ok: false, error: 'incorrect' };
+
+  const result = data as { balance?: number; energy?: number };
 
   return {
     ok: true,
-    balance: data,
+    balance: Number(result.balance ?? 0),
+    energy: Number(result.energy ?? 0),
     reward,
     currentStreak: 0,
     longestStreak: 0,

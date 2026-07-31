@@ -187,7 +187,8 @@ export default function TicTacToeGame({
 
   const statusLine = (() => {
     if (noEnergy && !gameOver) return 'Enerjin bitib';
-    if (outcome === 'win') return reward > 0 ? `Qazandın! +${reward} coin 🎉` : 'Qazandın! 🎉';
+    // `reward` is ENERGY since 0094 (a win no longer pays coins).
+    if (outcome === 'win') return reward > 0 ? `Qazandın! +${reward} enerji 🎉` : 'Qazandın! 🎉';
     if (outcome === 'draw') return 'Heç-heçə 🤝';
     if (outcome === 'loss') return 'Uduzdun. Növbəti dəfə!';
     // No difficulty hint. "Bu turda udmaq asandır" announced the easy round of

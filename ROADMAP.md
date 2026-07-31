@@ -28,10 +28,27 @@ Bütün layihə Vercel + Supabase-dən çıxarılıb self-hosted VPS-ə köçür
 2. **VPS = əməliyyat məsuliyyəti səndədir:** backup, təhlükəsizlik yeniləmələri, uptime artıq öz üzərinə düşür (Vercel/Supabase bunları avtomatik edir).
 3. **Faydası:** embeddings və LLM-i (hətta lokal model) öz serverində sərbəst işlətmək — Claude API xərcini azaltmaq üçün real seçim yaranır.
 
+## Coin satışı (gələcək, qərar alınıb, başlanmayıb)
+
+**Qərar tarixi:** 2026-08-01
+**Status:** İstiqamət təsdiqlənib, ödəniş inteqrasiyası başlanmayıb.
+
+`0094_two_currency_economy.sql` ilə coin premium valyutaya çevrildi — yeganə xərc yerləri chat mesajları və qaraj/VIP nömrələrdir, gəlir isə qəsdən azdır (gündəlik pay + reklam). Növbəti mərhələdə coin **real pula satılacaq** (indikativ: 50 coin ≈ 20 ₼).
+
+Başlamazdan əvvəl həll olunmalı olanlar:
+
+- Ödəniş provayderi seçimi (yerli kart emissiyası ilə işləyən bir həll lazımdır)
+- Server tərəfdə təsdiqlənən satınalma axını — client-in "ödədim" siqnalı ilə coin verilməməlidir, `ad_view_tokens`-dakı nonce pattern-i ilə eyni prinsip
+- Geri qaytarma / mübahisə (chargeback) halında coin-in geri alınması
+- Vergi və qanuni tərəf
+
+**Diqqət:** coin pula bərabər olduğu üçün `CLAUDE.md`-dəki "hər coin verən yol pulsuz hesab minlərlə açıla bildiyi halda da dayanmalıdır" qaydası artıq daha ciddidir — pulsuz coin verən istənilən yeni mexanizm birbaşa gəlir itkisidir.
+
 ## Əlaqəli açıq mövzular
 
 `CLAUDE.md`-də sənədləşdirilmiş, hələ həll olunmamış məsələlər (köçürmədən asılı olmayan):
 
 - Custom SMTP + email təsdiqi (hazırda söndürülüb)
-- Per-IP signup limiti və qlobal gündəlik LLM-xərc "circuit breaker"
-- Monetizasiya: real rewarded-ad şəbəkəsi inteqrasiyası (hazırda "reklam izlə" yalnız simulyasiyadır — heç bir reklam gəliri yoxdur)
+- **Per-IP signup limiti** — hələ yoxdur. Qlobal gündəlik LLM "circuit breaker" isə `0093_global_llm_circuit_breaker.sql` ilə **bağlandı** (`llm_usage_counters` + `consume_llm_budget`, `app_settings.daily_llm_message_cap`, default 2000/gün, fail-open).
+- Monetizasiya: real rewarded-ad şəbəkəsi inteqrasiyası (hazırda "reklam izlə" yalnız simulyasiyadır — heç bir reklam gəliri yoxdur). Reklam yeni modeldə **coin** verən yeganə təkrarlanan mexanizmdir, yəni bu inteqrasiya artıq iqtisadiyyatın mərkəzindədir, kənar detal deyil.
+- Dərs suallarının ilk-dəfə-düzgün mükafatı hələ **coin** verir və gündəlik cap-ı yoxdur — hədd sual bankının ölçüsüdür. Coin pula bərabər olduğuna görə yenidən baxılmalıdır.

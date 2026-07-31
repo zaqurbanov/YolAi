@@ -27,8 +27,8 @@ const FIELDS: {
 }[] = [
   {
     param: 'garageXoBonusPct',
-    label: 'Lada 2107 — XO coin bonusu (%)',
-    hint: 'XO oyununda qazanılan coinə əlavə faiz bonusu.',
+    label: 'Lada 2107 — XO enerji bonusu (%)',
+    hint: 'XO oyununda qazanılan enerjiyə əlavə faiz bonusu.',
     integerOnly: false,
     min: 0,
     max: 1000,

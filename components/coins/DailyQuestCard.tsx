@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react';
 import { Button, Alert, toast } from '@heroui/react';
 import { Spinner } from '@/components/Spinner';
 import { claimDailyChestAction, type DailyChestClaimState } from '@/app/coin-qazan/actions';
-import { CoinIcon, CheckIcon } from '@/components/icons';
+import { ChestIcon, EnergyIcon, CheckIcon } from '@/components/icons';
 import ChestOpenOverlay from '@/components/coins/ChestOpenOverlay';
 import type { DailyQuestStatusResult } from '@/lib/coins/dailyQuests';
 
@@ -32,12 +32,14 @@ export default function DailyQuestCard({ status }: DailyQuestCardProps) {
       setResult(state);
       if (state.status === 'success') {
         setClaimed(true);
+        // The chest pays ENERGY since 0094; `balance` is the (unchanged) coin
+        // balance, forwarded only so the navbar badge re-syncs.
         if (state.balance != null) {
           window.dispatchEvent(new CustomEvent('coin-balance-update', { detail: { balance: state.balance } }));
         }
         toast.success('Sandıq açıldı!', {
-          description: `+${state.reward} coin qazandınız`,
-          indicator: <CoinIcon />,
+          description: `+${state.reward} enerji qazandınız`,
+          indicator: <EnergyIcon />,
         });
         setRevealReward(state.reward ?? 0);
         setRevealOpen(true);
@@ -48,10 +50,13 @@ export default function DailyQuestCard({ status }: DailyQuestCardProps) {
   return (
     <div className="glass-card rounded-2xl p-6 space-y-4">
       <div className="flex items-center gap-3 border-b border-outline-variant/30 pb-4">
-        <div className="flex size-10 items-center justify-center rounded-xl bg-safety-yellow/15 text-safety-yellow">
-          <CoinIcon />
+        <div className="flex size-10 items-center justify-center rounded-xl bg-caution-orange/15 text-caution-orange">
+          <ChestIcon />
         </div>
-        <h2 className="text-headline-md text-[18px]">Gündəlik Missiyalar</h2>
+        <div>
+          <h2 className="text-headline-md text-[18px]">Gündəlik Missiyalar</h2>
+          <p className="text-legal-citation text-on-surface-variant">Sandıqdan enerji çıxır</p>
+        </div>
       </div>
 
       <ul className="space-y-2.5">
@@ -99,7 +104,7 @@ export default function DailyQuestCard({ status }: DailyQuestCardProps) {
         >
           {({ isPending: pending }) => (
             <>
-              {pending ? <Spinner size="sm" tone="current" /> : <CoinIcon />}
+              {pending ? <Spinner size="sm" tone="current" /> : <ChestIcon />}
               Günün Sandığını Aç
             </>
           )}

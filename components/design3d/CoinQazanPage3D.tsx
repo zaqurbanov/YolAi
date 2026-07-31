@@ -6,6 +6,7 @@ import { ArrowLeftIcon, CoinIcon, FlameIcon } from '@/components/icons';
 interface CoinQazanPage3DProps {
   coinBalance: number;
   streakDays: number;
+  dailyGrantCard: ReactNode;
   dailyQuestCard: ReactNode;
   weeklyLeaderboardCard: ReactNode;
   garageCard: ReactNode;
@@ -28,6 +29,7 @@ interface CoinQazanPage3DProps {
 // a card's internal render logic, so every server action / HeroUI
 // integration inside those cards stays exactly as it was.
 const HUD_FRAMES: { key: keyof Omit<CoinQazanPage3DProps, 'coinBalance' | 'streakDays'>; label: string; span?: string }[] = [
+  { key: 'dailyGrantCard', label: 'GÜNLÜK HƏDİYYƏ' },
   { key: 'dailyQuestCard', label: 'GÜNDƏLİK MİSSİYA' },
   { key: 'weeklyLeaderboardCard', label: 'HƏFTƏLİK REYTİNQ' },
   { key: 'garageCard', label: 'VİRTUAL QARAJ' },
@@ -70,6 +72,7 @@ function HudFrame({ label, children, className }: { label: string; children: Rea
 export default function CoinQazanPage3D({
   coinBalance,
   streakDays,
+  dailyGrantCard,
   dailyQuestCard,
   weeklyLeaderboardCard,
   garageCard,
@@ -81,6 +84,7 @@ export default function CoinQazanPage3D({
   wheelGame,
 }: CoinQazanPage3DProps) {
   const cards: Record<string, ReactNode> = {
+    dailyGrantCard,
     dailyQuestCard,
     weeklyLeaderboardCard,
     garageCard,

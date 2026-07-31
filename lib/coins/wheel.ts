@@ -6,10 +6,13 @@ import { bakuTodayDate } from '@/lib/date/baku';
 import { logError } from '@/lib/logging/logError';
 
 // ÇARX — daily free prize wheel (0068_wheel_of_fortune.sql). One free spin per
-// UTC day; the SERVER picks the winning segment with crypto RNG and credits its
-// coin value. The client only triggers the spin and animates to the returned
+// Baku day; the SERVER picks the winning segment with crypto RNG and credits its
+// value. The client only triggers the spin and animates to the returned
 // index — it never chooses the prize. Read path fails OPEN (display), spin path
 // fails CLOSED (no credit on error).
+//
+// CURRENCY: prizes are ENERGY since 0094_two_currency_economy.sql. The
+// wheel_prizes app_settings key and its segment values are unchanged.
 
 const WHEEL_PRIZES_KEY = 'wheel_prizes';
 
@@ -18,9 +21,9 @@ export interface WheelPrize {
   weight: number;
 }
 
-// Each segment carries a coin value and an admin-configured weight (percentage
+// Each segment carries an energy value and an admin-configured weight (percentage
 // odds, all ten weights sum to 100). The server draws a weighted-random segment
-// with crypto RNG. Modest EV (~3 coins), on par with the daily quiz.
+// with crypto RNG. Modest EV (~3 energy), on par with the daily quiz.
 const DEFAULT_WHEEL_PRIZES: WheelPrize[] = [
   { value: 1, weight: 25 },
   { value: 1, weight: 20 },
@@ -131,7 +134,16 @@ function pickWeightedIndex(prizes: WheelPrize[]): number {
 }
 
 export type SpinResult =
-  | { ok: true; prizeIndex: number; prize: number; balance: number }
+  | {
+      ok: true;
+      prizeIndex: number;
+      /** ENERGY won. */
+      prize: number;
+      /** Coin balance — unchanged by a spin, returned for the shared meter. */
+      balance: number;
+      /** New ENERGY balance. */
+      energy: number;
+    }
   | { ok: false; error: 'already_spun' | 'unavailable' | 'error' };
 
 // Performs the spin: SERVER-side weighted RNG picks the segment, the RPC credits
@@ -163,6 +175,14 @@ export async function spinWheel(userId: string): Promise<SpinResult> {
     return { ok: false, error: 'error' };
   }
 
-  if (typeof data !== 'number') return { ok: false, error: 'error' };
-  return { ok: true, prizeIndex, prize, balance: data };
+  if (typeof data !== 'object' || data === null) return { ok: false, error: 'error' };
+  const result = data as { balance?: number; energy?: number };
+
+  return {
+    ok: true,
+    prizeIndex,
+    prize,
+    balance: Number(result.balance ?? 0),
+    energy: Number(result.energy ?? 0),
+  };
 }

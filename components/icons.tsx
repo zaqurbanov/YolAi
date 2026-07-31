@@ -308,6 +308,27 @@ export function CoinIcon(props: IconProps) {
   );
 }
 
+// The gameplay currency (⚡). Paired with CoinIcon everywhere both are shown —
+// since 0094 the two are distinct currencies and a coin glyph on an energy
+// payout is a lie, so this is the ONLY marker for energy rewards/costs.
+export function EnergyIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M13 2.5 4.5 13.5H11l-1 8 8.5-11H12l1-8Z" />
+    </svg>
+  );
+}
+
+export function GiftIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4 11h16v8a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-8Z" />
+      <path d="M3 8h18v3H3V8ZM12 8v12" />
+      <path d="M12 8S10.5 4 8.5 4a2 2 0 0 0 0 4H12Zm0 0s1.5-4 3.5-4a2 2 0 0 1 0 4H12Z" />
+    </svg>
+  );
+}
+
 export function ChestIcon(props: IconProps) {
   return (
     <svg {...base(props)}>

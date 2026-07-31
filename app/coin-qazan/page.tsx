@@ -19,6 +19,7 @@ import {
 } from '@/lib/coins/games';
 import { getWheelStatus } from '@/lib/coins/wheel';
 import { getDailyQuestStatus } from '@/lib/coins/dailyQuests';
+import { getDailyGrantStatus } from '@/lib/coins/dailyGrant';
 import { getCarTiers } from '@/lib/garage/carTiers';
 import { getUserGarage } from '@/lib/garage/garage';
 import { getActiveGaragePerk } from '@/lib/garage/perks';
@@ -27,6 +28,7 @@ import GamesShowcase from '@/components/games/GamesShowcase';
 import WheelGame from '@/components/games/WheelGame';
 import DailyQuizCard from '@/components/account/DailyQuizCard';
 import DailyQuestCard from '@/components/coins/DailyQuestCard';
+import DailyGrantCard from '@/components/coins/DailyGrantCard';
 import GarageCard from '@/components/coins/GarageCard';
 import MobileCoinQazan from '@/components/coins/MobileCoinQazan';
 import PlateMarketCard from '@/components/coins/PlateMarketCard';
@@ -74,6 +76,7 @@ export default async function CoinQazanPage() {
     wheelStatus,
     energyPurchaseConfig,
     dailyQuestStatus,
+    dailyGrantStatus,
     carTiers,
     userGarage,
     garagePerk,
@@ -95,6 +98,7 @@ export default async function CoinQazanPage() {
     getWheelStatus(user.id),
     getEnergyPurchaseConfig(),
     getDailyQuestStatus(user.id),
+    getDailyGrantStatus(user.id),
     getCarTiers(),
     getUserGarage(user.id),
     getActiveGaragePerk(user.id),
@@ -127,6 +131,7 @@ export default async function CoinQazanPage() {
   // list). Internal render logic/server-action wiring is completely
   // untouched either way; only the surrounding chrome differs per design.
   const dailyQuestCard = <DailyQuestCard status={dailyQuestStatus} />;
+  const dailyGrantCard = <DailyGrantCard status={dailyGrantStatus} />;
   const weeklyLeaderboardCard = <WeeklyLeaderboardCard leaderboard={weeklyLeaderboard} />;
   const garageCard = (
     <GarageCard tiers={carTiers} garage={userGarage} coinBalance={coinStatus.balance} perk={garagePerk} />
@@ -186,6 +191,7 @@ export default async function CoinQazanPage() {
             coinBalance={coinStatus.balance}
             streakDays={streakStatus.current}
             longestStreak={streakStatus.longest}
+            dailyGrantCard={dailyGrantCard}
             dailyQuestCard={dailyQuestCard}
             dailyQuizCard={dailyQuizCard}
             gamesSection={gamesSection}
@@ -215,6 +221,7 @@ export default async function CoinQazanPage() {
           </div>
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            {dailyGrantCard}
             {dailyQuestCard}
             {weeklyLeaderboardCard}
             {garageCard}
@@ -234,6 +241,7 @@ export default async function CoinQazanPage() {
         <CoinQazanPage3D
           coinBalance={coinStatus.balance}
           streakDays={streakStatus.current}
+          dailyGrantCard={dailyGrantCard}
           dailyQuestCard={dailyQuestCard}
           weeklyLeaderboardCard={weeklyLeaderboardCard}
           garageCard={garageCard}

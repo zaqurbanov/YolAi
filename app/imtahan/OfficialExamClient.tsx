@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Button, toast } from '@heroui/react';
 import { buttonVariants } from '@heroui/styles';
 import MobileBottomTabBar from '@/components/home/MobileBottomTabBar';
+import Footer from '@/components/Footer';
 import { Spinner } from '@/components/Spinner';
 import {
   startExamSessionAction,
@@ -19,6 +20,7 @@ import {
   CheckIcon,
   CloseIcon,
   ClockIcon,
+  EnergyIcon,
   RulesIcon,
   TrophyIcon,
   LockIcon,
@@ -33,11 +35,12 @@ import { answerExamQuestionAction } from './actions';
 const EXAM_DURATION_MS = 15 * 60_000;
 const QUESTION_COUNT = 10;
 
+// No coin balance is threaded in: since 0094 exam entry is energy-only, so a
+// coin figure on this screen would be decoration at best and a false payment
+// hint at worst.
 interface OfficialExamClientProps {
-  initialBalance: number;
   initialEnergy: number;
   maxEnergy: number;
-  coinPrice: number;
   energyCost: number;
   passThreshold: number;
   history: ExamHistorySummary;
@@ -70,16 +73,13 @@ function formatTime(ms: number): string {
 }
 
 export default function OfficialExamClient({
-  initialBalance,
   initialEnergy,
   maxEnergy,
-  coinPrice,
   energyCost,
   passThreshold,
   history,
 }: OfficialExamClientProps) {
   const [phase, setPhase] = useState<Phase>('idle');
-  const [balance, setBalance] = useState(initialBalance);
   const [energy, setEnergy] = useState(initialEnergy);
   const [questions, setQuestions] = useState<ExamQuestion[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -182,10 +182,10 @@ export default function OfficialExamClient({
     }
   }
 
-  async function start(paymentMethod: 'coin' | 'energy') {
+  async function start() {
     setIsStarting(true);
     try {
-      const res: StartExamState = await startExamSessionAction(paymentMethod);
+      const res: StartExamState = await startExamSessionAction();
       if (res.status !== 'success' || !res.questions || !res.sessionId) {
         toast.danger(res.message);
         return;
@@ -197,7 +197,6 @@ export default function OfficialExamClient({
       setVerdicts(Array.from({ length: res.questions.length }, () => null));
       setCurrent(0);
       setResult(null);
-      if (typeof res.balance === 'number') setBalance(res.balance);
       if (typeof res.energy === 'number') setEnergy(res.energy);
       deadlineRef.current = Date.now() + EXAM_DURATION_MS;
       setRemainingMs(EXAM_DURATION_MS);
@@ -498,7 +497,6 @@ export default function OfficialExamClient({
   }
 
   // ------------------------------------------------------------------ landing
-  const canAffordCoins = balance >= coinPrice;
   const canAffordEnergy = energy >= energyCost;
   const lastPct =
     history.lastScore != null && history.lastTotal
@@ -506,7 +504,12 @@ export default function OfficialExamClient({
       : null;
 
   return (
-    <div className="editorial relative flex flex-col overflow-hidden pb-24">
+    // No `overflow-hidden` on this root: it is a flex ITEM of the app-wide
+    // scroller (<main> in app/layout.tsx), and `overflow: hidden` swaps a flex
+    // item's automatic minimum size from content-based to 0 — which let it
+    // shrink to the viewport and clip everything below the fold. Decorative
+    // clipping belongs on the individual cards, which already carry it.
+    <div className="editorial relative flex flex-1 flex-col pb-24">
       <div className="relative z-10 mx-auto w-full max-w-[1280px] px-5 pt-8 md:px-12 md:pt-14">
         {/* Split hero. Left: the pitch. Right: the user's own last result as a
             circular badge — the export's centrepiece, and the one number that
@@ -527,7 +530,7 @@ export default function OfficialExamClient({
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Button
                 variant="primary"
-                onPress={() => void start('energy')}
+                onPress={() => void start()}
                 isDisabled={isStarting || !canAffordEnergy}
                 className="glow-primary gap-2 rounded-full px-8 py-4 text-[12px] font-bold uppercase tracking-[0.1em]"
               >
@@ -535,23 +538,25 @@ export default function OfficialExamClient({
                 İmtahana başla
                 <ArrowRightIcon width={15} height={15} />
               </Button>
-              <button
-                type="button"
-                onClick={() => void start('coin')}
-                disabled={isStarting || !canAffordCoins}
-                className="rounded-full border border-border px-8 py-4 text-[12px] font-bold uppercase tracking-[0.1em] text-on-surface transition hover:bg-surface-tertiary disabled:opacity-45"
-              >
-                {coinPrice} coin ilə
-              </button>
             </div>
 
-            <p className="mt-4 text-[13px] text-on-surface-variant">
-              {energyCost} enerji ({energy}/{maxEnergy} qalıb) · {balance} coin
-              {!canAffordEnergy && !canAffordCoins && (
+            {/* Coins cannot buy exam entry since 0094, so the coin balance is
+                deliberately NOT printed here — showing it next to the price
+                implied it was a second payment option. Energy accumulates
+                across days, so it can exceed maxEnergy (the daily top-up);
+                the denominator is dropped once it no longer bounds the
+                balance rather than rendering e.g. "14/10". */}
+            <p className="mt-4 flex flex-wrap items-center gap-1.5 text-[13px] text-on-surface-variant">
+              <EnergyIcon width={14} height={14} className="text-caution-orange" />
+              {energyCost} enerji ·{' '}
+              <span className="tabular-nums">
+                {energy > maxEnergy ? energy : `${energy}/${maxEnergy}`} qalıb
+              </span>
+              {!canAffordEnergy && (
                 <>
-                  {' · '}
+                  ·{' '}
                   <Link href="/coin-qazan" className="font-semibold text-primary hover:underline">
-                    Coin qazan
+                    Enerji al
                   </Link>
                 </>
               )}
@@ -747,6 +752,10 @@ export default function OfficialExamClient({
             )}
           </div>
         </section>
+      </div>
+
+      <div className="mt-16">
+        <Footer />
       </div>
 
       <MobileBottomTabBar />
