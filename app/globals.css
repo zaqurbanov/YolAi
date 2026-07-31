@@ -274,6 +274,14 @@ html:not(.dark) {
   /* Ethereal's bright-mint container needs a readable on-color of its own —
      the generic --warning-foreground is white, which is unreadable on #62fae3. */
   --color-on-secondary-container: var(--on-secondary-container, var(--warning-foreground));
+  /* Editorial's four signature colours (see the .editorial block below).
+     Exposed here so they are usable as bg-sand / text-navy / etc. rather than
+     hardcoded hexes scattered through the markup. They resolve to nothing
+     outside .editorial, which is intended — this is a scoped design. */
+  --color-sand: var(--sand);
+  --color-sage: var(--sage);
+  --color-teal-deep: var(--teal-deep);
+  --color-navy: var(--navy);
 
   --color-tertiary: var(--tertiary);
 
@@ -382,6 +390,324 @@ html.dark .luminous-shadow-teal {
 
 html.dark .holographic-divider {
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.14), transparent);
+}
+
+/*
+ * "Editorial" — the home page's own design, scoped to its tree only.
+ * Source: Stitch project 9832560642768971810, screen "Ana Səhifə (Editorial)"
+ * (34f863119d1840b6a8ca9ebedb399cbe).
+ *
+ * Scoped rather than global on purpose: this is a pilot on one page. The rest
+ * of the app keeps the Ethereal light palette from html:not(.dark) above.
+ * Technique is the proven one — `[data-design='3d'] .chat-hud-shell` and
+ * `.oyrenme-hud-courses` both rebind primitives on a wrapper so unmodified
+ * shared components (CategoryCard, DailyQuizCard, every HeroUI control) inherit
+ * the new palette with no markup changes.
+ *
+ * The Stitch export ships four colours OUTSIDE its Material-3 ramp as
+ * `custom-sand` / `custom-sage` / `custom-teal` / `custom-navy`. They are the
+ * backbone of the whole look (the sand canvas, the differentiated bento tiles),
+ * so they are promoted here to real tokens with `--color-*` exposure rather
+ * than left as one-off hexes that would silently drift.
+ */
+.editorial {
+  /* Editorial's four signature colours, now first-class. */
+  --sand: #f1d089;
+  --sage: #b3c6c4;
+  --teal-deep: #548683;
+  --navy: #0b2433;
+
+  /* Warm sand canvas. This is the single most important value in the design:
+     white cards only read as lifted BECAUSE the page behind them is not white.
+     The previous iteration put white glass on a near-white #f7f9fb and that is
+     the technical reason it looked flat. */
+  --background: #f7f3ed;
+  --background-deep: #efe9e0;
+  --foreground: var(--navy);
+
+  --surface: #ffffff;
+  --surface-foreground: var(--navy);
+  --surface-secondary: #f4f2fe;
+  --surface-tertiary: #e8e7f3;
+  --surface-container-lowest: #ffffff;
+  --surface-container-highest: #e2e1ed;
+  --surface-bright: #fbf8ff;
+
+  --overlay: #ffffff;
+  --overlay-foreground: var(--navy);
+
+  --muted: #444654;
+  --outline: #757686;
+  --border: #c5c5d7;
+  --separator: #dcdce8;
+
+  --default: #eeedf8;
+  --default-foreground: var(--navy);
+  --segment: #eeedf8;
+  --segment-foreground: var(--navy);
+
+  /* Deep editorial blue. Literal spec value — 12.4:1 on the sand canvas, and
+     white on it is 14.0:1, so it works both as text and as a full tile fill
+     (which is exactly how the bento uses it). */
+  --accent: #002cb1;
+  --accent-foreground: #ffffff;
+  --primary-container: #2546d1;
+  --on-primary-container: #c1c9ff;
+  --focus: #002cb1;
+  --link: #002cb1;
+
+  --secondary: #4a6172;
+  --on-secondary: #ffffff;
+  --secondary-container: #cde6fa;
+  --on-secondary-container: #506778;
+  --tertiary: var(--teal-deep);
+
+  --success: #0e4644;
+  --success-foreground: #ffffff;
+  --warning: #4a6172;
+  --warning-foreground: #ffffff;
+  --danger: #ba1a1a;
+  --danger-foreground: #ffffff;
+  --error-container: #ffdad6;
+
+  --field-background: #ffffff;
+  --field-foreground: var(--navy);
+  --field-placeholder: #444654;
+  --field-border: transparent;
+  --backdrop: rgba(11, 36, 51, 0.5);
+
+  /* Traffic accents re-derived against the sand canvas so they belong to this
+     palette rather than reading as leftovers. All ≥ 4.5:1 on #f7f3ed. */
+  --safety-yellow: #8a5a00;
+  --caution-orange: #9a3412;
+  --regulatory-blue: #002cb1;
+  --go-green: #0e4644;
+
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-manrope), var(--font-inter), sans-serif;
+}
+
+/* Epilogue for display/headings, Manrope for everything else. */
+.editorial h1,
+.editorial h2,
+.editorial h3,
+.editorial .editorial-display {
+  font-family: var(--font-epilogue), var(--font-montserrat), sans-serif;
+  letter-spacing: -0.01em;
+}
+
+/* Editorial has no glassmorphism: cards are solid white with a hairline and a
+   soft shadow. Overrides the theme-level .glass-card so reused shared
+   components (CategoryCard, DailyQuizCard) match without being forked. */
+.editorial .glass-card,
+.editorial .glass-panel {
+  background: #ffffff;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid color-mix(in oklab, var(--border) 45%, transparent);
+  border-radius: 1.5rem;
+  box-shadow: 0 1px 2px rgba(11, 36, 51, 0.04), 0 8px 24px -12px rgba(11, 36, 51, 0.12);
+}
+
+/* No ambient glow in this design — the deep blue fill is the emphasis. */
+.editorial .glow-primary {
+  box-shadow: 0 8px 20px -8px rgba(0, 44, 177, 0.45);
+}
+
+.editorial .mono-label,
+.editorial .text-legal-citation {
+  font-family: var(--font-manrope), var(--font-inter), sans-serif;
+  letter-spacing: 0.1em;
+  font-weight: 700;
+}
+
+/* The bento's four tiles each get a different weight — this is what stops the
+   grid reading as four identical boxes, and it is the main reason this design
+   was chosen over the previous one. */
+.editorial-tile-sage {
+  background: color-mix(in oklab, var(--sage) 28%, white);
+  color: var(--navy);
+}
+.editorial-tile-sage:hover {
+  background: color-mix(in oklab, var(--sage) 48%, white);
+}
+.editorial-tile-primary {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+.editorial-tile-sand {
+  background: var(--sand);
+  color: var(--navy);
+}
+.editorial-tile-plain {
+  background: #ffffff;
+  color: var(--navy);
+  border: 1px solid color-mix(in oklab, var(--border) 45%, transparent);
+}
+
+/*
+ * Chat, under the Editorial palette. The chat trees opt in by adding
+ * `editorial` alongside their existing `chat-hud-shell` class, so they inherit
+ * every token above; only the handful of chat-specific surfaces that were
+ * tuned for the old glass look need adjusting here.
+ */
+.editorial .glass-panel {
+  background: #ffffff;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid color-mix(in oklab, var(--border) 45%, transparent);
+  box-shadow: 0 1px 2px rgba(11, 36, 51, 0.04), 0 8px 24px -12px rgba(11, 36, 51, 0.12);
+}
+
+/* Assistant bubble: white card with a deep-blue spine, matching the editorial
+   card language. The default rule gives it a 2px left border already; this
+   only recolours it and softens the corner radius to the page's 24px rhythm. */
+.editorial .chat-bubble-ai {
+  border-left-color: var(--accent);
+  border-radius: 1.5rem;
+  border-top-left-radius: 0.25rem;
+}
+
+/* User bubble: solid primary, the one place colour appears in the thread —
+   same role the filled bento tile plays on the home page. */
+.editorial .chat-bubble-user {
+  border-radius: 1.5rem;
+  border-top-right-radius: 0.25rem;
+  box-shadow: 0 8px 20px -10px rgba(0, 44, 177, 0.45);
+}
+
+/* Long legal references ("Maddə 61.1.2-ci", document titles, URLs) are one
+   unbroken token as far as the browser's line breaker is concerned — dots and
+   hyphens are not break opportunities — so they pushed the bubble past its
+   max-width instead of wrapping. `anywhere` is the only value that also lets
+   the flex item shrink below its longest word. Applied to both designs, not
+   just Editorial: the overflow existed before the restyle too. */
+.chat-bubble-ai,
+.chat-bubble-user {
+  overflow-wrap: anywhere;
+}
+
+/*
+ * Dropdown/popover panels are rendered through a PORTAL at <body> level, so
+ * they sit outside the `.editorial` (or any other) wrapper and never picked up
+ * its solid .glass-card override — they kept the translucent default and the
+ * chat text showed straight through the share menu. Scoping can't reach a
+ * portal, so this is deliberately a global rule on the popover class itself.
+ */
+.opaque-popover {
+  background: var(--overlay);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
+  box-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.35);
+}
+
+/* The composer is the one element that should stay visually lifted off the
+   sand canvas, so it keeps a stronger shadow than a plain card. */
+.editorial .chat-composer {
+  background: #ffffff;
+  border: 1px solid color-mix(in oklab, var(--border) 50%, transparent);
+  box-shadow: 0 4px 24px -8px rgba(11, 36, 51, 0.18);
+}
+
+/*
+ * Swipe-to-delete discoverability (components/ChatConversationList.tsx). A
+ * gesture with no visible control is invisible until someone stumbles onto it,
+ * so the first row nudges itself open once — far enough to expose the red
+ * delete panel underneath, then springs back. Runs once per mount and is
+ * suppressed for the rest of the session after the first real swipe.
+ *
+ * The delay lets the drawer finish opening first; a nudge that fires mid-
+ * transition reads as a glitch rather than a hint.
+ */
+@keyframes swipe-hint {
+  0%,
+  18% {
+    transform: translateX(0);
+  }
+  36% {
+    transform: translateX(64px);
+  }
+  62% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+.swipe-hint {
+  animation: swipe-hint 1900ms cubic-bezier(0.34, 1.2, 0.64, 1) 700ms 1 both;
+}
+
+/* Reduced motion gets no nudge — the row would still be reachable via the
+   trash button, which is the non-gesture path. */
+@media (prefers-reduced-motion: reduce) {
+  .swipe-hint {
+    animation: none;
+  }
+}
+
+/* The armed state — set on data-armed the frame the swipe passes the delete
+   threshold, alongside the haptic tick. Before it the panel is a hint; after
+   it, releasing WILL open the confirm, so it stops looking tentative: the
+   label is fully opaque and the icons pop. */
+.swipe-delete-backdrop > span {
+  opacity: 0.75;
+  transform: scale(0.94);
+  transition:
+    opacity 140ms ease-out,
+    transform 140ms cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+.swipe-delete-backdrop[data-armed='1'] > span {
+  opacity: 1;
+  transform: scale(1.06);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .swipe-delete-backdrop > span,
+  .swipe-delete-backdrop[data-armed='1'] > span {
+    transform: none;
+    transition: none;
+  }
+}
+
+/* Horizontal card rails (components/home/FeatureRail.tsx). The scrollbar is
+   hidden because the rail's affordance is the peeking next card plus the dot
+   row, not a bar — and on desktop the rail isn't used at all. Keyboard/AT
+   access is preserved: the dots are real buttons and the rail is still a
+   focusable scroll container. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Static, not the export's 20s-rotating text ring: a spinning caption is the
+   element most likely to date this page, and it carries no information. The
+   composition it contributed (a large warm disc anchoring the hero) is kept. */
+.editorial-seal {
+  background: var(--sand);
+  color: var(--navy);
+}
+
+/* DailyQuizCard sits INSIDE the white split card, so its own card chrome would
+   be a box drawn inside a box. Stripped back to plain content; the outer
+   rounded-[40px] panel provides the frame. */
+.editorial .editorial-quiz .glass-card {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+
+.editorial .holographic-divider {
+  background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--navy) 22%, transparent), transparent);
 }
 
 /*

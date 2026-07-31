@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Modal } from '@heroui/react';
-import { BellIcon } from '@/components/icons';
+import Image from 'next/image';
 import { formatAzDateTime } from '@/lib/format/date';
 import { markNotificationReadAction } from '@/app/notifications/actions';
 import type { NotificationRow } from '@/lib/notifications/notifications';
@@ -48,8 +48,17 @@ export default function NotificationBell({
         aria-label="Bildirişlər"
         className="glass-card relative flex size-9 items-center justify-center rounded-full text-on-surface transition-colors hover:bg-surface-tertiary/60"
       >
-        <BellIcon
-          className={unreadCount > 0 ? 'bell-heartbeat motion-reduce:animate-none' : undefined}
+        {/* Keeps the bell-heartbeat animation the stroke icon had — it is what
+            signals unread items at a glance. The PNG carries its own colours,
+            so it no longer inherits text-on-surface. */}
+        <Image
+          src="/icons/notification-icon.png"
+          alt=""
+          width={20}
+          height={20}
+          className={`size-5 object-contain ${
+            unreadCount > 0 ? 'bell-heartbeat motion-reduce:animate-none' : ''
+          }`}
         />
         {unreadCount > 0 && (
           <span className="mono-label absolute -right-1 -top-1 flex min-w-[18px] items-center justify-center rounded-full bg-error px-1 text-[10px] text-on-error">

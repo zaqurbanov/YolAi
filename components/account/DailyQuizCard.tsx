@@ -1,10 +1,11 @@
 'use client';
 
 import { useRef, useState, useTransition } from 'react';
+import Image from 'next/image';
 import { RadioGroup, Radio, Button, Alert, toast } from '@heroui/react';
 import { Spinner } from '@/components/Spinner';
 import { claimDailyQuizReward, type QuizClaimState } from '@/app/chat/actions';
-import { CoinIcon, FlameIcon } from '@/components/icons';
+import { FlameIcon } from '@/components/icons';
 import type { StreakStatus } from '@/lib/coins/quiz';
 
 interface DailyQuizCardProps {
@@ -70,9 +71,16 @@ export default function DailyQuizCard({ question, options, alreadyClaimed, rewar
     <div ref={cardRef} data-tour="daily-quiz-card" className="glass-card rounded-2xl p-6 space-y-4">
       <div className="flex items-center justify-between gap-4 border-b border-outline-variant/30 pb-4">
         <div className="flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-xl bg-go-green/15 text-go-green">
-            <CoinIcon />
-          </div>
+          {/* Raster icon, so no tinted chip behind it: a PNG carries its own
+              colours and can't inherit `text-go-green` the way the stroke SVG
+              it replaced did — a coloured chip would fight the artwork. */}
+          <Image
+            src="/icons/question-icon.png"
+            alt=""
+            width={40}
+            height={40}
+            className="size-10 shrink-0 object-contain"
+          />
           <h2 className="text-headline-md text-[18px]">Bugünkü sual</h2>
         </div>
         {!isLocked && (
@@ -85,13 +93,20 @@ export default function DailyQuizCard({ question, options, alreadyClaimed, rewar
       <div className="rounded-xl border border-outline-variant/30 bg-caution-orange/5 p-4">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <div className="flex size-9 items-center justify-center rounded-lg bg-caution-orange/15 text-caution-orange">
-              <FlameIcon
-                width={20}
-                height={20}
-                className={liveStreak > 0 ? 'streak-flame motion-reduce:animate-none' : undefined}
-              />
-            </div>
+            {/* Same streak-flame animation as the SVG it replaced (scale
+                1 → 1.08 → 0.97, 2s loop, origin at the base so it flickers
+                like a flame rather than pulsing like a dot). No tinted chip
+                behind it: the PNG carries its own colours and can't inherit
+                text-caution-orange. */}
+            <Image
+              src="/icons/flame-icon.png"
+              alt=""
+              width={36}
+              height={36}
+              className={`size-9 shrink-0 object-contain ${
+                liveStreak > 0 ? 'streak-flame motion-reduce:animate-none' : 'opacity-60'
+              }`}
+            />
             <div>
               <p className="text-body-md font-medium text-on-surface">{streakLabel}</p>
               {longest > 0 && (

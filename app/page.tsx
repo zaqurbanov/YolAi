@@ -9,7 +9,7 @@ import { getCoinBalanceStatus } from '@/lib/chat/coins';
 import { getCourses } from '@/lib/quiz/lessons';
 import { getStreakStatus, getQuizRewardAmount, hasClaimedToday, type StreakStatus } from '@/lib/coins/quiz';
 import { getDailyQuestionForUser } from '@/lib/quiz/questions';
-import EtherealHome, { type EtherealQuickLink } from '@/components/home/EtherealHome';
+import EditorialHome, { type EditorialQuickLink } from '@/components/home/EditorialHome';
 
 // NOTE ON DYNAMIC RENDERING: this page used to be a pure ISR page (no
 // cookies() call anywhere, service-role reads only) — one of the six routes
@@ -38,12 +38,6 @@ const HOME_TOPIC_TITLES = [
   'Sürət Həddi',
   'Sənədlər və Sığorta',
 ];
-const PROMO_FEATURES = [
-  'Rəsmi sənədlərə əsaslanan, mənbəyə istinad edən cavablar',
-  'Azərbaycan dilində sual-cavab dəstəyi',
-  '24/7 əlçatan AI köməkçi',
-];
-
 // MOCK: "Düzgün cavab nisbəti" has no real accuracy-tracking metric behind
 // it (no user feedback/rating system exists yet) and "24/7" is a descriptive
 // fact about support availability, not a measured figure — both stay
@@ -61,6 +55,7 @@ const MOCK_STATS_TAIL = [
 const FEATURES = [
   {
     icon: ChatIcon,
+    iconSrc: '/icons/ai-bot.png',
     title: 'AI Söhbət',
     desc: 'Yol qaydaları ilə bağlı istənilən sualı yaz — rəsmi sənədlərə əsaslanan, mənbəyə istinad edən cavab al. Vəziyyətin şəklini də göndərə bilərsən.',
     href: '/chat',
@@ -70,6 +65,7 @@ const FEATURES = [
   },
   {
     icon: RulesIcon,
+    iconSrc: '/icons/learning-icon.png',
     title: 'Sürücülük dərsləri',
     desc: 'Kateqoriyalar üzrə dərsləri oxu, hər mövzunun sonundakı testi keç və irəliləyişini izlə — sürücülük vəsiqəsi imtahanına addım-addım hazırlaş.',
     href: '/oyrenme',
@@ -79,6 +75,7 @@ const FEATURES = [
   },
   {
     icon: CoinIcon,
+    iconSrc: '/icons/reward-coin.png',
     title: 'Coin qazan',
     desc: 'Gündəlik sual, ardıcıllıq seriyası, dostları dəvət və reklam izləmə ilə coin topla. Coinlərlə pulsuz gündəlik limitdən sonra da AI söhbətini davam etdir.',
     href: '/coin-qazan',
@@ -88,6 +85,7 @@ const FEATURES = [
   },
   {
     icon: TrophyIcon,
+    iconSrc: '/icons/game-icon.png',
     title: 'Oyunlar və Çarx',
     desc: 'Kompüterə qarşı XO oyna, gündəlik pulsuz çarxı fırlat və həftəlik reytinqdə yerini tut — əylənərək coin qazan.',
     href: '/coin-qazan',
@@ -95,16 +93,6 @@ const FEATURES = [
     chip: 'bg-go-green/15 text-go-green',
     border: 'border-l-go-green',
   },
-];
-
-// How coins are earned (shown in the coin-explainer section). These mirror the
-// real earning mechanics on /coin-qazan.
-const COIN_EARN = [
-  'Gündəlik sualı düzgün cavabla',
-  'Ardıcıl günlərdə seriyanı qoru (streak bonusu)',
-  'XO oyna və gündəlik çarxı fırlat',
-  'Dostlarını dəvət et',
-  'Reklam izlə',
 ];
 
 export default async function Home() {
@@ -136,7 +124,13 @@ export default async function Home() {
     mobileProfile = data;
   }
   const isAdmin = mobileProfile?.role === 'admin';
-  const firstName = mobileProfile?.full_name?.trim().split(/\s+/)[0] || null;
+  // Falls back to the email local-part when no full_name is set, the same
+  // chain components/MobileAccountMenu.tsx already uses for its display name —
+  // so the greeting says who the user actually is instead of a generic noun.
+  // Still null if neither exists, in which case the greeting drops the name
+  // entirely rather than inventing one.
+  const firstName =
+    mobileProfile?.full_name?.trim().split(/\s+/)[0] || user?.email?.split('@')[0] || null;
   // Admins are exempt from the coin economy (same convention as
   // app/coin-qazan/page.tsx and app/account/page.tsx) — no balance/daily quiz
   // to show them.
@@ -182,16 +176,43 @@ export default async function Home() {
   // "tezliklə" tiles (href: null) rather than guessing a URL, per the task
   // brief. Flagged back: neither exists yet.
   const nisanlarCategory = categories.find((category) => category.title === 'Nişanlar');
-  const mobileQuickLinks: EtherealQuickLink[] = [
-    { key: 'fines', label: 'Cərimələr', icon: FineIcon, href: `/chat?q=${encodeURIComponent(fineCategory.question)}` },
+  // Captions describe the REAL destination each tile routes to — the Stitch
+  // export's captions ("Yoxla və Ödə", "Onlayn Müraciət") describe features
+  // this app does not have. İmtahan now points at the real /imtahan page;
+  // Xidmətlər still has no route anywhere in app/**, so it stays disabled.
+  const mobileQuickLinks: EditorialQuickLink[] = [
+    {
+      key: 'fines',
+      label: 'Cərimələr',
+      caption: 'AI-dan soruş',
+      icon: FineIcon,
+      iconSrc: '/icons/money-icon.png',
+      href: `/chat?q=${encodeURIComponent(fineCategory.question)}`,
+    },
     {
       key: 'signs',
       label: 'Nişanlar',
+      caption: 'AI-dan soruş',
       icon: SignIcon,
+      iconSrc: '/icons/nisan-icon-3.png',
       href: nisanlarCategory ? `/chat?q=${encodeURIComponent(nisanlarCategory.question)}` : null,
     },
-    { key: 'exam', label: 'İmtahan', icon: TrophyIcon, href: null },
-    { key: 'services', label: 'Xidmətlər', icon: ShieldIcon, href: null },
+    {
+      key: 'exam',
+      label: 'İmtahan',
+      caption: 'Simulyasiya',
+      icon: TrophyIcon,
+      iconSrc: '/icons/exam-icon.png',
+      href: '/imtahan',
+    },
+    {
+      key: 'services',
+      label: 'Xidmətlər',
+      caption: 'Tezliklə',
+      icon: ShieldIcon,
+      iconSrc: '/icons/service-icon.png',
+      href: null,
+    },
   ];
   // Phase 1 of the second "Cyber-Circuit Legal" design (see
   // components/design3d/): a client-side switch chooses between the
@@ -203,7 +224,7 @@ export default async function Home() {
     <DesignSwitch
       design={design}
       simple={
-        <EtherealHome
+        <EditorialHome
           isLoggedIn={Boolean(user)}
           firstName={firstName}
           coinBalance={mobileCoinStatus?.balance ?? null}
@@ -223,8 +244,6 @@ export default async function Home() {
           topics={topics}
           questionCounts={questionCounts}
           featureCards={FEATURES}
-          coinEarn={COIN_EARN}
-          promoFeatures={PROMO_FEATURES}
           stats={stats}
           formattedDriverCount={formattedDriverCount}
           driverInitials={driverInitials}

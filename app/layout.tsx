@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Montserrat, Inter, JetBrains_Mono, Plus_Jakarta_Sans } from "next/font/google";
+import { Montserrat, Inter, JetBrains_Mono, Epilogue, Manrope } from "next/font/google";
 import { Toast } from "@heroui/react";
 import "./globals.css";
 import NavBar from "@/components/NavBar";
@@ -31,14 +31,23 @@ const jetbrainsMono = JetBrains_Mono({
   weight: ["500"],
 });
 
-// The "Ethereal" light design's typeface (Stitch screen "Ana Səhifə
-// (Ethereal)"). Applied only inside the Ethereal home tree via
-// --font-jakarta, so the rest of the app keeps Montserrat/Inter — next/font
-// only ships the weights actually referenced in CSS.
-const plusJakarta = Plus_Jakarta_Sans({
-  variable: "--font-jakarta",
+// The "Editorial" home design's two typefaces (Stitch screen "Ana Səhifə
+// (Editorial)"): Epilogue carries display/headings, Manrope carries body and
+// labels. Two families with one job each is deliberate — the previous
+// iteration used a single family for everything, which is part of why it read
+// flat. Scoped to the .editorial-home tree in app/globals.css, so the rest of
+// the app keeps Montserrat/Inter; next/font only ships the weights actually
+// referenced in CSS.
+const epilogue = Epilogue({
+  variable: "--font-epilogue",
   subsets: ["latin"],
-  weight: ["400", "600", "700", "800"],
+  weight: ["500", "600", "700", "800"],
+});
+
+const manrope = Manrope({
+  variable: "--font-manrope",
+  subsets: ["latin"],
+  weight: ["400", "500", "700"],
 });
 
 export const metadata: Metadata = {
@@ -115,7 +124,7 @@ export default function RootLayout({
   return (
     <html
       lang="az"
-      className={`${montserrat.variable} ${inter.variable} ${jetbrainsMono.variable} ${plusJakarta.variable} h-full antialiased`}
+      className={`${montserrat.variable} ${inter.variable} ${jetbrainsMono.variable} ${epilogue.variable} ${manrope.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <head>

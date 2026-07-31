@@ -6,7 +6,7 @@ import type { UIMessage } from 'ai';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Avatar, Badge, Input, Button, Chip, AlertDialog, Modal, Dropdown, Label, Skeleton, toast } from '@heroui/react';
+import { Badge, Input, Button, Chip, AlertDialog, Modal, Dropdown, Label, Skeleton, toast } from '@heroui/react';
 import {
   SendIcon,
   ShareIcon,
@@ -172,18 +172,18 @@ const MessageBubble = memo(function MessageBubble({
       <div className={`flex items-end gap-2 ${isUser ? '' : 'flex-row'}`}>
         {!isUser && (
           <Image
-            src="/ai.png"
+            src="/icons/ai-bot.png"
             alt="Yol AI"
             width={40}
             height={40}
-            className="mb-0.5 size-10 shrink-0 rounded-full object-cover"
+            className="mb-0.5 size-10 shrink-0 object-contain"
           />
         )}
         <div
           className={
             isUser
-              ? 'glow-primary max-w-[85%] rounded-2xl rounded-tr-none bg-primary px-4 py-3 text-sm text-on-primary'
-              : 'glass-panel max-w-[85%] rounded-2xl rounded-tl-none border-l-2 border-primary px-4 py-3 text-sm text-on-surface'
+              ? 'chat-bubble-user max-w-[85%] break-words rounded-2xl rounded-tr-none bg-primary px-4 py-3 text-sm text-on-primary'
+              : 'chat-bubble-ai glass-panel max-w-[85%] min-w-0 break-words rounded-2xl rounded-tl-none border-l-2 border-primary px-4 py-3 text-sm text-on-surface'
           }
         >
           {message.parts.map((part, i) => {
@@ -1258,18 +1258,29 @@ export default function ChatClient({
           visionAvailable={visionAvailable}
           attachedPreviewUrl={attachedPreviewUrl}
           onAttachClick={() => fileInputRef.current?.click()}
+          onCameraClick={() => cameraInputRef.current?.click()}
+          onShareAction={handleShareAction}
+          canNativeShare={canNativeShare}
+          hasMessages={messages.length > 0}
           onClearAttachedFile={clearAttachedFile}
           isResizingImage={isResizingImage}
         />
       </div>
 
-      <div className="hidden md:flex flex-1 flex-col min-h-0 chat-hud-shell">
+      <div className="editorial hidden md:flex flex-1 flex-col min-h-0 chat-hud-shell">
       <header className="glass-panel print:hidden chat-hud-col flex items-center justify-between gap-4 px-4 py-3 sm:px-8">
         <div className="flex items-center gap-3 min-w-0">
           <Badge.Anchor>
-            <Avatar size="md">
-              <Avatar.Fallback>YH</Avatar.Fallback>
-            </Avatar>
+            {/* Same ai-bot.png the message avatars and the home page's "AI
+                Söhbət" card use, so the assistant has one face everywhere.
+                Replaces the "YH" initials fallback. */}
+            <Image
+              src="/icons/ai-bot.png"
+              alt="Yol AI"
+              width={40}
+              height={40}
+              className="size-10 shrink-0 object-contain"
+            />
             <Badge color="success" placement="bottom-right" size="sm" />
           </Badge.Anchor>
           <div className="min-w-0">
@@ -1299,7 +1310,7 @@ export default function ChatClient({
             >
               <ShareIcon />
             </Dropdown.Trigger>
-            <Dropdown.Popover placement="bottom end" className="glass-panel min-w-[210px] rounded-xl p-1">
+            <Dropdown.Popover placement="bottom end" className="opaque-popover min-w-[210px] rounded-xl p-1">
               <Dropdown.Menu aria-label="Paylaşım seçimləri" onAction={handleShareAction}>
                 <Dropdown.Item id="copy-link" textValue="Linki kopyala" className="text-sm text-on-surface">
                   Linki kopyala
@@ -1458,7 +1469,7 @@ export default function ChatClient({
                 >
                   {isResizingImage ? <Spinner size="sm" /> : <CameraIcon width={20} height={20} />}
                 </Dropdown.Trigger>
-                <Dropdown.Popover className="min-w-[200px]">
+                <Dropdown.Popover className="opaque-popover min-w-[200px] rounded-xl p-1">
                   <Dropdown.Menu
                     onAction={(key) => {
                       if (key === 'camera') cameraInputRef.current?.click();
