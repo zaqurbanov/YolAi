@@ -1,7 +1,6 @@
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { buttonVariants } from '@heroui/styles';
 import { createClient } from '@/lib/supabase/server';
 import { getQuizRewardAmount, hasClaimedToday, getStreakStatus } from '@/lib/coins/quiz';
 import { getOrCreateReferralCode, getReferralBonusAmount } from '@/lib/coins/referrals';
@@ -31,12 +30,13 @@ import WheelGame from '@/components/games/WheelGame';
 import DailyQuizCard from '@/components/account/DailyQuizCard';
 import DailyQuestCard from '@/components/coins/DailyQuestCard';
 import GarageCard from '@/components/coins/GarageCard';
+import MobileCoinQazan from '@/components/coins/MobileCoinQazan';
 import PlateMarketCard from '@/components/coins/PlateMarketCard';
 import ReferralCard from '@/components/account/ReferralCard';
 import AdWatchCard from '@/components/account/AdWatchCard';
 import WeeklyLeaderboardCard from '@/components/account/WeeklyLeaderboardCard';
 import Footer from '@/components/Footer';
-import { ArrowLeftIcon, RulesIcon, CoinIcon } from '@/components/icons';
+import { ArrowLeftIcon } from '@/components/icons';
 import DesignSwitch from '@/components/design3d/DesignSwitch';
 import CoinQazanPage3D from '@/components/design3d/CoinQazanPage3D';
 import { getServerDesign } from '@/lib/design/getServerDesign';
@@ -181,7 +181,29 @@ export default async function CoinQazanPage() {
     <DesignSwitch
       design={design}
       simple={
-        <div className="space-y-6 px-4 pt-8 pb-16 md:px-8">
+        <>
+        {/* Mobile shell (see components/coins/MobileCoinQazan.tsx) — CSS-only
+            split via md:hidden, same convention as /oyrenme/[courseId]. It
+            mounts the exact same card elements as the desktop tree below;
+            only the surrounding chrome differs. */}
+        <div className="md:hidden">
+          <MobileCoinQazan
+            coinBalance={coinStatus.balance}
+            streakDays={streakStatus.current}
+            longestStreak={streakStatus.longest}
+            dailyQuestCard={dailyQuestCard}
+            dailyQuizCard={dailyQuizCard}
+            gamesSection={gamesSection}
+            wheelGame={wheelGame}
+            garageCard={garageCard}
+            plateMarketCard={plateMarketCard}
+            referralCard={referralCard}
+            adWatchCard={adWatchCard}
+            weeklyLeaderboardCard={weeklyLeaderboardCard}
+          />
+        </div>
+
+        <div className="hidden space-y-6 px-4 pt-8 pb-16 md:block md:px-8">
           <div>
             <Link
               href="/account"
@@ -207,30 +229,11 @@ export default async function CoinQazanPage() {
             {adWatchCard}
             {gamesSection}
             {wheelGame}
-
-            <div className="glass-card rounded-2xl p-6 space-y-4 lg:col-span-2">
-              <div className="flex items-center gap-3 border-b border-outline-variant/30 pb-4">
-                <div className="flex size-10 items-center justify-center rounded-xl bg-primary/15 text-primary">
-                  <RulesIcon />
-                </div>
-                <h2 className="text-headline-md text-[18px]">Dərslərdən keç</h2>
-              </div>
-              <p className="text-body-md text-on-surface-variant">
-                Sürücülük vəsiqəsi dərslərindəki hər bir sualı ilk dəfə düzgün cavablandıranda coin
-                qazanırsan — eyni zamanda yol hərəkəti qaydalarını da öyrənmiş olursan.
-              </p>
-              <Link
-                href="/oyrenme"
-                className={buttonVariants({ variant: 'primary', size: 'md' }) + ' glow-primary gap-2'}
-              >
-                <CoinIcon />
-                Dərslərə başla
-              </Link>
-            </div>
           </div>
 
           <Footer />
         </div>
+        </>
       }
       threeD={
         <CoinQazanPage3D

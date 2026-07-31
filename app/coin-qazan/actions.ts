@@ -465,7 +465,9 @@ export async function startExamSessionAction(paymentMethod: ExamPaymentMethod): 
     return { status: 'error', message: 'Xəta baş verdi. Bir az sonra yenidən cəhd edin' };
   }
 
+  // Both exam entry points share this action, so both are revalidated.
   revalidatePath('/coin-qazan');
+  revalidatePath('/imtahan');
   return {
     status: 'success',
     message: 'İmtahan başladı',

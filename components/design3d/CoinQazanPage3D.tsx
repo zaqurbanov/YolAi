@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import RoadShaderBackground from '@/components/design3d/RoadShaderBackground';
-import { ArrowLeftIcon, CoinIcon, FlameIcon, RulesIcon } from '@/components/icons';
+import { ArrowLeftIcon, CoinIcon, FlameIcon } from '@/components/icons';
 
 interface CoinQazanPage3DProps {
   coinBalance: number;
@@ -192,35 +192,6 @@ export default function CoinQazanPage3D({
           ))}
         </div>
 
-        {/* ---------- Lessons CTA ---------- */}
-        <div
-          className="hud-glass flex flex-col gap-4 rounded-2xl border-l-4 p-6"
-          style={{ borderColor: 'var(--hud-cyan)' }}
-        >
-          <div className="flex items-center gap-3 border-b pb-4" style={{ borderColor: 'var(--hud-border)' }}>
-            <div
-              className="flex size-10 items-center justify-center rounded-xl"
-              style={{ background: 'color-mix(in oklab, var(--hud-cyan) 15%, transparent)', color: 'var(--hud-cyan)' }}
-            >
-              <RulesIcon />
-            </div>
-            <h2 className="text-lg font-bold" style={{ fontFamily: 'var(--hud-font-display)' }}>
-              Dərslərdən keç
-            </h2>
-          </div>
-          <p className="text-sm" style={{ color: 'var(--hud-on-surface-variant)' }}>
-            Sürücülük vəsiqəsi dərslərindəki hər bir sualı ilk dəfə düzgün cavablandıranda coin
-            qazanırsan — eyni zamanda yol hərəkəti qaydalarını da öyrənmiş olursan.
-          </p>
-          <Link
-            href="/oyrenme"
-            className="inline-flex w-fit items-center gap-2 rounded-xl px-6 py-3 text-sm font-bold transition-transform hover:scale-105 active:scale-95"
-            style={{ background: 'var(--hud-cyan)', color: 'var(--hud-bg-deep)', boxShadow: '0 0 20px var(--hud-glow-cyan)' }}
-          >
-            <CoinIcon />
-            Dərslərə başla
-          </Link>
-        </div>
       </div>
     </div>
   );

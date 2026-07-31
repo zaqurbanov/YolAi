@@ -152,6 +152,78 @@ export async function startExamSession(
   };
 }
 
+export type ExamAnswerError =
+  | 'session_not_found'
+  | 'already_used'
+  | 'session_expired'
+  | 'invalid_answer'
+  | 'unavailable'
+  | 'error';
+
+export type ExamAnswerResult =
+  | { ok: true; correct: boolean; locked: number; wasAlreadyAnswered: boolean }
+  | { ok: false; error: ExamAnswerError };
+
+/**
+ * Records ONE answer and returns only whether it was right — the correct index
+ * itself never leaves the database (0091). The first answer for a question is
+ * final: a second call returns the original verdict and ignores the new value,
+ * which is what stops the boolean verdict from becoming a brute-forceable
+ * answer oracle. See 0091_exam_per_question_answers.sql's header.
+ */
+export async function answerExamQuestion(
+  userId: string,
+  sessionId: string,
+  index: number,
+  answer: number
+): Promise<ExamAnswerResult> {
+  if (!Number.isInteger(index) || index < 0 || index >= QUESTIONS_PER_EXAM) {
+    return { ok: false, error: 'invalid_answer' };
+  }
+  if (!Number.isInteger(answer) || answer < 0 || answer >= OPTIONS_PER_QUESTION) {
+    return { ok: false, error: 'invalid_answer' };
+  }
+
+  const ttlSeconds = await readNumericSetting(
+    EXAM_SESSION_TTL_SECONDS_KEY,
+    DEFAULT_EXAM_SESSION_TTL_SECONDS
+  );
+
+  const { data, error } = await createAdminClient().rpc('answer_exam_question', {
+    p_user_id: userId,
+    p_session_id: sessionId,
+    p_index: index,
+    p_answer: answer,
+    p_session_ttl_seconds: Math.round(ttlSeconds),
+  });
+
+  if (error) {
+    const message = error.message ?? '';
+    if (message.includes('session_not_found')) return { ok: false, error: 'session_not_found' };
+    if (message.includes('already_used')) return { ok: false, error: 'already_used' };
+    if (message.includes('session_expired')) return { ok: false, error: 'session_expired' };
+    if (message.includes('invalid_index') || message.includes('invalid_answer')) {
+      return { ok: false, error: 'invalid_answer' };
+    }
+    if (isMissingRelationError(error)) return { ok: false, error: 'unavailable' };
+    void logError('exam.examSession.answer', error, { userId });
+    console.error('[exam] answer_exam_question RPC failed:', {
+      message: error.message,
+      code: error.code,
+    });
+    return { ok: false, error: 'error' };
+  }
+
+  if (typeof data !== 'object' || data === null) return { ok: false, error: 'error' };
+  const result = data as { correct?: boolean; locked?: number; wasAlreadyAnswered?: boolean };
+  return {
+    ok: true,
+    correct: Boolean(result.correct),
+    locked: Number(result.locked ?? answer),
+    wasAlreadyAnswered: Boolean(result.wasAlreadyAnswered),
+  };
+}
+
 export type ExamSubmitError =
   | 'session_not_found'
   | 'already_used'

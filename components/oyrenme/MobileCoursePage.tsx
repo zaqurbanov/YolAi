@@ -3,8 +3,7 @@ import { Chip } from '@heroui/react';
 import { buttonVariants } from '@heroui/styles';
 import MobileBottomTabBar from '@/components/home/MobileBottomTabBar';
 import ProgressRing from '@/components/oyrenme/ProgressRing';
-import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, LockIcon, PlayIcon, CoinIcon } from '@/components/icons';
-import { formatCoinBalance } from '@/lib/format/coins';
+import { ArrowRightIcon, CheckIcon, LockIcon, PlayIcon } from '@/components/icons';
 import type { CourseSummary, TopicSummary } from '@/lib/quiz/lessons';
 
 export interface MobileCoursePageProps {
@@ -14,8 +13,6 @@ export interface MobileCoursePageProps {
   topics: TopicSummary[];
   passedCount: number;
   progressPct: number;
-  /** Display only. null when the balance read failed — it fails open. */
-  balance: number | null;
   /** getCourses() minus this course, for the "Sizin üçün seçilənlər" rail. */
   otherCourses: CourseSummary[];
 }
@@ -32,7 +29,6 @@ export default function MobileCoursePage({
   topics,
   passedCount,
   progressPct,
-  balance,
   otherCourses,
 }: MobileCoursePageProps) {
   // Real, derived stat-card numbers (no time-tracking/certificate data exists
@@ -45,22 +41,10 @@ export default function MobileCoursePage({
 
   return (
     <div className="flex flex-col pb-24">
-      <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between gap-3 border-b border-outline-variant/30 bg-surface/60 px-4 backdrop-blur-xl">
-        <div className="flex min-w-0 items-center gap-2">
-          <Link
-            href="/oyrenme"
-            className="flex size-9 shrink-0 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:text-primary"
-            aria-label="Kurslara qayıt"
-          >
-            <ArrowLeftIcon width={18} height={18} />
-          </Link>
-          <span className="truncate text-headline-md text-[16px]">{title}</span>
-        </div>
-        <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-safety-yellow/15 px-3 py-1.5 text-label-sm font-semibold text-safety-yellow">
-          <CoinIcon width={16} height={16} />
-          {balance != null ? formatCoinBalance(balance) : '—'}
-        </span>
-      </header>
+      {/* No <header> here on purpose: the global NavBar is the single top bar
+          on mobile (back button, "Akademiya" label, coin badge, account menu).
+          This used to render a second stacked one. The course name lives in
+          the <h1> below instead. */}
 
       <section className="flex flex-col items-center gap-4 px-4 pt-8 pb-2 text-center">
         <div className="relative flex items-center justify-center">

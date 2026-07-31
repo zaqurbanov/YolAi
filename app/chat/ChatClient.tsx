@@ -484,6 +484,9 @@ export default function ChatClient({
   const router = useRouter();
   const [input, setInput] = useState(initialInput ?? '');
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
+  // Survives handleSubmit's synchronous clear of `attachedFile`, so onError can
+  // still tell whether the failed request carried an image. Diagnostics only.
+  const lastSendHadImageRef = useRef(false);
   const [attachedPreviewUrl, setAttachedPreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -663,7 +666,13 @@ export default function ChatClient({
         message: String(err?.message ?? err),
         details: {
           conversationId: conversationIdRef.current,
-          hasAttachedImage: attachedFile !== null,
+          // Read from the ref, NOT from `attachedFile` state: handleSubmit
+          // clears that state synchronously right after sendMessage(), so by
+          // the time a streaming failure reaches onError the state is always
+          // null and this field reported `false` for every image send — which
+          // made image-specific failures indistinguishable from text ones in
+          // the logs.
+          hasAttachedImage: lastSendHadImageRef.current,
           apiErrorCode: extractApiErrorCode(err),
         },
       });
@@ -1157,6 +1166,7 @@ export default function ChatClient({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!input.trim() && !attachedFile) return;
+    lastSendHadImageRef.current = attachedFile !== null;
     if (attachedFile) {
       // sendMessage's `files` accepts a FileList or FileUIPart[], not a bare
       // File[] — DataTransfer is the standard way to construct a FileList
@@ -1237,8 +1247,6 @@ export default function ChatClient({
     <>
       <div className="md:hidden h-full">
         <MobileChat
-          conversationTitle={conversationTitle}
-          coins={coins}
           messages={mobileMessages}
           timestampFor={timestampFor}
           isBusy={isBusy}

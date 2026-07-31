@@ -19,6 +19,14 @@ export interface QuizQuestionRow {
   createdAt: string;
   updatedAt: string;
   isFineAmount: boolean;
+  /** Storage path (not URL) of the illustration above the question, or null. */
+  imagePath: string | null;
+  /**
+   * 4-element array positionally aligned with `options`; entry i is answer i's
+   * picture path, or null. `null` (rather than [null,null,null,null]) when the
+   * question has no answer images at all.
+   */
+  optionImagePaths: (string | null)[] | null;
 }
 
 interface QuizQuestionsSelectRow {
@@ -34,6 +42,8 @@ interface QuizQuestionsSelectRow {
   created_at: string;
   updated_at: string;
   is_fine_amount: boolean;
+  image_path: string | null;
+  option_image_paths: unknown;
 }
 
 function mapRow(row: QuizQuestionsSelectRow): QuizQuestionRow {
@@ -50,11 +60,18 @@ function mapRow(row: QuizQuestionsSelectRow): QuizQuestionRow {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     isFineAmount: row.is_fine_amount,
+    imagePath: row.image_path ?? null,
+    optionImagePaths:
+      Array.isArray(row.option_image_paths) && row.option_image_paths.length === 4
+        ? row.option_image_paths.map((entry) =>
+            typeof entry === 'string' && entry ? entry : null
+          )
+        : null,
   };
 }
 
 const SELECT_COLUMNS =
-  'id, category, question, options, correct_index, explanation, status, source_title, created_by, created_at, updated_at, is_fine_amount';
+  'id, category, question, options, correct_index, explanation, status, source_title, created_by, created_at, updated_at, is_fine_amount, image_path, option_image_paths';
 
 export async function listQuestions(status?: 'draft' | 'published'): Promise<QuizQuestionRow[]> {
   let query = createAdminClient()
@@ -138,6 +155,10 @@ export interface QuestionPatch {
   category?: string;
   explanation?: string | null;
   isFineAmount?: boolean;
+  /** Storage path, or null to clear the question illustration. */
+  imagePath?: string | null;
+  /** 4-element path array, or null to clear all answer images. */
+  optionImagePaths?: (string | null)[] | null;
 }
 
 export async function updateQuestion(
@@ -161,6 +182,16 @@ export async function updateQuestion(
   if (patch.category !== undefined) update.category = patch.category;
   if (patch.explanation !== undefined) update.explanation = patch.explanation;
   if (patch.isFineAmount !== undefined) update.is_fine_amount = patch.isFineAmount;
+  if (patch.imagePath !== undefined) update.image_path = patch.imagePath;
+  if (patch.optionImagePaths !== undefined) {
+    // Collapse an all-null array back to NULL so "no answer images" has one
+    // representation in the DB rather than two — examPool's parser treats them
+    // identically, but a stored [null,null,null,null] would make the admin UI
+    // and any future query need to handle both.
+    const paths = patch.optionImagePaths;
+    update.option_image_paths =
+      paths && paths.some((entry) => entry != null) ? paths : null;
+  }
 
   const { data, error } = await createAdminClient()
     .from('quiz_questions')

@@ -3,6 +3,8 @@ import { buttonVariants } from '@heroui/styles';
 import type { ComponentType, SVGProps } from 'react';
 import DailyQuizCard from '@/components/account/DailyQuizCard';
 import MobileBottomTabBar from '@/components/home/MobileBottomTabBar';
+import MobileAccountMenu from '@/components/MobileAccountMenu';
+import ThemeToggle from '@/components/ThemeToggle';
 import { CoinIcon, ArrowRightIcon, ArrowUpIcon, FlameIcon } from '@/components/icons';
 import type { RuleCategory } from '@/lib/content/ruleCategories';
 import type { StreakStatus } from '@/lib/coins/quiz';
@@ -80,30 +82,6 @@ export default function MobileHome({
 
   return (
     <div className="flex flex-col pb-24">
-      <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between border-b border-outline-variant/30 bg-surface/60 px-4 backdrop-blur-xl">
-        <div className="flex items-center gap-2">
-          <div className="flex size-9 items-center justify-center rounded-full bg-primary/15 text-label-sm font-bold text-primary ring-1 ring-primary/30">
-            {(firstName ?? 'Q')[0]?.toUpperCase()}
-          </div>
-          <span className="text-headline-md text-[16px]">YOL</span>
-        </div>
-        {coinBalance != null ? (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-safety-yellow/15 px-3 py-1.5 text-label-sm font-semibold text-safety-yellow">
-            <CoinIcon width={16} height={16} />
-            {coinBalance}
-          </span>
-        ) : isLoggedIn ? (
-          // Admin: coin economy doesn't apply, but they ARE logged in — no
-          // login link, just a neutral badge instead of the coin count.
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-outline-variant/20 px-3 py-1.5 text-label-sm font-semibold text-on-surface-variant">
-            Admin
-          </span>
-        ) : (
-          <Link href="/login" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
-            Daxil ol
-          </Link>
-        )}
-      </header>
 
       <div className="px-4 pt-5">
         <p className="text-body-md text-on-surface-variant">

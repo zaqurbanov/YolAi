@@ -3,58 +3,52 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { Avatar } from '@heroui/react';
+import { buttonVariants } from '@heroui/styles';
 import { SidebarToggleButton } from '@/components/SidebarToggleButton';
 import { BackButton } from '@/components/BackButton';
 import CoinBadge from '@/components/CoinBadge';
 import NotificationBell from '@/components/NotificationBell';
-import NavBarMenu from '@/components/NavBarMenu';
+import MobileAccountMenu from '@/components/MobileAccountMenu';
 import ThemeToggle from '@/components/ThemeToggle';
 import DesignToggle from '@/components/DesignToggle';
 import { CoinIcon } from '@/components/icons';
 import { useNavState } from '@/components/useNavState';
 
-// Client component on purpose. It used to be an async server component
-// calling createClient() -> cookies(), and because it renders in the ROOT
-// layout that forced EVERY page in the app to render dynamically — including
-// pages with no auth needs, which is expensive against the Vercel Hobby
-// serverless-function cap (see CLAUDE.md). Fetching the same data after mount
-// keeps one nav implementation instead of forking a static-only variant.
-// Same rule as app/account/page.tsx's avatar fallback: first letters of the
-// display name, or of the email when no name is set.
-function initialsFrom(name: string | null | undefined, email: string | null): string {
-  const source = name?.trim() || email || '';
-  return source
-    .split(/[\s@.]+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('');
-}
+// Mobile-only section labels. This bar is the single top navigation bar on
+// mobile for every route (see the note on the title span below), so it has to
+// say where you are — on desktop the sidebar already does that job, which is
+// why these are `sm:hidden`. Ordered longest-prefix-first; `/` falls through to
+// the brand wordmark instead of a label.
+const MOBILE_SECTION_TITLES: ReadonlyArray<readonly [string, string]> = [
+  ['/oyrenme', 'Akademiya'],
+  ['/coin-qazan', 'Coin Qazan'],
+  ['/imtahan', 'Rəsmi İmtahan'],
+  ['/qiymetler', 'Qiymətlər'],
+  ['/account', 'Hesab'],
+  ['/admin', 'Admin'],
+  ['/chat', 'AI Chat'],
+  ['/sual', 'Sual'],
+  ['/faq', 'FAQ'],
+];
 
 export default function NavBar() {
   const nav = useNavState();
   const pathname = usePathname();
   const logoUrl = nav?.logoUrl ?? '/logo.png';
-  // MobileHome (`/`) and MobileChat (`/chat`, `/chat/[id]`) each render their
-  // own sticky header at mobile widths, so the global NavBar would
-  // double-render chrome there — hide it on those routes at mobile widths
-  // only; every other route/breakpoint is unchanged.
-  const hasOwnMobileHeader = pathname === '/' || pathname.startsWith('/chat');
+
+  const mobileTitle =
+    MOBILE_SECTION_TITLES.find(
+      ([prefix]) => pathname === prefix || pathname?.startsWith(`${prefix}/`),
+    )?.[1] ?? null;
 
   return (
-    <nav
-      className={`hud-navbar border-b px-3 py-3 items-center justify-between gap-2 sm:px-6 ${hasOwnMobileHeader ? 'hidden md:flex' : 'flex'}`}
-    >
+    <nav className="hud-navbar sticky top-0 z-30 flex items-center justify-between gap-2 border-b border-outline-variant/30 bg-surface/80 px-3 py-3 backdrop-blur-xl sm:px-6">
       <div className="flex min-w-0 items-center gap-2">
         <BackButton />
-        <SidebarToggleButton />
-        <Link href="/" className="flex items-center gap-2 font-semibold whitespace-nowrap shrink-0">
-          {/* White chip only for the static /logo.png fallback (an opaque
-              PNG with no alpha channel) — an admin-uploaded logo is assumed
-              to already have an appropriate (usually transparent)
-              background, so wrapping it in a forced white box would fight
-              its own design instead of fixing anything. */}
+        <span className="hidden md:inline-flex">
+          <SidebarToggleButton />
+        </span>
+        <Link href="/" className="flex min-w-0 items-center gap-2 font-semibold whitespace-nowrap">
           {logoUrl === '/logo.png' ? (
             <span className="flex shrink-0 items-center justify-center rounded-md bg-white p-0.5 shadow-sm">
               <Image src={logoUrl} alt="Yol Hərəkəti QA logo" width={36} height={32} className="object-contain" />
@@ -69,25 +63,23 @@ export default function NavBar() {
               className="shrink-0 object-contain"
             />
           )}
-          {/* Hidden below sm: on a narrow phone, back button + sidebar
-              toggle + logo + wordmark + the right-side icon cluster don't
-              all fit in one row and overflow — dropping the wordmark (the
-              logo mark alone is still enough of a brand cue) is the
-              cheapest fix, matching the same md:hidden/sm:hidden pattern
-              this app already uses elsewhere for mobile-vs-desktop splits. */}
-          <span className="hidden sm:inline">Yol Hərəkəti QA</span>
+          <span className="hidden text-base font-bold text-foreground sm:inline">Yol Hərəkəti QA</span>
         </Link>
+        {/* Replaces the wordmark on mobile: the per-screen <header> elements
+            that used to carry a section title were removed so this bar is the
+            only top bar on mobile — without a label every screen would look
+            identical above the fold. Dynamic titles (conversation name, course
+            name) deliberately stay in page content, not here. */}
+        {mobileTitle && (
+          <span className="truncate text-base font-bold text-foreground sm:hidden">{mobileTitle}</span>
+        )}
       </div>
-      <div className="flex shrink-0 items-center gap-1 text-sm sm:gap-2">
-        {/* Nothing auth-dependent renders until nav state is known — a fixed
-            min-width placeholder holds the slot so the icon cluster doesn't
-            shift when it resolves. */}
+
+      <div className="flex shrink-0 items-center gap-1.5 text-sm sm:gap-2">
         {nav === null ? (
           <span aria-hidden className="h-8 w-16 rounded-full bg-surface-hover/40 sm:w-40" />
         ) : (
           <>
-            {/* Desktop only — on mobile this moves into the 3-dot menu
-                (NavBarMenu) to keep the navbar from getting crowded. */}
             {nav.user && !nav.isAdmin && (
               <Link
                 href="/coin-qazan"
@@ -107,30 +99,25 @@ export default function NavBar() {
             )}
           </>
         )}
-        {/* Desktop only — on mobile the theme switch and design switch live
-            in the 3-dot menu. */}
         <span className="hidden sm:inline-flex">
           <DesignToggle />
         </span>
         <span className="hidden sm:inline-flex">
           <ThemeToggle />
         </span>
-        {nav?.user && (
+        {/* The avatar menu is the only overflow trigger now — the separate
+            3-dot NavBarMenu that used to sit beside it was folded into it.
+            Logged-out visitors have no avatar, so the one action that menu
+            offered them (login) is a plain button here. */}
+        {nav?.user && <MobileAccountMenu />}
+        {nav !== null && !nav.user && (
           <Link
-            href="/account"
-            aria-label="Hesab menyusu"
-            title="Hesab"
-            className="shrink-0 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+            href="/login"
+            className={buttonVariants({ variant: 'primary', size: 'sm' })}
           >
-            <Avatar size="sm" className="ring-1 ring-primary/30 transition-opacity hover:opacity-80">
-              {nav.user.avatarUrl ? (
-                <Avatar.Image src={nav.user.avatarUrl} alt="Profil şəkli" />
-              ) : null}
-              <Avatar.Fallback>{initialsFrom(nav.user.fullName, nav.user.email)}</Avatar.Fallback>
-            </Avatar>
+            Daxil ol
           </Link>
         )}
-        {nav !== null && <NavBarMenu hasUser={!!nav.user} isAdmin={nav.isAdmin} />}
       </div>
     </nav>
   );

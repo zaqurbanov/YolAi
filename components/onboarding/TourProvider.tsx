@@ -23,7 +23,7 @@ export function useTour() {
 
 // Global, single-instance guided tour: owns which step is active (null = not
 // running). Opt-in only — the tour never auto-starts, it only runs when the
-// user explicitly triggers it (NavBarMenu's "Turu yenidən göstər"), per user
+// user explicitly triggers it (MobileAccountMenu's "Turu yenidən göstər"), per user
 // feedback that auto-starting on every visit was disruptive. Page navigation
 // between steps and spotlight positioning both live in TourOverlay — this
 // provider only owns state, so start()/next()/back() are just index changes;
@@ -41,7 +41,7 @@ export function TourProvider({ children }: { children: ReactNode }) {
   // — so they share one implementation.
   const skip = finish;
 
-  // Only entry point that starts the tour (NavBarMenu's "Turu yenidən
+  // Only entry point that starts the tour (MobileAccountMenu's "Turu yenidən
   // göstər") — jumps to step 0. Navigating to step 0's page (if not already
   // there) is handled by TourOverlay's own effect, not here.
   const start = useCallback(() => {

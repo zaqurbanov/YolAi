@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { buttonVariants } from '@heroui/styles';
 import { createClient } from '@/lib/supabase/server';
 import Footer from '@/components/Footer';
-import { getCourses } from '@/lib/quiz/lessons';
+import { getCourses, getCourseTopics, type TopicSummary } from '@/lib/quiz/lessons';
 import { getCoinBalanceStatus } from '@/lib/chat/coins';
 import DesignSwitch from '@/components/design3d/DesignSwitch';
 import OyrenmePage3D from '@/components/design3d/OyrenmePage3D';
@@ -25,12 +25,6 @@ export default async function OyrenmePage() {
 
   if (!user) redirect('/login');
 
-  // getCourses() returns [] (never throws) when the lessons migration has not
-  // been applied yet — the empty state below is the live path today, not a
-  // theoretical edge case.
-  // Balance is display-only (the unlock action re-reads and charges its own).
-  // getCoinBalanceStatus fails open; null just renders as "—" in the dialog.
-  // Its `price` field is the CHAT MESSAGE price — not a course price. Ignored.
   const [courses, balance] = await Promise.all([
     getCourses(user.id),
     getCoinBalanceStatus(user.id)
@@ -38,16 +32,25 @@ export default async function OyrenmePage() {
       .catch(() => null),
   ]);
 
-  // Overall progress is counted in TOPICS across all published courses, which
-  // is the unit a user actually advances through now.
+  const featuredCourse =
+    courses.find((c) => c.isUnlocked && c.totalTopics > 0) ??
+    courses.find((c) => c.totalTopics > 0) ??
+    null;
+
+  let featuredTopics: TopicSummary[] = [];
+  if (featuredCourse) {
+    try {
+      featuredTopics = await getCourseTopics(featuredCourse.id, user.id);
+    } catch {
+      featuredTopics = [];
+    }
+  }
+
+  // Overall progress is counted in TOPICS across all published courses
   const totalTopics = courses.reduce((sum, c) => sum + c.totalTopics, 0);
   const passedTopics = courses.reduce((sum, c) => sum + c.passedTopics, 0);
   const overallPct = totalTopics > 0 ? Math.round((passedTopics / totalTopics) * 100) : 0;
 
-  // Built once, reused by BOTH trees below — same pattern as
-  // app/coin-qazan/page.tsx's card descriptors. Internal render logic (server
-  // action wiring inside UnlockCourseCard) is untouched either way; only the
-  // surrounding chrome the 3D tree adds around it differs.
   const hasCourses = courses.length > 0;
   const emptyStateSimple = (
     <div className="glass-panel rounded-2xl px-6 py-12 text-center">
@@ -89,9 +92,6 @@ export default async function OyrenmePage() {
       design={design}
       simple={
         <>
-          {/* Mobile Academy shell (see legaldrive-design skill, "Academy
-              (Öyrənmə) page — mobile") — CSS-only split via md:hidden, no
-              separate route. Desktop tree below is untouched, just wrapped. */}
           <div className="md:hidden">
             <MobileOyrenme
               courses={courses}
@@ -99,6 +99,7 @@ export default async function OyrenmePage() {
               overallPct={overallPct}
               totalTopics={totalTopics}
               passedTopics={passedTopics}
+              featuredTopics={featuredTopics}
             />
           </div>
 

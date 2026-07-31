@@ -11,7 +11,6 @@ import { getCourses, getCourseTopics } from '@/lib/quiz/lessons';
 import DesignSwitch from '@/components/design3d/DesignSwitch';
 import CoursePage3D from '@/components/design3d/CoursePage3D';
 import { getServerDesign } from '@/lib/design/getServerDesign';
-import { getCoinBalanceStatus } from '@/lib/chat/coins';
 import MobileCoursePage from '@/components/oyrenme/MobileCoursePage';
 
 export const metadata: Metadata = {
@@ -77,12 +76,12 @@ export default async function CoursePage({ params }: { params: Promise<{ courseI
   // getCourses() rather than a fresh lesson_courses query: it is the existing
   // read for the same rows (title/description) and keeps every course read on
   // this feature going through lib/quiz/lessons.
-  const [topics, courses, balance] = await Promise.all([
+  // Coin balance is no longer read here: the mobile course header that showed
+  // it was removed in favour of the global NavBar's CoinBadge, which fetches
+  // its own balance client-side. One fewer per-request DB round trip.
+  const [topics, courses] = await Promise.all([
     getCourseTopics(courseId, user.id),
     getCourses(user.id),
-    getCoinBalanceStatus(user.id)
-      .then((s) => s.balance)
-      .catch(() => null),
   ]);
   const course = courses.find((c) => c.id === courseId);
   const passedCount = topics.filter((t) => t.passed).length;
@@ -132,7 +131,6 @@ export default async function CoursePage({ params }: { params: Promise<{ courseI
               topics={topics}
               passedCount={passedCount}
               progressPct={progressPct}
-              balance={balance}
               otherCourses={otherCourses}
             />
           </div>

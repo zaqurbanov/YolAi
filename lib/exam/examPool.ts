@@ -14,6 +14,9 @@ import { logError } from '@/lib/logging/logError';
 
 const QUESTIONS_PER_EXAM = 10;
 
+/** Public bucket created in 0090_exam_question_images.sql. */
+export const EXAM_IMAGE_BUCKET = 'exam-images';
+
 // Same cap and rationale as lib/quiz/topicTest.ts's MAX_FINE_AMOUNT_QUESTIONS
 // (see that file and the 0086 migration header) — kept as a separate
 // constant since exam size (10) and topic-test size (variable) are unrelated.
@@ -23,6 +26,15 @@ export interface ExamQuestion {
   id: string;
   question: string;
   options: string[];
+  /** Public URL of the illustration shown above the question, or null. */
+  imageUrl: string | null;
+  /**
+   * Positionally aligned with `options` — entry i is the picture for answer i,
+   * or null. Always length 4 when present so the renderer can index it
+   * directly; null (not an array of nulls) when the question has no answer
+   * images at all, which is the common case.
+   */
+  optionImageUrls: (string | null)[] | null;
 }
 
 interface PoolRow {
@@ -30,10 +42,32 @@ interface PoolRow {
   question: string;
   options: unknown;
   is_fine_amount: boolean;
+  image_path: string | null;
+  option_image_paths: unknown;
 }
 
 interface PoolQuestion extends ExamQuestion {
   isFineAmount: boolean;
+}
+
+// Storage paths are stored, not URLs (see 0090's header) — resolved to public
+// URLs here, at the single point where question rows become client-facing
+// data, so nothing downstream has to know the bucket name.
+export function examImageUrl(path: string | null | undefined): string | null {
+  if (!path) return null;
+  const { data } = createAdminClient().storage.from(EXAM_IMAGE_BUCKET).getPublicUrl(path);
+  return data.publicUrl || null;
+}
+
+// Tolerant by design: a row whose option_image_paths is malformed (wrong
+// length, wrong type) degrades to a normal text-only question instead of
+// dropping the question from the pool or throwing mid-exam. The DB constraint
+// in 0090 already rejects the wrong length on write; this guards rows written
+// before it, or by hand.
+function parseOptionImageUrls(raw: unknown): (string | null)[] | null {
+  if (!Array.isArray(raw) || raw.length !== 4) return null;
+  const urls = raw.map((entry) => (typeof entry === 'string' && entry ? examImageUrl(entry) : null));
+  return urls.some((url) => url !== null) ? urls : null;
 }
 
 // Fisher-Yates using crypto randomInt — copied verbatim from
@@ -50,7 +84,7 @@ function shuffle<T>(items: T[]): T[] {
 export async function drawExamQuestions(): Promise<ExamQuestion[] | null> {
   const { data, error } = await createAdminClient()
     .from('quiz_questions')
-    .select('id, question, options, is_fine_amount')
+    .select('id, question, options, is_fine_amount, image_path, option_image_paths')
     .eq('status', 'published')
     .returns<PoolRow[]>();
 
@@ -71,6 +105,8 @@ export async function drawExamQuestions(): Promise<ExamQuestion[] | null> {
         id: row.id,
         question: row.question,
         options: row.options.map((option) => String(option)),
+        imageUrl: examImageUrl(row.image_path),
+        optionImageUrls: parseOptionImageUrls(row.option_image_paths),
         isFineAmount: Boolean(row.is_fine_amount),
       },
     ];
@@ -94,5 +130,11 @@ export async function drawExamQuestions(): Promise<ExamQuestion[] | null> {
     selected.push(...fineAmount.slice(fineAmountTake, fineAmountTake + shortfall));
   }
 
-  return shuffle(selected).map(({ id, question, options }) => ({ id, question, options }));
+  return shuffle(selected).map(({ id, question, options, imageUrl, optionImageUrls }) => ({
+    id,
+    question,
+    options,
+    imageUrl,
+    optionImageUrls,
+  }));
 }

@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { href: '/', label: 'Ana Səhifə', icon: 'home' as const },
   { href: '/chat', label: 'Söhbət', icon: 'chat' as const },
   { href: '/oyrenme', label: 'Sürücülük vəsiqəsini al', icon: 'rules' as const },
+  { href: '/imtahan', label: 'Rəsmi İmtahan', icon: 'trophy' as const },
   { href: '/coin-qazan', label: 'Coin Qazan', icon: 'coin' as const },
   { href: '/account', label: 'Ayarlar', icon: 'settings' as const },
 ];
@@ -22,7 +23,7 @@ const NAV_ITEMS = [
 // Both /account and /coin-qazan require auth (they redirect logged-out visitors
 // to /login), so hide them from the logged-out set rather than sending someone
 // into a redirect.
-const AUTH_ONLY_HREFS = new Set(['/account', '/coin-qazan']);
+const AUTH_ONLY_HREFS = new Set(['/account', '/coin-qazan', '/imtahan']);
 const PUBLIC_NAV_ITEMS = NAV_ITEMS.filter((item) => !AUTH_ONLY_HREFS.has(item.href));
 
 // Client component for the same reason as NavBar.tsx — it rendered in the
@@ -35,11 +36,12 @@ export default function Sidebar() {
   // otherwise) — hide it for logged-out visitors instead of sending them into
   // a redirect. While auth state is still unknown, show the public set: it's
   // the subset every visitor can use, so nothing appears and then vanishes.
-  // Admins are exempt from the coin economy and /coin-qazan bounces them to
-  // /account, so drop it from their menu rather than show a redirecting link.
+  // Admins are exempt from the coin economy; both /coin-qazan and /imtahan
+  // (whose entry costs coins or energy) bounce them to /account, so drop both
+  // from their menu rather than show a redirecting link.
   const navItems = nav?.user
     ? nav.isAdmin
-      ? NAV_ITEMS.filter((item) => item.href !== '/coin-qazan')
+      ? NAV_ITEMS.filter((item) => item.href !== '/coin-qazan' && item.href !== '/imtahan')
       : NAV_ITEMS
     : PUBLIC_NAV_ITEMS;
 

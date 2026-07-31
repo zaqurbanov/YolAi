@@ -119,84 +119,102 @@ html.dark {
 html:not(.dark) {
   color-scheme: light;
 
-  /* HeroUI primitive overrides -> HUD palette, light theme (restrained neutral-dominant
-     palette, full rebuild — see skill "Palette update (latest)"). A single cool-gray
-     neutral family (H~220deg, low saturation, NOT stark pure white) carries
-     background/surface, with the same single indigo-blue accent (H~231deg, moderate
-     saturation) used in dark mode for primary/interactive elements. No second
-     competing vivid accent — the old warning/secondary slot is a quiet desaturated
-     slate tone instead. */
-  --background: #f3f6fb;
-  --foreground: #1b1f27;
+  /* HeroUI primitive overrides -> "Ethereal" light palette. Source: Stitch
+     project 9832560642768971810, screen "Ana Səhifə (Ethereal)"
+     (f5a4d622742a4b32b5cc86063f524caa). This REPLACES the cool-gray + indigo
+     light palette; dark mode is untouched and still carries the navy/pale-
+     indigo scheme.
+
+     Unlike every previous palette in this app, the values below are LITERAL
+     spec values, not derivations — the Stitch export is itself a light-mode
+     Material-3 ramp, so there is nothing to invert. The two brand colors are a
+     violet primary (#6b38d4) and a deep-teal secondary (#006b5f); together
+     they drive the gradient used on the wordmark, primary buttons and progress
+     fills. The canvas is a very light cool white (#f7f9fb), and cards are
+     translucent white glass rather than solid fills — see the .glass-card
+     light-theme rule further down, which was retuned to match. */
+  --background: #f7f9fb;
+  --foreground: #191c1e;
 
   --surface: #ffffff;
-  --surface-foreground: #1b1f27;
-  --surface-secondary: #f0f2f5;
-  --surface-tertiary: #e4e7ec;
+  --surface-foreground: #191c1e;
+  --surface-secondary: #f2f4f6;
+  --surface-tertiary: #e6e8ea;
 
   --overlay: #ffffff;
-  --overlay-foreground: #1b1f27;
+  --overlay-foreground: #191c1e;
 
-  --muted: #6b7280;
+  --muted: #494454;
 
-  --default: #f0f2f5;
-  --default-foreground: #1b1f27;
+  --default: #f2f4f6;
+  --default-foreground: #191c1e;
 
-  --accent: #4338ca;
+  --accent: #6b38d4;
   --accent-foreground: #ffffff;
 
-  --border: #e4e7ec;
-  --separator: #edeff2;
-  --focus: #3e63dd;
-  --link: #3e63dd;
+  --border: #cbc3d7;
+  --separator: #e6e2ee;
+  --focus: #6b38d4;
+  --link: #6b38d4;
 
-  --success: #1e7d42;
-  --success-foreground: #eafff1;
+  --success: #006b5f;
+  --success-foreground: #ffffff;
 
-  --warning: #64748b;
+  /* The Ethereal ramp has no "quiet neutral" warning slot — its secondary IS
+     the teal. Reusing it here keeps HeroUI's warning-variant components inside
+     the two-color brand system instead of introducing a third hue. */
+  --warning: #006b5f;
   --warning-foreground: #ffffff;
 
-  --danger: #b3261e;
+  --danger: #ba1a1a;
   --danger-foreground: #ffffff;
 
-  --segment: #f0f2f5;
-  --segment-foreground: #1b1f27;
+  --segment: #f2f4f6;
+  --segment-foreground: #191c1e;
 
   --field-background: #ffffff;
-  --field-foreground: #1b1f27;
-  --field-placeholder: #6b7280;
+  --field-foreground: #191c1e;
+  --field-placeholder: #494454;
   --field-border: transparent;
 
-  --backdrop: rgba(27, 31, 39, 0.5);
+  --backdrop: rgba(25, 28, 30, 0.5);
 
   --surface-shadow: 0 0 0 0 transparent inset;
-  --overlay-shadow: inset 0 0 1px 0 rgba(0, 0, 0, 0.08);
+  --overlay-shadow: inset 0 0 1px 0 rgba(107, 56, 212, 0.1);
   --field-shadow: 0 0 0 0 transparent inset;
 
   /* M3-only tokens that have no direct HeroUI primitive equivalent above */
   --surface-container-lowest: #ffffff;
-  --surface-container-highest: #d0d5dd;
-  --surface-bright: #ffffff;
-  --outline: #9aa1ae;
-  --primary-container: #c0c1ff;
-  --on-primary-container: #1000a9;
-  --secondary-container: #e2e8f0;
-  --tertiary: #94a3b8;
-  --error-container: #ffdad4;
+  --surface-container-highest: #e0e3e5;
+  --surface-bright: #f7f9fb;
+  --outline: #7b7486;
+  --primary-container: #8455ef;
+  --on-primary-container: #fffbff;
+  --secondary-container: #62fae3;
+  --on-secondary-container: #007165;
+  --tertiary: #904800;
+  --error-container: #ffdad6;
+
+  /* The Ethereal secondary (deep teal) and its bright mint container, exposed
+     as first-class tokens so the violet->teal gradient can be built anywhere
+     without hardcoding hexes. */
+  --secondary: #006b5f;
+  --on-secondary: #ffffff;
 
   /* Deepest recessed canvas layer, light-mode sibling of the dark theme's
      --background-deep (see dark block above for the full rationale). */
-  --background-deep: #e7ecf5;
+  --background-deep: #eceef0;
 
-  /* Traffic-accent functional colors — same hues as dark mode, darkened
-     (same-hue Tailwind -700/-800 step) for AA text contrast on this lighter
-     background; the literal Stitch values (yellow-400/orange-400/blue-500/
-     green-500) fall well under 4.5:1 here. See skill "Palette update (latest)"
-     for the computed contrast ratios. */
-  --safety-yellow: #854d0e;
-  --caution-orange: #9a3412;
-  --regulatory-blue: #1d4ed8;
-  --go-green: #166534;
+  /* Traffic-accent functional colors. Hues are unchanged from dark mode but
+     darkened for AA text contrast on this much lighter canvas — the literal
+     Stitch yellow-400/orange-400/blue-500/green-500 values fall well under
+     4.5:1 here. regulatory-blue and go-green are pulled toward the Ethereal
+     violet/teal so they read as part of this palette rather than leftovers
+     from the previous one. */
+  --safety-yellow: #8a5a00;
+  --caution-orange: #b55d00;
+  --regulatory-blue: #5516be;
+  --go-green: #006b5f;
 
   /* See dark block above for what these control. The source image is a near-black
      asphalt illustration with no light variant — at dark-mode opacity with no filter
@@ -253,6 +271,9 @@ html:not(.dark) {
   --color-secondary: var(--warning);
   --color-on-secondary: var(--warning-foreground);
   --color-secondary-container: var(--secondary-container);
+  /* Ethereal's bright-mint container needs a readable on-color of its own —
+     the generic --warning-foreground is white, which is unreadable on #62fae3. */
+  --color-on-secondary-container: var(--on-secondary-container, var(--warning-foreground));
 
   --color-tertiary: var(--tertiary);
 
@@ -290,28 +311,123 @@ html.dark .glow-primary {
   box-shadow: 0 0 16px rgba(124, 147, 242, 0.28);
 }
 
-/* Light theme glass: translucent white (not a lightened copy of the dark navy glass,
-   which reads muddy on white), with the border doing more of the edge-definition work
-   since a white top-hairline inset glow is invisible on a light background — a soft
-   drop shadow stands in for that ambient glow instead. */
+/* Light theme glass — "Ethereal". Literal values from the Stitch export's own
+   .glass-card rule: a WHITE translucent fill with a white (not black) hairline
+   border, so cards read as frosted panes catching light rather than as outlined
+   boxes. The shadow moved out of this rule and into .luminous-shadow-* below,
+   because in this design the card shadow is tinted by the brand color and is
+   applied per-section, not uniformly to every card. */
 html:not(.dark) .glass-card,
 html:not(.dark) .glass-panel {
   background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
-}
-
-html:not(.dark) .glass-panel {
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 8px 30px rgba(107, 56, 212, 0.06);
 }
 
 html:not(.dark) .glow-primary {
-  /* rgb of the light-mode accent #3e63dd (indigo-blue), dimmer still than dark mode —
-     a bare hint of glow on white/near-white surfaces, not an ambient light source. */
-  box-shadow: 0 0 12px rgba(62, 99, 221, 0.14);
+  /* rgb of the Ethereal violet primary #6b38d4. Stronger than the previous
+     light palette's bare hint — in this design the primary button is a
+     violet->teal gradient and is *meant* to read as a light source. */
+  box-shadow: 0 10px 20px rgba(107, 56, 212, 0.3);
+}
+
+/* Ethereal signature effects. Literal from the Stitch export, exposed as
+   utilities so any section can opt in — the two tinted "luminous" shadows are
+   what stop the light theme from looking like flat white boxes on white. */
+.luminous-shadow-violet {
+  box-shadow: 0 20px 40px -15px rgba(107, 56, 212, 0.2);
+}
+
+.luminous-shadow-teal {
+  box-shadow: 0 20px 40px -15px rgba(0, 107, 95, 0.15);
+}
+
+/* Section separator that fades in from both edges instead of a hard 1px rule. */
+.holographic-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(107, 56, 212, 0.2), transparent);
+}
+
+/* violet -> teal, the design's one gradient. Used on the wordmark, primary
+   CTAs and progress fills so the two brand colors always appear together. */
+.ethereal-gradient {
+  background-image: linear-gradient(to right, var(--accent), var(--secondary, #006b5f));
+}
+
+.ethereal-gradient-text {
+  background-image: linear-gradient(to right, var(--accent), var(--secondary, #006b5f));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Blurred colour orb used as ambient decoration behind glass cards. Sized and
+   positioned by the caller; this only carries the blur + tint. */
+.ethereal-orb {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(48px);
+  pointer-events: none;
+}
+
+/* The dark theme keeps its own glass/glow rules above — these Ethereal effects
+   are light-only, so they collapse to something neutral rather than bleeding a
+   violet cast into the navy dark theme. */
+html.dark .luminous-shadow-violet,
+html.dark .luminous-shadow-teal {
+  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.45);
+}
+
+html.dark .holographic-divider {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.14), transparent);
+}
+
+/*
+ * Ethereal home (components/home/EtherealHome.tsx). Two shared components are
+ * mounted there UNCHANGED because they own real server-action wiring that must
+ * not be forked — DailyQuizCard (claimDailyQuizReward, streak state,
+ * already-claimed state) and CategoryCard (real citations, question counts,
+ * /chat?q= links). Both still render their own `glass-card` + token classes,
+ * so they are repainted in place here rather than duplicated.
+ *
+ * Same scoping technique as `[data-design='3d'] .chat-hud-shell` and
+ * `.oyrenme-hud-courses` further down: a wrapper class re-skins descendants,
+ * nothing outside the wrapper is touched.
+ */
+.ethereal-home .glass-card,
+.ethereal-home .glass-panel {
+  border-radius: 2rem;
+}
+
+.ethereal-home .ethereal-topics .glass-card {
+  /* CategoryCard carries a border-l-4 accent stripe from the previous design;
+     in Ethereal the card edge is a soft white hairline all the way round, and
+     depth comes from the tinted shadow instead. */
+  border-left-width: 1px;
+  transition: transform 220ms ease, box-shadow 220ms ease;
+}
+
+.ethereal-home .ethereal-topics .glass-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 40px -15px rgba(107, 56, 212, 0.2);
+}
+
+.ethereal-home .ethereal-quiz .glass-card {
+  box-shadow: 0 20px 40px -15px rgba(0, 107, 95, 0.15);
+  padding-top: 2rem;
+}
+
+html.dark .ethereal-home .ethereal-topics .glass-card:hover,
+html.dark .ethereal-home .ethereal-quiz .glass-card {
+  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.45);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ethereal-home .ethereal-topics .glass-card:hover {
+    transform: none;
+  }
 }
 
 .mono-label {
@@ -659,6 +775,42 @@ html:not(.dark) .tour-spotlight {
 
 .coin-badge-pulse {
   animation: coin-badge-pulse 550ms ease-out;
+}
+
+/* MobileAccountMenu (components/MobileAccountMenu.tsx): the avatar is now the
+   only entry point to the account/overflow menu (the navbar's separate 3-dot
+   button was removed), so it gets a slow looping halo to read as tappable.
+   Colour comes from --avatar-accent, a per-user hue derived from user.id — see
+   accentForUser() there. Ring-only (no transform): the avatar sits in a
+   fixed-height navbar row and scaling it would shift its neighbours. */
+@keyframes avatar-pulse {
+  0% {
+    box-shadow: 0 0 0 0 var(--avatar-accent-soft);
+  }
+  /* Ends transparent at full spread, then snaps back to 0 spread while still
+     transparent — otherwise the return leg reads as a second, inward ripple. */
+  70% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.avatar-pulse {
+  animation: avatar-pulse 2.4s ease-out infinite;
+  border-radius: 9999px;
+}
+
+/* Stitch "Coin Qazan (Premium)" (screen 1d90afd2991d4339bc4ea8db000b1dcc) uses a
+   gradient-filled section headline. Reproduced here against the app's own
+   primary ramp rather than that export's generic mint (#dbffe2 → #73db9a),
+   per the palette note in the legaldrive-design skill. */
+.gradient-headline {
+  background-image: linear-gradient(135deg, var(--color-primary), var(--color-primary-container));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 /* Coin mini-games (components/games/*). All looping/transform animations get

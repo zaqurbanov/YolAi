@@ -1,24 +1,21 @@
 'use client';
 
-import Image from 'next/image';
-import Link from 'next/link';
 import type { UIMessage } from 'ai';
 import { memo, useMemo, useState } from 'react';
 import { Input, Button } from '@heroui/react';
 import {
   SendIcon,
-  SettingsIcon,
   GavelIcon,
   CloseIcon,
   PaperclipIcon,
   MicIcon,
-  CoinIcon,
   ArrowRightIcon,
+  ClockIcon,
 } from '@/components/icons';
 import MobileBottomTabBar from '@/components/home/MobileBottomTabBar';
+import { useSidebar } from '@/components/SidebarContext';
 import { Spinner } from '@/components/Spinner';
 import { renderCitationText } from '@/lib/chat/renderCitationText';
-import { formatCoinBalance } from '@/lib/format/coins';
 
 export interface MobileCitation {
   document_id: string;
@@ -36,8 +33,6 @@ export interface MobileChatMessage {
 }
 
 export interface MobileChatProps {
-  conversationTitle: string | null;
-  coins: { balance: number; price: number } | null;
   messages: MobileChatMessage[];
   timestampFor: (id: string) => string;
   isBusy: boolean;
@@ -282,13 +277,32 @@ const MobileMessageBubble = memo(function MobileMessageBubble({
   );
 });
 
+// Opens the existing sidebar drawer, which on mobile is where
+// ChatConversationList lives. Split out as its own component purely so the
+// useSidebar() hook call sits outside MobileChat — MobileChat is memo-free and
+// re-renders on every streamed token, and there is no reason to re-read sidebar
+// context that often.
+function ChatHistoryButton() {
+  const { toggle } = useSidebar();
+
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      aria-label="Söhbət tarixçəsini aç"
+      className="glass-card inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-label-sm font-semibold text-on-surface shadow-sm transition active:scale-95"
+    >
+      <ClockIcon width={16} height={16} className="text-primary" />
+      Tarixçə
+    </button>
+  );
+}
+
 // Mobile-only visual restyle of the existing useChat-driven chat — all state
 // (messages, composer input, coin balance) lives in ChatClient.tsx and is
 // passed down as props/callbacks; this component owns no chat state of its
 // own (no useChat, no coin fetch) per the structural split documented there.
 export default function MobileChat({
-  conversationTitle,
-  coins,
   messages,
   timestampFor,
   isBusy,
@@ -308,47 +322,30 @@ export default function MobileChat({
 }: MobileChatProps) {
   return (
     <div className="chat-hud-shell flex h-full flex-col">
-      <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between border-b border-outline-variant/30 bg-surface/60 px-4 backdrop-blur-xl">
-        <div className="flex min-w-0 items-center gap-2">
-          <Image
-            src="/ai.png"
-            alt="Yol AI"
-            width={36}
-            height={36}
-            className="size-9 shrink-0 rounded-full object-cover"
-          />
-          <div className="min-w-0">
-            <span className="truncate text-headline-md text-[16px] block">YolXpert AI</span>
-            {conversationTitle && (
-              <span className="truncate text-legal-citation block text-on-surface-variant">
-                {conversationTitle}
-              </span>
-            )}
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {coins && (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-safety-yellow/15 px-3 py-1.5 text-label-sm font-semibold text-safety-yellow">
-              <CoinIcon width={16} height={16} />
-              {formatCoinBalance(coins.balance)}
-            </span>
-          )}
-          <Link
-            href="/account"
-            aria-label="Tənzimləmələr"
-            className="rounded-full p-2 text-on-surface-variant transition hover:bg-surface-hover hover:text-on-surface"
-          >
-            <SettingsIcon width={20} height={20} />
-          </Link>
-        </div>
-      </header>
+      {/* No <header> here on purpose: the global NavBar is the single top bar
+          on mobile (it carries back, section title, coins, notifications and
+          the account menu). This used to render a second stacked one. */}
 
       {/* pb-64 (256px), not the composer's own ~96px offset + ~60px height:
           the fixed composer's footprint grows by another ~64px when the
           image-attach preview row is showing, and the scroll container can't
           react to that dynamically without measuring it, so this reserves
           enough for the worst case rather than the common one. */}
-      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-4 pt-5 pb-64">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-4 pb-64">
+        {/* Chat history is only reachable through the sidebar drawer, and the
+            control that opens it (SidebarToggleButton) is `hidden md:inline-flex`
+            in the navbar — so on mobile there was no way in at all. This is that
+            way in. It opens the SAME drawer, which already renders
+            ChatConversationList (list + new/rename/delete), so there is no second
+            history UI to keep in sync.
+
+            Sticky rather than fixed: it rides the top of the scroll container, so
+            it stays reachable while scrolling back through a long conversation
+            without floating over the composer or the bottom tab bar. */}
+        <div className="sticky top-0 z-10 -mx-4 mb-1 flex justify-end bg-gradient-to-b from-surface/95 to-transparent px-4 pt-3 pb-4 backdrop-blur-sm">
+          <ChatHistoryButton />
+        </div>
+
         {!historyLoaded && (
           <div className="flex flex-col items-start gap-1.5">
             <div className="glass-panel max-w-[85%] rounded-2xl rounded-tl-none border-l-2 border-primary px-4 py-3">

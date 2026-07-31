@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Montserrat, Inter, JetBrains_Mono } from "next/font/google";
+import { Montserrat, Inter, JetBrains_Mono, Plus_Jakarta_Sans } from "next/font/google";
 import { Toast } from "@heroui/react";
 import "./globals.css";
 import NavBar from "@/components/NavBar";
@@ -31,6 +31,16 @@ const jetbrainsMono = JetBrains_Mono({
   weight: ["500"],
 });
 
+// The "Ethereal" light design's typeface (Stitch screen "Ana Səhifə
+// (Ethereal)"). Applied only inside the Ethereal home tree via
+// --font-jakarta, so the rest of the app keeps Montserrat/Inter — next/font
+// only ships the weights actually referenced in CSS.
+const plusJakarta = Plus_Jakarta_Sans({
+  variable: "--font-jakarta",
+  subsets: ["latin"],
+  weight: ["400", "600", "700", "800"],
+});
+
 export const metadata: Metadata = {
   title: {
     default: "Yol Hərəkəti Qaydaları QA",
@@ -52,9 +62,13 @@ export const metadata: Metadata = {
   },
 };
 
+// Matches the Ethereal light canvas (--background in html:not(.dark)), which
+// is now the default. `colorScheme: 'light dark'` rather than a hard 'dark':
+// the app ships both themes and the default is light, so pinning the UA to
+// dark made form controls and scrollbars disagree with the page.
 export const viewport: Viewport = {
-  themeColor: "#16181d",
-  colorScheme: "dark",
+  themeColor: "#f7f9fb",
+  colorScheme: "light dark",
 };
 
 // Sets the `data-design` attribute AND the `dark` class on <html> from
@@ -83,10 +97,15 @@ export const viewport: Viewport = {
 // `data-design` attribute this script sets pre-paint always agrees with
 // whichever tree the server actually rendered — no hydration mismatch),
 // falling back to localStorage (kept in sync by
-// lib/design/useAppDesign.ts's setDesign3D) and finally to '3d': first-time
-// visitors with neither a cookie nor localStorage entry get the newer
-// "Cyber-Circuit Legal" design by default (product decision, 2026-07-28).
-const THEME_AND_DESIGN_INIT_SCRIPT = `(function(){try{var m=document.cookie.match(/(?:^|; )yol-design=([^;]+)/);var cookieVal=m?decodeURIComponent(m[1]):null;var design=(cookieVal==='simple'||cookieVal==='3d')?cookieVal:(localStorage.getItem('yol-design')==='simple'?'simple':'3d');document.documentElement.setAttribute('data-design',design);var t=localStorage.getItem('yol-theme');var dark=design==='3d'?true:(t!=='light');document.documentElement.classList.toggle('dark',dark);}catch(e){document.documentElement.setAttribute('data-design','3d');document.documentElement.classList.add('dark');}})();`;
+// lib/design/useAppDesign.ts's setDesign3D) and finally to 'simple'.
+//
+// Both defaults flipped on 2026-07-31 (design '3d' -> 'simple', and 'simple's
+// theme dark -> light): the `simple` tree's light palette was rebuilt as
+// "Ethereal" from the Stitch screen of that name, and it is a light-FIRST
+// design, so `t === 'dark'` is now the opt-in rather than `t !== 'light'`.
+// Keep this in sync with DEFAULT_DESIGN in lib/design/constants.ts — this
+// script cannot import it.
+const THEME_AND_DESIGN_INIT_SCRIPT = `(function(){try{var m=document.cookie.match(/(?:^|; )yol-design=([^;]+)/);var cookieVal=m?decodeURIComponent(m[1]):null;var design=(cookieVal==='simple'||cookieVal==='3d')?cookieVal:(localStorage.getItem('yol-design')==='3d'?'3d':'simple');document.documentElement.setAttribute('data-design',design);var t=localStorage.getItem('yol-theme');var dark=design==='3d'?true:(t==='dark');document.documentElement.classList.toggle('dark',dark);}catch(e){document.documentElement.setAttribute('data-design','simple');document.documentElement.classList.remove('dark');}})();`;
 
 export default function RootLayout({
   children,
@@ -96,7 +115,7 @@ export default function RootLayout({
   return (
     <html
       lang="az"
-      className={`${montserrat.variable} ${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      className={`${montserrat.variable} ${inter.variable} ${jetbrainsMono.variable} ${plusJakarta.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <head>
