@@ -9,7 +9,7 @@ import {
   purchaseLessonRetry,
   unlockLessonCourse,
 } from '@/lib/coins/lessonUnlock';
-import { getCoinBalanceStatus } from '@/lib/chat/coins';
+import { getEnergyStatus } from '@/lib/coins/games';
 import {
   drawTopicQuestions,
   getAttemptState,
@@ -28,7 +28,7 @@ export interface UnlockCourseState {
   status:
     | 'success'
     | 'already_unlocked'
-    | 'insufficient_coins'
+    | 'insufficient_energy'
     | 'invalid_course'
     | 'already_free'
     | 'no_content'
@@ -40,7 +40,7 @@ export interface UnlockCourseState {
   missing?: number;
 }
 
-// Spends coins to unlock a paid course. Mirrors app/coin-qazan/actions.ts:
+// Spends ENERGY to unlock a paid course. Mirrors app/coin-qazan/actions.ts:
 // session lookup with the RLS-respecting client, then delegate to the lib
 // function, which owns the price resolution and the fail-closed debit.
 //
@@ -70,10 +70,10 @@ export async function unlockCourseAction(courseId: string): Promise<UnlockCourse
       return { status: 'already_unlocked', message: 'Bu kurs artıq açıqdır' };
     }
 
-    if (result.error === 'insufficient_coins') {
+    if (result.error === 'insufficient_energy') {
       // Display-only lookups. The debit already refused; nothing here re-decides it.
       const [balance, price] = await Promise.all([
-        getCoinBalanceStatus(user.id)
+        getEnergyStatus(user.id)
           .then((status) => status.balance)
           .catch(() => null),
         getCourseUnlockPrice(courseId).catch(() => null),
@@ -82,15 +82,15 @@ export async function unlockCourseAction(courseId: string): Promise<UnlockCourse
       if (typeof balance === 'number' && typeof price === 'number') {
         const missing = Math.max(0, price - balance);
         return {
-          status: 'insufficient_coins',
-          message: `Balansınız kifayət etmir. ${missing} coin çatmır`,
+          status: 'insufficient_energy',
+          message: `Balansınız kifayət etmir. ${missing} enerji çatmır`,
           balance,
           price,
           missing,
         };
       }
 
-      return { status: 'insufficient_coins', message: 'Balansınız kifayət etmir' };
+      return { status: 'insufficient_energy', message: 'Balansınız kifayət etmir' };
     }
 
     if (result.error === 'invalid_course') {
@@ -352,7 +352,7 @@ export interface PurchaseRetryState {
     | 'not_found'
     | 'not_needed'
     | 'already_has_retry'
-    | 'insufficient_coins'
+    | 'insufficient_energy'
     | 'error';
   message: string;
   balance?: number;
@@ -360,7 +360,7 @@ export interface PurchaseRetryState {
   missing?: number;
 }
 
-// Buys one extra same-day attempt. The price is resolved server-side by
+// Buys one extra same-day attempt with ENERGY. The price is resolved server-side by
 // getLessonRetryCost() inside purchaseLessonRetry — never accepted here.
 //
 // The two product guards (0060's comment puts them in TS on purpose) fail
@@ -392,12 +392,12 @@ export async function purchaseRetryAction(topicId: string): Promise<PurchaseRetr
   const result = await purchaseLessonRetry(user.id, topicId);
 
   if (!result.ok) {
-    if (result.error === 'insufficient_coins') {
+    if (result.error === 'insufficient_energy') {
       // Display-only lookups; the debit already refused and nothing here
       // re-decides it. Same shape unlockCourseAction returns, so the frontend
-      // can reuse UnlockCourseCard's pricing / «Coin qazan» exit verbatim.
+      // can reuse UnlockCourseCard's pricing / «Enerji qazan» exit verbatim.
       const [balance, price] = await Promise.all([
-        getCoinBalanceStatus(user.id)
+        getEnergyStatus(user.id)
           .then((status) => status.balance)
           .catch(() => null),
         getLessonRetryCost().catch(() => null),
@@ -405,15 +405,15 @@ export async function purchaseRetryAction(topicId: string): Promise<PurchaseRetr
 
       if (typeof balance === 'number' && typeof price === 'number') {
         return {
-          status: 'insufficient_coins',
-          message: `Balansınız kifayət etmir. ${Math.max(0, price - balance)} coin çatmır`,
+          status: 'insufficient_energy',
+          message: `Balansınız kifayət etmir. ${Math.max(0, price - balance)} enerji çatmır`,
           balance,
           price,
           missing: Math.max(0, price - balance),
         };
       }
 
-      return { status: 'insufficient_coins', message: 'Balansınız kifayət etmir' };
+      return { status: 'insufficient_energy', message: 'Balansınız kifayət etmir' };
     }
 
     if (result.error === 'invalid_topic') {

@@ -1,8 +1,10 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import MobileBottomTabBar from '@/components/home/MobileBottomTabBar';
 import FeatureRail from '@/components/home/FeatureRail';
+import UnlockCourseCard from '@/app/oyrenme/UnlockCourseCard';
 import {
   ArrowRightIcon,
   CheckIcon,
@@ -10,8 +12,7 @@ import {
   AwardIcon,
   LockIcon,
   PlayIcon,
-  RulesIcon,
-  CoinIcon,
+  EnergyIcon,
 } from '@/components/icons';
 import { formatCoinBalance } from '@/lib/format/coins';
 import type { CourseSummary, TopicSummary } from '@/lib/quiz/lessons';
@@ -62,7 +63,7 @@ const STAT_CARDS: ReadonlyArray<{
     icon: PlayIcon,
     value: (s) => ({
       value: `${s.unlockedCourses}/${s.totalCourses}`,
-      hint: s.unlockedCourses < s.totalCourses ? 'qalanları coinlə aç' : 'hamısı açıqdır',
+      hint: s.unlockedCourses < s.totalCourses ? 'qalanları enerji ilə aç' : 'hamısı açıqdır',
     }),
   },
   {
@@ -75,6 +76,109 @@ const STAT_CARDS: ReadonlyArray<{
     }),
   },
 ];
+
+// One course card body, shared by the slider and the expanded list. Prices are
+// ENERGY since 0098 — course unlocks spend energy, never coins — so a locked
+// card shows an energy price, an open one shows its topic progress, and an
+// empty ("Tezliklə") one is not a thing to sell yet.
+function CourseCardContent({ course }: { course: CourseSummary }) {
+  const isEmpty = course.totalTopics === 0;
+  const isLocked = !isEmpty && !course.isUnlocked;
+  const isOpen = !isEmpty && course.isUnlocked;
+
+  return (
+    <>
+      <div className="flex items-start justify-between gap-2">
+        <h3
+          className={`truncate text-sm font-bold ${isOpen ? 'text-on-surface' : 'text-on-surface-variant'}`}
+        >
+          {course.title}
+        </h3>
+        {isLocked && <LockIcon width={14} height={14} className="shrink-0 text-safety-yellow" />}
+        {isEmpty && (
+          <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-on-surface-variant">
+            Tezliklə
+          </span>
+        )}
+      </div>
+
+      {course.description && (
+        <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-on-surface-variant">
+          {course.description}
+        </p>
+      )}
+
+      <div className="mt-auto flex items-center justify-between gap-2 border-t border-outline-variant/40 pt-3">
+        {isOpen && (
+          <span className="text-xs text-on-surface-variant">
+            {course.passedTopics}/{course.totalTopics} mövzu
+          </span>
+        )}
+        {isLocked && (
+          <span className="flex items-center gap-1 text-xs font-bold text-safety-yellow">
+            <EnergyIcon width={14} height={14} />
+            {formatCoinBalance(course.price)}
+          </span>
+        )}
+        {isEmpty && <span className="text-xs text-on-surface-variant">Hazırlanır</span>}
+        {isOpen && <ArrowRightIcon width={15} height={15} className="shrink-0 text-on-surface-variant" />}
+      </div>
+    </>
+  );
+}
+
+// Renders one course in its right wrapper — the same three-way split the
+// desktop CourseGrid uses. A LOCKED card is wrapped in <UnlockCourseCard>
+// (client): the whole card is the trigger and owns the energy purchase dialog,
+// so pricing, the balance rows and the «Enerji qazan» exit behave identically
+// to the desktop unlock. `wide` is true in the expanded list (card fills the
+// row), false in the slider (fixed-width, shrink-0). UnlockCourseCard appends
+// `w-full` to its trigger, so a locked slider card is wrapped in an explicit
+// width div rather than relying on class-order to beat w-full.
+const CARD_BASE =
+  'flex min-h-40 flex-col border border-outline-variant/40 bg-surface rounded-2xl p-4';
+
+function renderCourseCard(course: CourseSummary, balance: number | null, wide: boolean) {
+  const isEmpty = course.totalTopics === 0;
+  const isLocked = !isEmpty && !course.isUnlocked;
+  const isOpen = !isEmpty && course.isUnlocked;
+  const widthClass = wide ? 'w-full' : 'w-72 shrink-0';
+  const content = <CourseCardContent course={course} />;
+
+  if (isLocked) {
+    return (
+      <div key={course.id} className={widthClass}>
+        <UnlockCourseCard
+          courseId={course.id}
+          title={course.title}
+          price={course.price}
+          balance={balance}
+          className={CARD_BASE}
+        >
+          {content}
+        </UnlockCourseCard>
+      </div>
+    );
+  }
+
+  if (isOpen) {
+    return (
+      <Link
+        key={course.id}
+        href={`/oyrenme/${course.id}`}
+        className={`${CARD_BASE} ${widthClass} transition active:scale-[0.99]`}
+      >
+        {content}
+      </Link>
+    );
+  }
+
+  return (
+    <div key={course.id} className={`${CARD_BASE} ${widthClass}`}>
+      {content}
+    </div>
+  );
+}
 
 export interface MobileOyrenmeProps {
   courses: CourseSummary[];
@@ -99,6 +203,11 @@ export default function MobileOyrenme({
   unlockedCourses,
   completedCourses,
 }: MobileOyrenmeProps) {
+  // "Bütün kurslar" expands the course slider into the full stacked list —
+  // client state only, no extra route (a route would cost another Vercel
+  // function and the deployment is already past the Hobby cap — CLAUDE.md).
+  const [showAllCourses, setShowAllCourses] = useState(false);
+
   const stats: LearningStats = {
     overallPct,
     totalTopics,
@@ -172,11 +281,59 @@ export default function MobileOyrenme({
             <h1 className="text-2xl font-bold tracking-tight text-on-surface leading-tight">
               {featuredCourse?.title ?? 'Kurslar hazırlanır'}
             </h1>
+            {/* The empty-state copy belongs ONLY to the truly-empty case — a
+                published course with a null description used to fall through to
+                "Hələ dərc edilmiş kurs yoxdur" under a real title, which was the
+                bug. A real course with no description gets a neutral fallback. */}
             <p className="mt-1.5 text-xs leading-relaxed text-on-surface-variant font-normal">
-              {featuredCourse?.description ??
-                'Hələ dərc edilmiş kurs yoxdur. Tezliklə burada görünəcək.'}
+              {courses.length === 0
+                ? 'Hələ dərc edilmiş kurs yoxdur. Tezliklə burada görünəcək.'
+                : (featuredCourse?.description ??
+                  'Kurs materiallarını bitirərək növbəti mövzuya keçin.')}
             </p>
           </div>
+        </section>
+
+        {/* Kurslar — real published courses, right under the featured course
+            title (this is the spot that used to print "Hələ dərc edilmiş kurs
+            yoxdur" under a real course with a null description). Collapsed: a
+            horizontal card slider (swipeable). Expanded via "Bütün kurslar":
+            every course stacked with its energy price. This replaced an invented
+            "Sizin Üçün Seçilənlər" rail whose two cards ("Avtonom Sürüş
+            Texnologiyaları", "Sürüş Təhlükəsizliyi Qaydaları") pointed at
+            courses that do not exist. */}
+        <section>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-lg font-bold text-on-surface">Kurslar</h2>
+            {courses.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowAllCourses((v) => !v)}
+                className="flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+              >
+                {showAllCourses ? 'Yığcam görünüş' : 'Bütün kurslar'}
+                <ArrowRightIcon
+                  width={14}
+                  height={14}
+                  className={`transition-transform ${showAllCourses ? 'rotate-90' : ''}`}
+                />
+              </button>
+            )}
+          </div>
+
+          {showAllCourses ? (
+            <div className="space-y-3">{courses.map((course) => renderCourseCard(course, balance, true))}</div>
+          ) : (
+            <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2 scrollbar-none">
+              {courses.length > 0 ? (
+                courses.map((course) => renderCourseCard(course, balance, false))
+              ) : (
+                <p className="text-xs text-on-surface-variant">
+                  Hələ dərc edilmiş kurs yoxdur. Tezliklə burada görünəcək.
+                </p>
+              )}
+            </div>
+          )}
         </section>
 
         {/* Stat rail. Every figure below is DERIVED FROM REAL DATA — the two
@@ -298,41 +455,6 @@ export default function MobileOyrenme({
           </div>
         </section>
 
-        {/* Sizin Üçün Seçilənlər (Recommended Rail) */}
-        <section className="pt-2">
-          <h2 className="text-lg font-bold text-on-surface mb-3">Sizin Üçün Seçilənlər</h2>
-          <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none -mx-4 px-4">
-            {/* Card 1 */}
-            <div className="w-64 shrink-0 bg-surface border border-outline-variant/40 rounded-2xl overflow-hidden flex flex-col group cursor-pointer">
-              <div className="relative h-32 w-full bg-gradient-to-br from-indigo-900 via-purple-900 to-slate-900 overflow-hidden">
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-[var(--accent)]/30 via-transparent to-transparent opacity-80" />
-                <div className="absolute top-3 left-3 bg-primary/20/90 backdrop-blur-md border border-primary/30 text-primary text-[10px] font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1">
-                  <span className="size-1.5 rounded-full bg-primary animate-pulse" />
-                  YENİ
-                </div>
-              </div>
-              <div className="p-3.5">
-                <h3 className="text-sm font-bold text-on-surface group-hover:text-primary transition-colors">
-                  Avtonom Sürüş Texnologiyaları
-                </h3>
-                <p className="text-xs text-on-surface-variant mt-1">Gələcəyin ağıllı sürüş və təhlükəsizlik sistemləri.</p>
-              </div>
-            </div>
-
-            {/* Card 2 */}
-            <div className="w-64 shrink-0 bg-surface border border-outline-variant/40 rounded-2xl overflow-hidden flex flex-col group cursor-pointer">
-              <div className="relative h-32 w-full bg-gradient-to-br from-slate-800 via-teal-950 to-slate-900 overflow-hidden">
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,_var(--tw-gradient-stops))] from-[var(--secondary)]/20 via-transparent to-transparent opacity-80" />
-              </div>
-              <div className="p-3.5">
-                <h3 className="text-sm font-bold text-on-surface group-hover:text-primary transition-colors">
-                  Sürüş Təhlükəsizliyi Qaydaları
-                </h3>
-                <p className="text-xs text-on-surface-variant mt-1">Ekstremal hava şəraitində idarəetmə prinsipləri.</p>
-              </div>
-            </div>
-          </div>
-        </section>
       </main>
 
       {/* Fixed Bottom Navigation */}

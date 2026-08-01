@@ -34,6 +34,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
  *   profile: AdminUserProfile;
  *   stats: AdminUserStats;
  *   coins: { balance: number; daily_limit: number | null } | null; // null only if the user_coins row lookup itself failed
+ *   energy: number | null; // null only if the user_energy row lookup itself failed
  *   lastSignInAt: string | null; // auth.users.last_sign_in_at via admin API; null if never signed in or lookup failed
  * }
  *
@@ -93,6 +94,7 @@ export interface AdminUserDetail {
   profile: AdminUserProfile;
   stats: AdminUserStats;
   coins: { balance: number; daily_limit: number | null } | null;
+  energy: number | null;
   lastSignInAt: string | null;
 }
 
@@ -155,6 +157,16 @@ export async function getAdminUserDetail(userId: string): Promise<AdminUserDetai
     .maybeSingle();
   const coins = coinRow ? { balance: Number(coinRow.balance), daily_limit: coinRow.daily_limit } : null;
 
+  // user_energy has no admin-read RLS policy either (0067 — select-own only),
+  // so same service-role client. Best-effort like coins: a lookup failure
+  // degrades to `energy: null` rather than failing the whole page.
+  const { data: energyRow } = await admin
+    .from('user_energy')
+    .select('balance')
+    .eq('user_id', userId)
+    .maybeSingle();
+  const energy = energyRow ? Number(energyRow.balance) : null;
+
   // auth.users.last_sign_in_at is only reachable via the admin API (no such
   // column on profiles). Best-effort like coins above: degrade to null on
   // error rather than failing the whole page.
@@ -185,6 +197,7 @@ export async function getAdminUserDetail(userId: string): Promise<AdminUserDetai
     return {
       profile,
       coins,
+      energy,
       lastSignInAt,
       stats: {
         totalConversations: 0,
@@ -239,6 +252,7 @@ export async function getAdminUserDetail(userId: string): Promise<AdminUserDetai
   return {
     profile,
     coins,
+    energy,
     lastSignInAt,
     stats: {
       totalConversations,

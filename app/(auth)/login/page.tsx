@@ -1,22 +1,17 @@
 'use client';
 
-import { Suspense, useActionState } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { TextField, Label, Input, Button, Alert, Separator } from '@heroui/react';
-import { login, type AuthFormState } from '../actions';
+import { Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Button, Alert, Separator } from '@heroui/react';
 import { GoogleSignInButton } from '@/components/GoogleSignInButton';
-import { Spinner } from '@/components/Spinner';
 
-const initialState: AuthFormState = {};
-
-// Sign-IN keeps the password form so the accounts that predate the
-// Google-only signup change don't lose access. Sign-UP is Google-only —
-// see app/(auth)/actions.ts. Google is listed first because it is the only
-// path available to a new user.
+// Sign-IN is Google-first. The email+password form lives on /login/email so
+// the accounts that predate the Google-only signup change keep a way in —
+// it is deliberately a second step, not a competing form on this page.
 function LoginForm() {
-  const [state, formAction, pending] = useActionState(login, initialState);
+  const router = useRouter();
   const searchParams = useSearchParams();
-  const error = state?.error ?? searchParams.get('error');
+  const error = searchParams.get('error');
   const ref = searchParams.get('ref');
 
   return (
@@ -32,40 +27,26 @@ function LoginForm() {
         <div className="glass-panel rounded-2xl p-6 sm:p-8">
           <GoogleSignInButton referralCode={ref} />
 
-          <div className="my-6 flex items-center gap-3">
-            <Separator className="flex-1" />
-            <span className="mono-label uppercase text-on-surface-variant">və ya</span>
-            <Separator className="flex-1" />
-          </div>
-
-          <form action={formAction} className="flex flex-col gap-5">
-            <TextField name="email" isRequired>
-              <Label>Email</Label>
-              <Input type="email" placeholder="ad@nümunə.com" />
-            </TextField>
-            <TextField name="password" isRequired>
-              <Label>Şifrə</Label>
-              <Input type="password" placeholder="••••••••" />
-            </TextField>
-
-            {error && (
+          {error && (
+            <div className="mt-4">
               <Alert status="danger">
                 <Alert.Indicator />
                 <Alert.Content>
                   <Alert.Description>{error}</Alert.Description>
                 </Alert.Content>
               </Alert>
-            )}
+            </div>
+          )}
 
-            <Button type="submit" variant="outline" fullWidth isPending={pending}>
-              {({ isPending }) => (
-                <>
-                  {isPending ? <Spinner size="sm" tone="current" /> : null}
-                  Şifrə ilə daxil ol
-                </>
-              )}
-            </Button>
-          </form>
+          <div className="my-6 flex items-center gap-3">
+            <Separator className="flex-1" />
+            <span className="mono-label uppercase text-on-surface-variant">və ya</span>
+            <Separator className="flex-1" />
+          </div>
+
+          <Button variant="outline" fullWidth onPress={() => router.push('/login/email')}>
+            Email ilə daxil ol
+          </Button>
         </div>
       </div>
     </div>

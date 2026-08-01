@@ -11,31 +11,60 @@ The economy was split into two currencies with deliberately separate roles:
 | | **Coin** | **Energy** |
 |---|---|---|
 | Role | Premium / scarce | Gameplay |
-| Sinks | Chat messages, garage cars, VIP plates | All games, official exam |
-| Income | Daily grant (3) + ad watch | Daily grant (10) + every game reward |
+| Sinks | Chat messages, official exam, garage cars, VIP plates | All games |
+| Income | Daily **top-up** to `daily_coin_grant` + ad watch + weekly-marathon day-7 (streak) chest + energy→coin | Daily **top-up** to `game_daily_energy` + every game reward + per-mission daily-quest energy |
 | Accumulates | Yes | Yes (since 0094 — see below) |
 | Future | **Sold for real money** (~50 coins ≈ 20 AZN) | Never sold |
 
-### The one invariant: energy must NEVER convert back into coins
+### The invariant, with one owner-sanctioned exception (0096)
 
-Coin → energy purchase is allowed and is now a legitimate money sink. The
-inverse must not exist in any form, direct or indirect. This single rule is what
-dissolves the farming loop that existed before 0094 (5 coins → 10 energy → up to
-20 coins from the sign-speed game), and it does so *structurally* rather than by
-tuning numbers — no game pays coins any more, so there is nothing to farm back
-into.
+Coin → energy purchase is allowed and is a legitimate money sink. The inverse
+exists in exactly ONE form, added by `0096_energy_to_coin.sql`: the daily-capped
+`energy_to_coin` path (default 100 energy → 1.5 coins, per-account per-Baku-day
+cap `energy_to_coin_daily_cap` = 100, ledgered in `energy_to_coin_conversions`).
+That cap is the real bound against the free-account abuse model (free energy ×
+unlimited accounts → sellable coins); the coin→energy→coin roundtrip is ~97%
+lossy so it is not a vector — free energy is. Any other energy-spending path
+that credits coins reopens the farming loop.
 
-Verified at 0094 time: the only `user_coins` writes in the migration are inside
-`claim_daily_grant` (which grants, never converts). `settle_tictactoe`,
-`settle_sign_speed_round`, `start_exam_session`, `claim_wheel_spin`,
-`claim_daily_quiz_*` and `claim_daily_chest` read coins only for the shared UI
-meter. **Any future change that makes a game or an energy-spending path credit
-coins reopens the loop — re-run that check.**
+Verified at 0096 time: the only `user_coins` writes outside `claim_daily_grant`
+(which grants, never converts) are `convert_energy_to_coins` (the sanctioned
+exception) and `claim_daily_chest` **on the streak-day-7 (COINS) slot**
+(`0097_daily_quest_split.sql`, streak-day-indexed `weekly_marathon_rewards`)
+— a free coin income (no mission gate since 0097), not a conversion.
+`settle_tictactoe`, `settle_sign_speed_round`, `start_exam_session`,
+`claim_wheel_spin` and `claim_daily_quiz_*` still read coins only for the shared
+UI meter. **Any future change that makes a game or an energy-spending path
+credit coins reopens the loop — re-run that check.**
 
 ### What moved to energy
 
-Daily quiz, daily chest, wheel of fortune, daily quests, sign-speed game, XO
-wins, streak milestones. Ad watch and referral stayed on coins.
+Daily quiz, daily chest (streak days 1–6 pay energy; streak day 7 pays coins
+via the `0097` streak-indexed marathon — free, no mission gate, a missed day
+resets to day 1), wheel of fortune, per-mission daily-quest rewards (each of
+today's missions pays its own energy via `claim_daily_mission`), sign-speed
+game, XO wins, streak milestones. Ad watch and referral stayed on coins.
+
+### The daily grant is a top-up to a floor, not an increment
+
+Once per Baku day, each balance is raised **to** its configured floor if below
+it, and left completely alone if at or above it. Floor 3: balance 2 → 3;
+balance 6 → 6, nothing granted. Surpluses are never reduced, so energy earned
+from games survives midnight. It is automatic — applied on the first
+server-side balance read of the day, with no claim button.
+
+**The gate is the `daily_grant_claims` ledger row, never `balance < floor`.**
+Otherwise: top up to 3 → spend 3 on chat → balance 0 → next read sees `0 < 3`
+→ top up again, forever. Concurrency is handled by `unique(user_id,
+grant_date)` — the second inserter blocks on the first's uncommitted tuple
+rather than seeing an empty table. Energy has its own equivalent marker,
+`user_energy.last_grant_date`.
+
+There is exactly **one** recurring grant per currency: `daily_coin_grant`
+(default 10) and `game_daily_energy` (default 10). An additive `daily_grant_coins`
+key existed briefly and was retired before reaching any live database —
+two independent daily coin grants keyed on two different markers was the
+double-payment bug this design exists to prevent.
 
 ### Bounded income (per user, per Baku day, at defaults)
 
@@ -44,17 +73,19 @@ wins, streak milestones. Ad watch and referral stayed on coins.
   6 XO + 20 sign-speed. Games are allowed to be net-positive for a skilled
   player; that is safe **only because every game has a server-enforced daily
   earning cap.** Adding a game without one breaks the bound.
-- **Coin: 13–18/day recurring** — 10 legacy top-up + 3 daily grant + 5 ad watch.
+- **Coin: 15/day maximum** — the floor contributes at most 10 (and only to a
+  balance that actually hit 0), plus 5 from ad watch.
 
-### Open decisions (owner's call, not yet made)
+### Open decisions
 
-1. **`daily_coin_grant` (the legacy free-allowance top-up, default 10) overlaps
-   the new 3-coin daily grant** and undercuts coin scarcity. 0094 changed
-   `getGlobalDailyCoinGrant()` to accept `0`, which it previously rejected — so
-   it can now be switched off. Setting it to `0` also removes the free chat
-   allowance, so it is a deliberate product choice.
+1. ✅ **Resolved.** The two overlapping daily coin grants were consolidated into
+   one: `daily_coin_grant` survives, the additive `daily_grant_coins` was
+   retired. **Its default is still 10** — the owner sets the real figure from
+   the admin panel. `0` is now an accepted value (it used to be rejected as
+   "not configured"), but `0` also removes the free chat allowance entirely.
 2. **Legacy balances were intentionally not wiped or converted.** Coins earned
    at the old 10–20/day rate are worth considerably more under the new scarcity.
+   Top-up semantics reinforce this: a balance above the floor is never reduced.
 
 ---
 

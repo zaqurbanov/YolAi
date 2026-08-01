@@ -3,14 +3,32 @@ import { randomInt } from 'node:crypto';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isMissingRelationError } from '@/lib/supabase/missingRelation';
 import { logError } from '@/lib/logging/logError';
+import {
+  DEFAULT_WEEKLY_MARATHON_SCHEDULE,
+  DEFAULT_DAILY_MISSION_REWARD,
+  getWeeklyMarathonSchedule,
+  getDailyMissionReward,
+  type MarathonRewardType,
+  type WeeklyMarathonSlot,
+} from '@/lib/coins/weeklyMarathon';
 
 // "Gündəlik Missiyalar + Günün Sandığı" (Daily Quests + Daily Chest).
 // Originally 3 fixed daily missions (0081_daily_quests.sql); as of
 // 0085_daily_quest_rotation.sql this is a POOL of 8 possible missions,
 // rotating 3/day. Mission definitions (label/kind/target) are TS code
-// constants, not app_settings — only the chest reward amount is
-// admin-tunable (mirrors lib/coins/adWatch.ts's getAdWatchRewardAmount
-// pattern), same product decision 0081 made, just extended to 8 entries.
+// constants, not app_settings.
+//
+// As of 0097_daily_quest_split.sql the MISSIONS and the CHEST are SEPARATE:
+//   - Each daily mission pays its OWN per-mission ENERGY reward, claimed
+//     individually via claimDailyMission (amount from the
+//     `daily_mission_reward` app_settings key, resolved server-side).
+//   - The chest is FREE — no mission gate at all, still one open per user per
+//     Baku day. Its reward is a 7-slot STREAK-DAY schedule (energy days 1-6,
+//     coins on streak day 7), admin-tunable via the `weekly_marathon_rewards`
+//     app_settings key with a TS-side default (lib/coins/weeklyMarathon.ts).
+//     "Streak day" is per-user: day 1 = the first day the user opens the
+//     chest, a missed day resets to day 1, a completed day-7 cycle restarts
+//     at day 1.
 
 export interface MissionDef {
   key: string;
@@ -38,9 +56,10 @@ export const MISSION_POOL: MissionDef[] = [
 const MISSIONS_PER_DAY = 3;
 const ROTATION_HISTORY_ROWS = 7;
 
-// CURRENCY: the chest pays ENERGY since 0094_two_currency_economy.sql. Its
-// per-day bound is daily_quest_claims.chest_claimed, flipped under a row lock
-// inside claim_daily_chest — one chest per user per Baku day.
+// The legacy scalar chest reward below stays exported for the old admin
+// endpoint (GET/PATCH ?type=daily-chest-reward); the claim path no longer
+// reads it — the chest is streak-scheduled via weeklyMarathon.ts and missions
+// pay per-mission energy (daily_mission_reward) since 0097.
 const DAILY_CHEST_REWARD_KEY = 'daily_chest_reward';
 const DEFAULT_DAILY_CHEST_REWARD = 10;
 
@@ -212,6 +231,8 @@ interface RawQuestSignals {
   wheelDone: boolean;
   dailyQuizDone: boolean;
   chestClaimed: boolean;
+  claimedMissionKeys?: string[];
+  chestStreak?: number;
 }
 
 function isSignalDone(signals: RawQuestSignals, mission: MissionDef): boolean {
@@ -237,6 +258,8 @@ export interface DailyQuestMissionStatus {
   key: string;
   label: string;
   done: boolean;
+  /** Whether THIS user has already claimed this mission's energy reward today. */
+  claimed: boolean;
   progress?: string;
 }
 
@@ -246,6 +269,13 @@ export type DailyQuestStatusResult =
       missions: DailyQuestMissionStatus[];
       chestClaimed: boolean;
       allDone: boolean;
+      /** Per-mission ENERGY reward (resolved server-side from app_settings). */
+      missionReward: number;
+      // Weekly-marathon display data: the full 7-slot schedule (index 0 =
+      // streak day 1 .. index 6 = streak day 7 = COINS), the user's current
+      // consecutive-claim streak, and whether today is already claimed.
+      // Fail-open — never gates the status.
+      marathon: { schedule: WeeklyMarathonSlot[]; streak: number; todayClaimed: boolean };
     }
   | { ok: false; error: 'unavailable' | 'error' };
 
@@ -282,38 +312,61 @@ export async function getDailyQuestStatus(userId: string): Promise<DailyQuestSta
     chestClaimed: Boolean(raw.chestClaimed),
   };
 
+  const claimedKeys = new Set((raw.claimedMissionKeys ?? []).map(String));
   const todaysKeys = await getTodaysMissionKeys();
   const missions: DailyQuestMissionStatus[] = todaysKeys.map((key) => {
     const mission = MISSION_POOL.find((m) => m.key === key);
     if (!mission) {
       // Unknown/stale key (e.g. pool shrank since this key was rotated in)
       // — fail safe, same "never counts as done" posture as the SQL side.
-      return { key, label: key, done: false };
+      return { key, label: key, done: false, claimed: false };
     }
     const done = isSignalDone(signals, mission);
     const progress = mission.kind === 'chat' ? `${signals.chatCount}/${mission.target}` : undefined;
-    return { key: mission.key, label: mission.label, done, progress };
+    return { key: mission.key, label: mission.label, done, claimed: claimedKeys.has(mission.key), progress };
   });
+
+  // Marathon display data fails OPEN: getWeeklyMarathonSchedule and
+  // getDailyMissionReward already degrade to their defaults, but the outer
+  // guard below makes the whole fallback explicit — a bad or missing table
+  // value must never fail the quest card.
+  const streak = Number(raw.chestStreak ?? 0);
+  const todayClaimed = signals.chestClaimed;
+  let marathon: { schedule: WeeklyMarathonSlot[]; streak: number; todayClaimed: boolean };
+  let missionReward: number;
+  try {
+    const [schedule, reward] = await Promise.all([getWeeklyMarathonSchedule(), getDailyMissionReward()]);
+    marathon = { schedule, streak, todayClaimed };
+    missionReward = reward;
+  } catch (error) {
+    void logError('coins.dailyQuests.marathon.status', error, { userId });
+    marathon = { schedule: DEFAULT_WEEKLY_MARATHON_SCHEDULE, streak, todayClaimed };
+    missionReward = DEFAULT_DAILY_MISSION_REWARD;
+  }
 
   return {
     ok: true,
     missions,
     chestClaimed: signals.chestClaimed,
     allDone: missions.length > 0 && missions.every((m) => m.done),
+    missionReward,
+    marathon,
   };
 }
 
-export type ClaimDailyChestError = 'already_claimed' | 'quests_incomplete' | 'unavailable' | 'error';
+export type ClaimDailyChestError = 'already_claimed' | 'unavailable' | 'error';
 
 export type ClaimDailyChestResult =
   | {
       ok: true;
-      /** Coin balance — unchanged by the chest, returned for the shared meter. */
+      /** Coin balance — incremented by a coin chest, unchanged by an energy chest; returned for the shared meter either way. */
       balance: number;
-      /** New ENERGY balance. */
+      /** New ENERGY balance (unchanged by a coin chest). */
       energy: number;
-      /** ENERGY paid by the chest (since 0094). */
+      /** Reward paid by the chest — ENERGY or COINS depending on rewardType. */
       reward: number;
+      /** Which currency the chest actually paid ('coins' | 'energy'). */
+      rewardType: MarathonRewardType;
     }
   | { ok: false; error: ClaimDailyChestError };
 
@@ -321,18 +374,21 @@ export type ClaimDailyChestResult =
 // + chest_claimed flag, this function just translates its outcome (mirrors
 // claimAdWatchReward's error-mapping technique).
 export async function claimDailyChest(userId: string): Promise<ClaimDailyChestResult> {
-  const [reward, missionKeys] = await Promise.all([getDailyChestRewardAmount(), getTodaysMissionKeys()]);
+  // The FULL 7-slot streak schedule is resolved server-side and passed to the
+  // RPC, which picks the slot by the user's STREAK day (day 1 = first day the
+  // user opens the marathon; day 7 = coins; a missed day resets). The chest
+  // has NO mission gate since 0097 — it is free. Reward amount/type are never
+  // client-supplied beyond this server-resolved schedule.
+  const schedule = await getWeeklyMarathonSchedule();
 
   const { data, error } = await createAdminClient().rpc('claim_daily_chest', {
     p_user_id: userId,
-    p_mission_keys: missionKeys,
-    p_reward: reward,
+    p_schedule: schedule,
   });
 
   if (error) {
     const message = error.message ?? '';
     if (message.includes('already_claimed')) return { ok: false, error: 'already_claimed' };
-    if (message.includes('quests_incomplete')) return { ok: false, error: 'quests_incomplete' };
     if (isMissingRelationError(error)) return { ok: false, error: 'unavailable' };
     void logError('coins.dailyQuests.claim', error, { userId });
     console.error('[coins] claim_daily_chest RPC failed:', {
@@ -345,13 +401,72 @@ export async function claimDailyChest(userId: string): Promise<ClaimDailyChestRe
   }
 
   if (typeof data !== 'object' || data === null) return { ok: false, error: 'error' };
-  const result = data as { balance?: number; energy?: number; reward?: number };
+  const result = data as { balance?: number; energy?: number; reward?: number; reward_type?: string | null };
 
   return {
     ok: true,
     balance: Number(result.balance ?? 0),
     energy: Number(result.energy ?? 0),
-    reward: Number(result.reward ?? reward),
+    reward: Number(result.reward ?? 0),
+    // Fail-safe: anything other than an explicit 'coins' from the RPC is
+    // treated as energy, so a mis-typed or stale RPC payload can never be
+    // reported as a coin payout.
+    rewardType: result.reward_type === 'coins' ? 'coins' : 'energy',
+  };
+}
+
+export type ClaimDailyMissionError = 'already_claimed' | 'mission_not_available' | 'mission_incomplete' | 'unavailable' | 'error';
+
+export type ClaimDailyMissionResult =
+  | {
+      ok: true;
+      /** New ENERGY balance after the reward. */
+      energy: number;
+      /** READ-ONLY coin balance, for the shared UI meter (missions never write coins). */
+      balance: number;
+      /** The energy reward paid for this mission (resolved server-side). */
+      reward: number;
+    }
+  | { ok: false; error: ClaimDailyMissionError };
+
+// Exactly one claim per mission per Baku day — enforced by claim_daily_mission's
+// row lock + claimed_mission_keys append, this function just translates its
+// outcome (same error-mapping technique as claimDailyChest).
+export async function claimDailyMission(userId: string, missionKey: string): Promise<ClaimDailyMissionResult> {
+  // The reward amount is resolved server-side from app_settings
+  // (daily_mission_reward) — never client-supplied.
+  const reward = await getDailyMissionReward();
+
+  const { data, error } = await createAdminClient().rpc('claim_daily_mission', {
+    p_user_id: userId,
+    p_mission_key: missionKey,
+    p_reward: reward,
+  });
+
+  if (error) {
+    const message = error.message ?? '';
+    if (message.includes('already_claimed')) return { ok: false, error: 'already_claimed' };
+    if (message.includes('mission_not_available')) return { ok: false, error: 'mission_not_available' };
+    if (message.includes('mission_incomplete')) return { ok: false, error: 'mission_incomplete' };
+    if (isMissingRelationError(error)) return { ok: false, error: 'unavailable' };
+    void logError('coins.dailyQuests.claimMission', error, { userId });
+    console.error('[coins] claim_daily_mission RPC failed:', {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+    });
+    return { ok: false, error: 'error' };
+  }
+
+  if (typeof data !== 'object' || data === null) return { ok: false, error: 'error' };
+  const result = data as { energy?: number; balance?: number };
+
+  return {
+    ok: true,
+    energy: Number(result.energy ?? 0),
+    balance: Number(result.balance ?? 0),
+    reward,
   };
 }
 

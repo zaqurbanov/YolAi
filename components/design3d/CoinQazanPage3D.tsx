@@ -7,6 +7,8 @@ interface CoinQazanPage3DProps {
   coinBalance: number;
   streakDays: number;
   dailyGrantCard: ReactNode;
+  energyConverterCard: ReactNode;
+  energyToCoinConverterCard: ReactNode;
   dailyQuestCard: ReactNode;
   weeklyLeaderboardCard: ReactNode;
   garageCard: ReactNode;
@@ -30,6 +32,8 @@ interface CoinQazanPage3DProps {
 // integration inside those cards stays exactly as it was.
 const HUD_FRAMES: { key: keyof Omit<CoinQazanPage3DProps, 'coinBalance' | 'streakDays'>; label: string; span?: string }[] = [
   { key: 'dailyGrantCard', label: 'GÜNLÜK HƏDİYYƏ' },
+  { key: 'energyConverterCard', label: 'ENERJİ KONVERTER' },
+  { key: 'energyToCoinConverterCard', label: 'ENERJİ → COİN' },
   { key: 'dailyQuestCard', label: 'GÜNDƏLİK MİSSİYA' },
   { key: 'weeklyLeaderboardCard', label: 'HƏFTƏLİK REYTİNQ' },
   { key: 'garageCard', label: 'VİRTUAL QARAJ' },
@@ -73,6 +77,8 @@ export default function CoinQazanPage3D({
   coinBalance,
   streakDays,
   dailyGrantCard,
+  energyConverterCard,
+  energyToCoinConverterCard,
   dailyQuestCard,
   weeklyLeaderboardCard,
   garageCard,
@@ -85,6 +91,8 @@ export default function CoinQazanPage3D({
 }: CoinQazanPage3DProps) {
   const cards: Record<string, ReactNode> = {
     dailyGrantCard,
+    energyConverterCard,
+    energyToCoinConverterCard,
     dailyQuestCard,
     weeklyLeaderboardCard,
     garageCard,

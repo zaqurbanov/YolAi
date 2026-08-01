@@ -1,14 +1,18 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import MobileBottomTabBar from '@/components/home/MobileBottomTabBar';
 import AnimatedNumber from '@/components/AnimatedNumber';
 import { ArrowLeftIcon, CoinIcon, EnergyIcon } from '@/components/icons';
+import { purchaseEnergyAction } from '@/app/coin-qazan/actions';
+import { isEnergyPresetDisabled, formatCoin } from '@/components/coins/EnergyConverterCard';
 import type { GameMeta } from '@/lib/coins/gameCatalog';
+import type { EnergyPurchaseConfig } from '@/lib/coins/games';
 import TicTacToeGame from './TicTacToeGame';
 import SignSpeedGame from './SignSpeedGame';
 import ExamSimulatorGame from './ExamSimulatorGame';
+import NisanTapmacasiGame from './NisanTapmacasiGame';
 
 interface GamePageShellProps {
   meta: GameMeta;
@@ -17,6 +21,8 @@ interface GamePageShellProps {
   maxEnergy: number;
   initialTodayCount: number;
   winReward: number;
+  /** Coin→energy exchange rate/caps (getEnergyPurchaseConfig, app_settings-backed). */
+  energyPurchaseConfig: EnergyPurchaseConfig;
 }
 
 /**
@@ -38,11 +44,16 @@ export default function GamePageShell({
   maxEnergy,
   initialTodayCount,
   winReward,
+  energyPurchaseConfig,
 }: GamePageShellProps) {
   const [balance, setBalance] = useState(initialBalance);
   const [energy, setEnergy] = useState(initialEnergy);
   const [todayCount, setTodayCount] = useState(initialTodayCount);
   const [xoUnavailable, setXoUnavailable] = useState(false);
+  const [converterOpen, setConverterOpen] = useState(false);
+  const [buyMessage, setBuyMessage] = useState<string | null>(null);
+  const [isBuyPending, startBuyTransition] = useTransition();
+  const buyMessageTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Same ramp GamesSection used: every third game of the day is easy, the rest
   // are hard. Kept identical so moving the game to its own page doesn't
@@ -57,6 +68,9 @@ export default function GamePageShell({
     window.dispatchEvent(
       new CustomEvent('coin-balance-update', { detail: { balance: nextBalance } }),
     );
+    window.dispatchEvent(
+      new CustomEvent('energy-balance-update', { detail: { balance: nextEnergy } }),
+    );
   }, []);
 
   const handleXoSettled = useCallback(
@@ -66,6 +80,27 @@ export default function GamePageShell({
     },
     [handleSettled],
   );
+
+  // Compact coin→energy converter — same server action + coin-balance-update
+  // contract as handleSettled, with the multiplier chosen by the tapped preset.
+  const handleBuyEnergy = useCallback((m: number) => {
+    startBuyTransition(async () => {
+      const result = await purchaseEnergyAction(m);
+      if (result.status === 'success' && result.coinBalance != null && result.energy != null) {
+        setBalance(result.coinBalance);
+        setEnergy(result.energy);
+        window.dispatchEvent(
+          new CustomEvent('coin-balance-update', { detail: { balance: result.coinBalance } }),
+        );
+        window.dispatchEvent(
+          new CustomEvent('energy-balance-update', { detail: { balance: result.energy } }),
+        );
+      }
+      setBuyMessage(result.message);
+      if (buyMessageTimeout.current) clearTimeout(buyMessageTimeout.current);
+      buyMessageTimeout.current = setTimeout(() => setBuyMessage(null), 4000);
+    });
+  }, []);
 
   return (
     // Bottom clearance sits on the INNER container, not the outer one. The
@@ -131,7 +166,60 @@ export default function GamePageShell({
               Qələbə +{winReward} enerji
             </span>
           )}
+          <button
+            type="button"
+            onClick={() => setConverterOpen((o) => !o)}
+            aria-expanded={converterOpen}
+            className="flex items-center gap-1.5 rounded-full bg-primary/10 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-primary transition hover:bg-primary/15"
+          >
+            <EnergyIcon width={14} height={14} />
+            Enerji al
+          </button>
         </div>
+
+        {converterOpen && (
+          <div className="mx-auto mt-3 flex w-full max-w-xl flex-col items-center gap-2.5 rounded-2xl border border-border/40 bg-surface px-4 py-3.5">
+            {energy >= energyPurchaseConfig.maxBalance ? (
+              <p className="text-legal-citation text-on-surface-variant">Maksimum enerjiyə çatmısan</p>
+            ) : (
+              <>
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  {Array.from(
+                    { length: Math.max(1, Math.floor(energyPurchaseConfig.maxMultiplier)) },
+                    (_, i) => i + 1,
+                  ).map((m) => {
+                    const disabled = isEnergyPresetDisabled(m, {
+                      energy,
+                      maxEnergy,
+                      maxBalance: energyPurchaseConfig.maxBalance,
+                      balance,
+                      coinCost: energyPurchaseConfig.coinCost,
+                      energyAmount: energyPurchaseConfig.energyAmount,
+                    });
+                    return (
+                      <button
+                        key={m}
+                        type="button"
+                        disabled={disabled || isBuyPending}
+                        onClick={() => handleBuyEnergy(m)}
+                        className="rounded-full border border-border/40 bg-surface-secondary px-3.5 py-1.5 text-[13px] font-bold tabular-nums text-on-surface transition hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        {m}×
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-legal-citation text-on-surface-variant">
+                  {formatCoin(energyPurchaseConfig.coinCost)} coin →{' '}
+                  {formatCoin(energyPurchaseConfig.energyAmount)} enerji
+                </p>
+              </>
+            )}
+            {buyMessage && (
+              <p className="text-legal-citation text-on-surface-variant">{buyMessage}</p>
+            )}
+          </div>
+        )}
 
         {/* Board panel. The orbs are the export's "editorial feel" decoration —
             purely presentational, behind the board, pointer-events-none. */}
@@ -163,6 +251,9 @@ export default function GamePageShell({
             )}
             {meta.slug === 'imtahan' && (
               <ExamSimulatorGame energy={energy} onSettled={handleSettled} />
+            )}
+            {meta.slug === 'nisan-tapmacasi' && (
+              <NisanTapmacasiGame energy={energy} onSettled={handleSettled} />
             )}
           </div>
         </div>

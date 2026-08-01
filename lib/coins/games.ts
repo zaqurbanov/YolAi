@@ -43,6 +43,9 @@ const DEFAULT_ENERGY_PURCHASE_ENERGY_AMOUNT = 10;
 const ENERGY_PURCHASE_MAX_BALANCE_KEY = 'energy_purchase_max_balance';
 const DEFAULT_ENERGY_PURCHASE_MAX_BALANCE = 50;
 
+const ENERGY_PURCHASE_MAX_MULTIPLIER_KEY = 'energy_purchase_max_multiplier';
+const DEFAULT_ENERGY_PURCHASE_MAX_MULTIPLIER = 5;
+
 export {
   GAME_DAILY_ENERGY_KEY,
   DEFAULT_GAME_DAILY_ENERGY,
@@ -58,6 +61,8 @@ export {
   DEFAULT_ENERGY_PURCHASE_ENERGY_AMOUNT,
   ENERGY_PURCHASE_MAX_BALANCE_KEY,
   DEFAULT_ENERGY_PURCHASE_MAX_BALANCE,
+  ENERGY_PURCHASE_MAX_MULTIPLIER_KEY,
+  DEFAULT_ENERGY_PURCHASE_MAX_MULTIPLIER,
 };
 
 export type GameOutcome = 'win' | 'draw' | 'loss';
@@ -68,7 +73,16 @@ export type GameOutcome = 'win' | 'draw' | 'loss';
 // the re-simulation diverge from what the user actually played).
 export type Difficulty = 'easy' | 'hard';
 
-async function readNumericSetting(key: string, fallback: number): Promise<number> {
+// `allowZero` exists because 0 means two different things depending on the key:
+// for a PRICE key it is a real configuration (free play, set from the admin
+// panel) and must survive the read; for a reward/cap/grant key it is a
+// "couldn't read a usable value" signal and must fall back to the TS default.
+// Same split as getGlobalDailyCoinGrant() in lib/chat/coins.ts.
+async function readNumericSetting(
+  key: string,
+  fallback: number,
+  options?: { allowZero?: boolean }
+): Promise<number> {
   const { data, error } = await createAdminClient()
     .from('app_settings')
     .select('value')
@@ -78,7 +92,8 @@ async function readNumericSetting(key: string, fallback: number): Promise<number
   if (error || !data) return fallback;
 
   const value = typeof data.value === 'number' ? data.value : Number(data.value);
-  if (!Number.isFinite(value) || value <= 0) return fallback;
+  if (!Number.isFinite(value)) return fallback;
+  if (options?.allowZero ? value < 0 : value <= 0) return fallback;
   return value;
 }
 
@@ -95,17 +110,27 @@ export interface EnergyStatus {
 // the read hiccups — the authoritative gate is settle_tictactoe (which raises
 // 'no_energy' / 'unavailable'), not this display value.
 export async function getEnergyStatus(userId: string): Promise<EnergyStatus> {
-  const max = Math.round(await readNumericSetting(GAME_DAILY_ENERGY_KEY, DEFAULT_GAME_DAILY_ENERGY));
+  const base = await readNumericSetting(GAME_DAILY_ENERGY_KEY, DEFAULT_GAME_DAILY_ENERGY);
+  // The meter's scale must use the SAME perk-adjusted grant that is actually
+  // credited, otherwise a Prius owner reads 15/10 on a fresh day.
+  const max = Math.round(await getEffectiveEnergyGrant(userId, base));
   try {
     const { data, error } = await createAdminClient().rpc('grant_daily_energy', {
       p_user_id: userId,
-      p_daily_grant: Math.round(await getEffectiveEnergyGrant(userId, max)),
+      p_daily_grant: max,
     });
     if (error || typeof data !== 'number') return { balance: max, max };
     return { balance: data, max };
   } catch {
     return { balance: max, max };
   }
+}
+
+// The XO round price in ENERGY (for display). allowZero: an admin-configured
+// 0 means free play and must be reported as 0, not silently as the default.
+// The authoritative charge is settle_tictactoe's conditional decrement.
+export async function getGameEnergyCost(): Promise<number> {
+  return readNumericSetting(GAME_ENERGY_COST_KEY, DEFAULT_GAME_ENERGY_COST, { allowZero: true });
 }
 
 // The current XO win reward in ENERGY (for display). Resolves the admin
@@ -304,7 +329,7 @@ export async function playTicTacToe(userId: string, userMoves: number[]): Promis
 
   const [energyMax, energyCost, winReward, winCap, garagePerk] = await Promise.all([
     readNumericSetting(GAME_DAILY_ENERGY_KEY, DEFAULT_GAME_DAILY_ENERGY),
-    readNumericSetting(GAME_ENERGY_COST_KEY, DEFAULT_GAME_ENERGY_COST),
+    readNumericSetting(GAME_ENERGY_COST_KEY, DEFAULT_GAME_ENERGY_COST, { allowZero: true }),
     readNumericSetting(TICTACTOE_WIN_REWARD_KEY, DEFAULT_TICTACTOE_WIN_REWARD),
     readNumericSetting(TICTACTOE_DAILY_WIN_CAP_KEY, DEFAULT_TICTACTOE_DAILY_WIN_CAP),
     getActiveGaragePerk(userId),
@@ -365,18 +390,20 @@ export interface EnergyPurchaseConfig {
   coinCost: number;
   energyAmount: number;
   maxBalance: number;
+  maxMultiplier: number;
 }
 
 // Read-only, admin-configured exchange rate for display. Fails OPEN to the TS
 // defaults like getEnergyStatus/getTicTacToeWinReward — the authoritative gate
 // is purchase_energy itself.
 export async function getEnergyPurchaseConfig(): Promise<EnergyPurchaseConfig> {
-  const [coinCost, energyAmount, maxBalance] = await Promise.all([
+  const [coinCost, energyAmount, maxBalance, maxMultiplier] = await Promise.all([
     readNumericSetting(ENERGY_PURCHASE_COIN_COST_KEY, DEFAULT_ENERGY_PURCHASE_COIN_COST),
     readNumericSetting(ENERGY_PURCHASE_ENERGY_AMOUNT_KEY, DEFAULT_ENERGY_PURCHASE_ENERGY_AMOUNT),
     readNumericSetting(ENERGY_PURCHASE_MAX_BALANCE_KEY, DEFAULT_ENERGY_PURCHASE_MAX_BALANCE),
+    readNumericSetting(ENERGY_PURCHASE_MAX_MULTIPLIER_KEY, DEFAULT_ENERGY_PURCHASE_MAX_MULTIPLIER),
   ]);
-  return { coinCost, energyAmount, maxBalance };
+  return { coinCost, energyAmount, maxBalance, maxMultiplier };
 }
 
 export type EnergyPurchaseError = 'insufficient_coins' | 'energy_cap_reached' | 'unavailable' | 'error';
@@ -385,21 +412,36 @@ export type EnergyPurchaseResult =
   | { ok: true; coinBalance: number; energy: number }
   | { ok: false; error: EnergyPurchaseError };
 
-// Takes NO client-supplied amounts — every param is resolved server-side from
-// app_settings (fail-open TS defaults) and passed to purchase_energy, which is
-// the sole authority on whether the exchange is allowed.
-export async function purchaseEnergy(userId: string): Promise<EnergyPurchaseResult> {
-  const [dailyEnergyGrant, coinCost, energyAmount, maxBalance] = await Promise.all([
-    readNumericSetting(GAME_DAILY_ENERGY_KEY, DEFAULT_GAME_DAILY_ENERGY),
-    readNumericSetting(ENERGY_PURCHASE_COIN_COST_KEY, DEFAULT_ENERGY_PURCHASE_COIN_COST),
-    readNumericSetting(ENERGY_PURCHASE_ENERGY_AMOUNT_KEY, DEFAULT_ENERGY_PURCHASE_ENERGY_AMOUNT),
-    readNumericSetting(ENERGY_PURCHASE_MAX_BALANCE_KEY, DEFAULT_ENERGY_PURCHASE_MAX_BALANCE),
-  ]);
+// The client may only supply a MULTIPLIER (never an amount or rate). It is
+// clamped server-side below; every base amount is still resolved server-side
+// from app_settings (fail-open TS defaults) and passed to purchase_energy,
+// which is the sole authority on whether the exchange is allowed.
+function clampMultiplier(raw: number, maxMultiplier: number): number {
+  if (!Number.isFinite(raw)) return 1;
+  return Math.min(Math.max(1, Math.floor(raw)), Math.max(1, Math.floor(maxMultiplier)));
+}
+
+export async function purchaseEnergy(
+  userId: string,
+  multiplier = 1
+): Promise<EnergyPurchaseResult> {
+  const [dailyEnergyGrant, baseCoinCost, baseEnergyAmount, maxBalance, maxMultiplier] =
+    await Promise.all([
+      readNumericSetting(GAME_DAILY_ENERGY_KEY, DEFAULT_GAME_DAILY_ENERGY),
+      readNumericSetting(ENERGY_PURCHASE_COIN_COST_KEY, DEFAULT_ENERGY_PURCHASE_COIN_COST),
+      readNumericSetting(ENERGY_PURCHASE_ENERGY_AMOUNT_KEY, DEFAULT_ENERGY_PURCHASE_ENERGY_AMOUNT),
+      readNumericSetting(ENERGY_PURCHASE_MAX_BALANCE_KEY, DEFAULT_ENERGY_PURCHASE_MAX_BALANCE),
+      readNumericSetting(ENERGY_PURCHASE_MAX_MULTIPLIER_KEY, DEFAULT_ENERGY_PURCHASE_MAX_MULTIPLIER),
+    ]);
+
+  const m = clampMultiplier(multiplier, maxMultiplier);
+  const coinCost = Math.round(baseCoinCost * m * 100) / 100;
+  const energyAmount = Math.round(baseEnergyAmount * m);
 
   const { data, error } = await createAdminClient().rpc('purchase_energy', {
     p_user_id: userId,
     p_coin_cost: coinCost,
-    p_energy_amount: Math.round(energyAmount),
+    p_energy_amount: energyAmount,
     p_daily_energy_grant: Math.round(dailyEnergyGrant),
     p_max_energy: Math.round(maxBalance),
   });

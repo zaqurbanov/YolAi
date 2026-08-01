@@ -1,5 +1,5 @@
 /**
- * The three energy games, as data. Shared by the showcase on /coin-qazan and the
+ * The four energy games, as data. Shared by the showcase on /coin-qazan and the
  * single dynamic route that renders them, so a slug, title or description can
  * never drift between the card and the page it opens.
  *
@@ -8,7 +8,7 @@
  * cap (see CLAUDE.md), and every additional page costs one more function. A
  * single dynamic segment gives the same path-shaped URLs for one.
  */
-export const GAME_SLUGS = ['xo', 'nisan-sureti', 'imtahan'] as const;
+export const GAME_SLUGS = ['xo', 'nisan-sureti', 'imtahan', 'nisan-tapmacasi'] as const;
 
 export type GameSlug = (typeof GAME_SLUGS)[number];
 
@@ -56,6 +56,15 @@ export const GAMES: Record<GameSlug, GameMeta> = {
     emoji: '🎓',
     cost: '1 enerji',
     tone: 'safety-yellow',
+  },
+  'nisan-tapmacasi': {
+    slug: 'nisan-tapmacasi',
+    title: 'Nişan Tapmacası',
+    tagline: 'Bulanıq nişanı ipucu ilə tanı.',
+    description: 'Şəkli bulanıq verilən yol nişanını ipucu ilə tanı. Hər düzgün cavab enerji gətirir.',
+    emoji: '🔍',
+    cost: '1 enerji',
+    tone: 'caution-orange',
   },
 };
 

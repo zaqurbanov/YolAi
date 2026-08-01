@@ -7,7 +7,7 @@ import Footer from '@/components/Footer';
 import LessonMarkdown from '@/components/LessonMarkdown';
 import { ArrowLeftIcon, ArrowRightIcon, DocumentIcon } from '@/components/icons';
 import { getTopicForReading } from '@/lib/quiz/topicTest';
-import { getCoinBalanceStatus } from '@/lib/chat/coins';
+import { getEnergyStatus } from '@/lib/coins/games';
 import DesignSwitch from '@/components/design3d/DesignSwitch';
 import TopicPage3D from '@/components/design3d/TopicPage3D';
 import { getServerDesign } from '@/lib/design/getServerDesign';
@@ -53,9 +53,11 @@ export default async function TopicPage({
   // silently renders under the wrong course's breadcrumb.
   if (topic.courseId !== courseId) notFound();
 
-  // Display only — purchaseRetryAction re-reads and charges its own. Fails open
-  // to null, which renders as "—" in the retry dialog.
-  const balance = await getCoinBalanceStatus(user.id)
+  // Display only — purchaseRetryAction re-reads and charges its own. Since 0098
+  // the retry costs ENERGY, so the shown balance comes from getEnergyStatus (which
+  // also applies the lazy daily top-up). Fails open to null, which renders as "—"
+  // in the retry dialog.
+  const balance = await getEnergyStatus(user.id)
     .then((s) => s.balance)
     .catch(() => null);
 

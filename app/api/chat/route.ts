@@ -31,6 +31,7 @@ import {
 } from '@/lib/chat/coins';
 import { claimPendingReferral } from '@/lib/coins/referrals';
 import { recordQuestChatActivity } from '@/lib/coins/dailyQuests';
+import { getEnergyStatus } from '@/lib/coins/games';
 
 // Conversation history / quota used to live at app/api/chat/history/route.ts.
 // Folded in here behind `?type=history` (`?type=quota` for the balance probe)
@@ -849,14 +850,24 @@ export async function GET(request: Request) {
       return Response.json({ exempt: true });
     }
 
-    const { balance, dailyLimit, price, msUntilReset } = await getCoinBalanceStatus(user.id);
+    // Both currencies in one probe: CoinBadge and EnergyBadge (both in the
+    // navbar) fetch this same endpoint, so a single request keeps both badges
+    // live. getEnergyStatus applies the lazy daily energy top-up as a side
+    // effect, exactly as getCoinBalanceStatus tops up coins — the badge reads
+    // a topped-up balance.
+    const [coin, energy] = await Promise.all([
+      getCoinBalanceStatus(user.id),
+      getEnergyStatus(user.id),
+    ]);
 
     return Response.json({
       exempt: false,
-      balance,
-      dailyLimit: dailyLimit ?? DEFAULT_DAILY_LIMIT,
-      price,
-      msUntilReset,
+      balance: coin.balance,
+      dailyLimit: coin.dailyLimit ?? DEFAULT_DAILY_LIMIT,
+      price: coin.price,
+      msUntilReset: coin.msUntilReset,
+      energy: energy.balance,
+      maxEnergy: energy.max,
     });
   }
 

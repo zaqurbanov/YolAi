@@ -1,4 +1,4 @@
-import { FineIcon, ChatIcon, RulesIcon, CoinIcon, TrophyIcon, SignIcon, ShieldIcon } from '@/components/icons';
+import { FineIcon, ChatIcon, RulesIcon, CoinIcon, TrophyIcon, SignIcon, ShieldIcon, AwardIcon } from '@/components/icons';
 import { getCategoryContent, getCategoryQuestionCounts } from '@/lib/content/categoryContent';
 import { getRegisteredDriverCount, getRecentDriverInitials } from '@/lib/content/getRegisteredDriverCount';
 import DesignSwitch from '@/components/design3d/DesignSwitch';
@@ -92,6 +92,20 @@ const FEATURES = [
     cta: 'Oynamağa başla',
     chip: 'bg-go-green/15 text-go-green',
     border: 'border-l-go-green',
+  },
+  // Kept as the LAST card on purpose: on the desktop 2-col grid the original
+  // four cards stay in their familiar 2x2 layout, and the exam lands on its
+  // own row as the flagship call-to-action. On the mobile rail it's simply
+  // the fifth slide.
+  {
+    icon: AwardIcon,
+    iconSrc: '/icons/exam-icon.png',
+    title: 'Rəsmi imtahan simulyasiyası',
+    desc: 'Rəsmi imtahan formatında suallara cavab ver, vaxt limitini idarə et və keçid balına çat — real imtahandan əvvəl özünü tam sınaqdan keçir.',
+    href: '/imtahan',
+    cta: 'İmtahana başla',
+    chip: 'bg-caution-orange/15 text-caution-orange',
+    border: 'border-l-caution-orange',
   },
 ];
 

@@ -71,13 +71,15 @@ export default function WheelGame({ prizes, initialStatus }: WheelGameProps) {
     return `conic-gradient(${stops})`;
   }, [segments]);
 
-  const settle = useCallback((prize: number, balance: number) => {
+  const settle = useCallback((prize: number, balance: number, energy: number) => {
     setWonPrize(prize);
     setStatus('spun');
     setSpinning(false);
-    // Keep the navbar CoinBadge and the XO card's balance live without a refresh
-    // (same event the quiz / ad-watch / XO paths emit).
+    // Keep the navbar CoinBadge and EnergyBadge live without a refresh (same
+    // events the quiz / ad-watch / XO paths emit). The wheel pays ENERGY, so
+    // `balance` (coins) is unchanged and only `energy` actually moves.
     window.dispatchEvent(new CustomEvent('coin-balance-update', { detail: { balance } }));
+    window.dispatchEvent(new CustomEvent('energy-balance-update', { detail: { balance: energy } }));
   }, []);
 
   const spin = useCallback(async () => {
@@ -95,13 +97,13 @@ export default function WheelGame({ prizes, initialStatus }: WheelGameProps) {
       return;
     }
 
-    const { prizeIndex, prize, balance = 0 } = res;
+    const { prizeIndex, prize, balance = 0, energy = 0 } = res;
     // Land the winning segment's centre at the top pointer.
     const centreAngle = segments[prizeIndex]?.centre ?? 0;
 
     if (reducedMotion()) {
       setRotation(-centreAngle);
-      settle(prize, balance);
+      settle(prize, balance, energy);
       return;
     }
 
@@ -109,7 +111,7 @@ export default function WheelGame({ prizes, initialStatus }: WheelGameProps) {
     const target = 360 * turnsRef.current - centreAngle;
     setRotation(target);
     // Matches the CSS transition duration below; on end we reveal the prize.
-    window.setTimeout(() => settle(prize, balance), 3600);
+    window.setTimeout(() => settle(prize, balance, energy), 3600);
   }, [spinning, status, segments, settle]);
 
   return (

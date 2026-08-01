@@ -3,8 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { isMissingRelationError } from '@/lib/supabase/missingRelation';
 import { logError } from '@/lib/logging/logError';
 import { drawExamQuestions, type ExamQuestion } from '@/lib/exam/examPool';
-import { GAME_DAILY_ENERGY_KEY, DEFAULT_GAME_DAILY_ENERGY } from '@/lib/coins/games';
-import { getEffectiveEnergyGrant } from '@/lib/garage/perks';
+import { EXAM_COIN_PRICE_KEY, DEFAULT_EXAM_COIN_PRICE } from '@/lib/exam/examPricing';
 import { maybeApplyFine } from '@/lib/garage/fines';
 
 // "Sınaq İmtahanı" (real exam simulator) — SERVER-AUTHORITATIVE, same posture
@@ -13,34 +12,41 @@ import { maybeApplyFine } from '@/lib/garage/fines';
 // server-side against the stored answers. Unlike sign speed / XO, this pays NO
 // reward on completion — pure sink, not a new earning path.
 //
-// ENTRY COSTS ENERGY ONLY since 0094_two_currency_economy.sql. The old "100
-// coins OR 1 energy" choice is gone end-to-end (TS, server action, RPC
-// signature): the exam is gameplay, and gameplay is energy-funded. Do not
-// reintroduce a coin entry path without re-reading 0094's INVARIANT header.
+// ENTRY COSTS COINS ONLY. 0094_two_currency_economy.sql had briefly made this
+// energy-funded; that was reversed on the owner's call — the exam is a
+// high-value feature and the premium currency is the right price tag, and coin
+// needed a third sink beyond chat and the garage. The energy path is gone
+// end-to-end (TS, server action, RPC signature); there is no dual "coin OR
+// energy" choice either.
+//
+// This does NOT breach 0094's energy-never-becomes-coin invariant: the
+// invariant forbids energy being spent on something that PAYS coins, and this
+// pays nothing at all — settle_exam_session credits neither currency. Money
+// flows one way only.
 
 // ---------------------------------------------------------------------------
 // Config — app_settings with TS-side defaults (house convention, no seed
-// rows). The daily energy GRANT amount is intentionally reused from games.ts
-// (GAME_DAILY_ENERGY_KEY) — one shared energy pool for the whole games
-// section, not a second one for this feature.
+// rows). The entry price itself lives in examPricing.ts, shared with the
+// display path and the admin panel so there is exactly one key and one
+// default.
 // ---------------------------------------------------------------------------
-const EXAM_ENERGY_COST_KEY = 'exam_energy_cost';
-const DEFAULT_EXAM_ENERGY_COST = 1;
-
 const EXAM_SESSION_TTL_SECONDS_KEY = 'exam_session_ttl_seconds';
 const DEFAULT_EXAM_SESSION_TTL_SECONDS = 1200;
 
-export {
-  EXAM_ENERGY_COST_KEY,
-  DEFAULT_EXAM_ENERGY_COST,
-  EXAM_SESSION_TTL_SECONDS_KEY,
-  DEFAULT_EXAM_SESSION_TTL_SECONDS,
-};
+export { EXAM_SESSION_TTL_SECONDS_KEY, DEFAULT_EXAM_SESSION_TTL_SECONDS };
 
 const QUESTIONS_PER_EXAM = 10;
 const OPTIONS_PER_QUESTION = 4;
 
-async function readNumericSetting(key: string, fallback: number): Promise<number> {
+// `allowZero` exists because 0 means two different things depending on the
+// key: for a PRICE it is a real admin choice (free exam), for a TTL/reward it
+// is an unreadable value that must fall back. Same split as
+// getGlobalDailyCoinGrant() in lib/chat/coins.ts.
+async function readNumericSetting(
+  key: string,
+  fallback: number,
+  allowZero = false
+): Promise<number> {
   const { data, error } = await createAdminClient()
     .from('app_settings')
     .select('value')
@@ -50,20 +56,21 @@ async function readNumericSetting(key: string, fallback: number): Promise<number
   if (error || !data) return fallback;
 
   const value = typeof data.value === 'number' ? data.value : Number(data.value);
-  if (!Number.isFinite(value) || value <= 0) return fallback;
+  if (!Number.isFinite(value)) return fallback;
+  if (allowZero ? value < 0 : value <= 0) return fallback;
   return value;
 }
 
-export type ExamStartError = 'no_energy' | 'pool_too_small' | 'unavailable' | 'error';
+export type ExamStartError = 'insufficient_coins' | 'pool_too_small' | 'unavailable' | 'error';
 
 export type ExamStartResult =
   | {
       ok: true;
       sessionId: string;
       questions: ExamQuestion[];
-      /** Coin balance — never debited by the exam, returned for the shared meter. */
+      /** New COIN balance after the entry cost was debited. */
       balance: number;
-      /** New ENERGY balance after the entry cost. */
+      /** Energy balance — never touched by the exam, returned for the shared meter. */
       energy: number;
     }
   | { ok: false; error: ExamStartError };
@@ -97,23 +104,22 @@ export async function startExamSession(userId: string): Promise<ExamStartResult>
     return { ok: false, error: 'error' };
   }
 
-  const [energyCost, baseDailyEnergyGrant] = await Promise.all([
-    readNumericSetting(EXAM_ENERGY_COST_KEY, DEFAULT_EXAM_ENERGY_COST),
-    readNumericSetting(GAME_DAILY_ENERGY_KEY, DEFAULT_GAME_DAILY_ENERGY),
-  ]);
-  const dailyEnergyGrant = await getEffectiveEnergyGrant(userId, baseDailyEnergyGrant);
+  // Price is resolved SERVER-SIDE and never accepted from the caller — this
+  // function is reachable from a server action, which is a plain POST.
+  const coinPrice = await readNumericSetting(EXAM_COIN_PRICE_KEY, DEFAULT_EXAM_COIN_PRICE, true);
 
+  // No daily-grant argument any more: the top-up is automatic on read paths
+  // (apply_daily_grant), so a spend path must not re-trigger it.
   const { data, error } = await createAdminClient().rpc('start_exam_session', {
     p_user_id: userId,
     p_question_ids: questionIds,
     p_correct_indices: correctIndices,
-    p_energy_cost: Math.round(energyCost),
-    p_daily_energy_grant: Math.round(dailyEnergyGrant),
+    p_coin_price: Math.round(coinPrice),
   });
 
   if (error) {
     const message = error.message ?? '';
-    if (message.includes('no_energy')) return { ok: false, error: 'no_energy' };
+    if (message.includes('insufficient_coins')) return { ok: false, error: 'insufficient_coins' };
     if (isMissingRelationError(error)) return { ok: false, error: 'unavailable' };
     void logError('exam.examSession.start', error, { userId });
     console.error('[exam] start_exam_session RPC failed:', {

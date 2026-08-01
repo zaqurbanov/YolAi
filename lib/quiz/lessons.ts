@@ -36,7 +36,7 @@ export interface CourseSummary {
   title: string;
   description: string | null;
   orderIndex: number;
-  /** Free courses never cost coins, regardless of unlock_price. */
+  /** Free courses never cost energy, regardless of unlock_price. */
   isFree: boolean;
   /**
    * The access predicate the UI should gate on: free, or purchased by this
@@ -173,8 +173,11 @@ export async function getCourses(userId: string): Promise<CourseSummary[]> {
       isFree: course.is_free,
       isUnlocked: isAdmin || course.is_free || unlockedCourseIds.has(course.id),
       // 0 is a legitimate per-course override, so check for null explicitly
-      // rather than relying on falsiness.
-      price: course.unlock_price !== null ? Number(course.unlock_price) : defaultPrice,
+      // rather than relying on falsiness. Energy is integer — round to match
+      // what the unlock RPC charges (round(p_price)::int).
+      price: Math.round(
+        course.unlock_price !== null ? Number(course.unlock_price) : defaultPrice
+      ),
       totalTopics,
       passedTopics,
       progressPct: totalTopics > 0 ? Math.round((passedTopics / totalTopics) * 100) : 0,

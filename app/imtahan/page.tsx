@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import { createClient } from '@/lib/supabase/server';
-import { getEnergyStatus } from '@/lib/coins/games';
+import { getCoinBalanceStatus } from '@/lib/chat/coins';
 import { getExamEntryPricing } from '@/lib/exam/examPricing';
 import { getExamHistory } from '@/lib/exam/examHistory';
 import OfficialExamClient from './OfficialExamClient';
@@ -37,21 +37,22 @@ export default async function ImtahanPage() {
     .maybeSingle();
 
   // Admins are exempt from the coin/energy economy everywhere else in the app
-  // (app/coin-qazan/page.tsx redirects them), and the exam costs energy — so
+  // (app/coin-qazan/page.tsx redirects them), and the exam costs coins — so
   // there is nothing here they can meaningfully do.
   if (profile?.role === 'admin') redirect('/account');
 
-  const [energyStatus, pricing, history] = await Promise.all([
-    getEnergyStatus(user.id),
+  // getCoinBalanceStatus applies the lazy daily coin top-up as a side effect,
+  // so the entry gate reads a topped-up balance.
+  const [coinStatus, pricing, history] = await Promise.all([
+    getCoinBalanceStatus(user.id),
     getExamEntryPricing(),
     getExamHistory(user.id),
   ]);
 
   return (
     <OfficialExamClient
-      initialEnergy={energyStatus.balance}
-      maxEnergy={energyStatus.max}
-      energyCost={pricing.energyCost}
+      coinBalance={coinStatus.balance}
+      coinPrice={pricing.coinPrice}
       passThreshold={pricing.passThreshold}
       history={history}
     />

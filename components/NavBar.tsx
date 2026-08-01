@@ -7,6 +7,7 @@ import { buttonVariants } from '@heroui/styles';
 import { SidebarToggleButton } from '@/components/SidebarToggleButton';
 import { BackButton } from '@/components/BackButton';
 import CoinBadge from '@/components/CoinBadge';
+import EnergyBadge from '@/components/EnergyBadge';
 import NotificationBell from '@/components/NotificationBell';
 import MobileAccountMenu from '@/components/MobileAccountMenu';
 import ThemeToggle from '@/components/ThemeToggle';
@@ -90,6 +91,7 @@ export default function NavBar() {
               </Link>
             )}
             {nav.user && !nav.isAdmin && <CoinBadge />}
+            {nav.user && !nav.isAdmin && <EnergyBadge />}
             {nav.user && (
               <NotificationBell
                 initialUnreadCount={nav.unreadCount}

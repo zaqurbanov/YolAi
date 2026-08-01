@@ -283,6 +283,83 @@ function GrantCoinsControl({
   );
 }
 
+function GrantEnergyControl({
+  userId,
+  onGranted,
+}: {
+  userId: string;
+  onGranted: (newBalance: number) => void;
+}) {
+  const [inputValue, setInputValue] = useState('');
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function grant(amount: number) {
+    setPending(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/chat-meta?type=user&id=${userId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ grantEnergy: amount }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setError(data?.error ?? 'Enerji hədiyyə etmək uğursuz oldu');
+        return;
+      }
+      if (data.energy?.balance != null) onGranted(Number(data.energy.balance));
+      setInputValue('');
+    } finally {
+      setPending(false);
+    }
+  }
+
+  function handleSubmit(sign: 1 | -1) {
+    const trimmed = inputValue.trim();
+    if (trimmed === '') {
+      setError('Miqdar sıfırdan fərqli tam ədəd olmalıdır');
+      return;
+    }
+    const value = Number(trimmed);
+    if (!Number.isFinite(value) || value === 0) {
+      setError('Miqdar sıfırdan fərqli tam ədəd olmalıdır');
+      return;
+    }
+    if (!Number.isInteger(value)) {
+      setError('Miqdar sıfırdan fərqli tam ədəd olmalıdır');
+      return;
+    }
+    void grant(sign * Math.abs(value));
+  }
+
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <TextField
+        type="number"
+        value={inputValue}
+        onChange={setInputValue}
+        className="w-32"
+        aria-label="Hədiyyə ediləcək enerji miqdarı"
+      >
+        <Input placeholder="Miqdar" min={1} max={100000} step={1} />
+      </TextField>
+      <Button variant="outline" size="sm" isPending={pending} onPress={() => handleSubmit(1)}>
+        {({ isPending }) => (
+          <>
+            {isPending ? <Spinner size="sm" tone="current" /> : null}
+            Əlavə et
+          </>
+        )}
+      </Button>
+      <Button variant="outline" size="sm" isPending={pending} onPress={() => handleSubmit(-1)}>
+        Çıxart
+      </Button>
+      {error && <span className="mono-label text-danger">{error}</span>}
+    </div>
+  );
+}
+
 export default function UserDetail({
   userId,
   detail,
@@ -295,6 +372,7 @@ export default function UserDetail({
   const { profile, stats, lastSignInAt } = detail;
   const [role, setRole] = useState(profile.role);
   const [coinBalance, setCoinBalance] = useState(detail.coins?.balance ?? null);
+  const [energyBalance, setEnergyBalance] = useState(detail.energy ?? null);
   const [dailyCoinLimit, setDailyCoinLimit] = useState(detail.coins?.daily_limit ?? null);
 
   const [conversations, setConversations] = useState<AdminUserConversation[]>(
@@ -367,6 +445,15 @@ export default function UserDetail({
             </span>
           </span>
           <GrantCoinsControl userId={userId} onGranted={setCoinBalance} />
+        </div>
+        <div className="flex items-center gap-3 flex-wrap pt-1">
+          <span className="mono-label text-on-surface-variant">
+            Enerji balansı:{' '}
+            <span className="text-on-surface font-medium">
+              {energyBalance != null ? energyBalance : '—'}
+            </span>
+          </span>
+          <GrantEnergyControl userId={userId} onGranted={setEnergyBalance} />
         </div>
         <div className="flex items-center gap-3 flex-wrap pt-1">
           <span className="mono-label text-on-surface-variant">

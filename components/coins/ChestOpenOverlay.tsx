@@ -3,18 +3,21 @@
 import { useEffect, useRef } from 'react';
 import { Button } from '@heroui/react';
 import AnimatedNumber from '@/components/AnimatedNumber';
-import { ChestIcon, ChestOpenIcon, EnergyIcon } from '@/components/icons';
+import { ChestIcon, ChestOpenIcon, EnergyIcon, CoinIcon } from '@/components/icons';
+import type { MarathonRewardType } from '@/lib/coins/weeklyMarathon';
 
 interface ChestOpenOverlayProps {
   reward: number;
   open: boolean;
   onClose: () => void;
+  /** Which currency the chest paid — 'coins' (Sunday) or 'energy' (default). */
+  rewardType?: MarathonRewardType;
 }
 
 const AUTO_CLOSE_MS = 3000;
-// The burst glyph follows the payout: the chest pays ENERGY since 0094, so
-// these are bolts, not coins. The `chest-coin-burst` animation name is unchanged
-// (it is a generic radial burst, reused rather than duplicated).
+// The burst glyph follows the payout currency (CoinIcon on a coin day, bolts
+// otherwise). The `chest-coin-burst` animation name is unchanged (it is a
+// generic radial burst, reused rather than duplicated).
 const BURST_COUNT = 6;
 
 // Full-screen celebratory reveal shown after DailyQuestCard's claim succeeds.
@@ -22,8 +25,10 @@ const BURST_COUNT = 6;
 // the server action response by the time this mounts, this just animates it.
 // Auto-dismisses after AUTO_CLOSE_MS unless the user closes it first; the
 // timer is always cleared on close/unmount so there's no setState-after-unmount.
-export default function ChestOpenOverlay({ reward, open, onClose }: ChestOpenOverlayProps) {
+export default function ChestOpenOverlay({ reward, open, onClose, rewardType = 'energy' }: ChestOpenOverlayProps) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isCoins = rewardType === 'coins';
+  const ValueIcon = isCoins ? CoinIcon : EnergyIcon;
 
   useEffect(() => {
     if (!open) return;
@@ -46,7 +51,7 @@ export default function ChestOpenOverlay({ reward, open, onClose }: ChestOpenOve
                 key={i}
                 className="chest-coin-burst motion-reduce:animate-none absolute left-1/2 top-1/2 text-caution-orange"
               >
-                <EnergyIcon width={16} height={16} />
+                <ValueIcon width={16} height={16} />
               </span>
             ))}
           </div>
@@ -66,9 +71,9 @@ export default function ChestOpenOverlay({ reward, open, onClose }: ChestOpenOve
           <p className="flex items-center justify-center gap-1.5 text-display-lg text-caution-orange">
             <span>+</span>
             <AnimatedNumber value={reward} durationMs={900} />
-            <EnergyIcon width={22} height={22} />
+            <ValueIcon width={22} height={22} />
           </p>
-          <p className="text-legal-citation text-on-surface-variant">enerji</p>
+          <p className="text-legal-citation text-on-surface-variant">{isCoins ? 'coin' : 'enerji'}</p>
         </div>
 
         <Button variant="primary" className="glow-primary w-full" onPress={onClose}>

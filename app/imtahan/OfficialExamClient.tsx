@@ -20,7 +20,7 @@ import {
   CheckIcon,
   CloseIcon,
   ClockIcon,
-  EnergyIcon,
+  CoinIcon,
   RulesIcon,
   TrophyIcon,
   LockIcon,
@@ -35,13 +35,14 @@ import { answerExamQuestionAction } from './actions';
 const EXAM_DURATION_MS = 15 * 60_000;
 const QUESTION_COUNT = 10;
 
-// No coin balance is threaded in: since 0094 exam entry is energy-only, so a
-// coin figure on this screen would be decoration at best and a false payment
-// hint at worst.
+// The landing shows the COIN entry price — since 0094 the exam is coin-only
+// (0095 removed the energy path end-to-end; examPricing.ts returns coinPrice,
+// and startExamSessionAction charges coins). This UI used to render an energy
+// cost that the backend never charged, so the afford gate and the price line
+// lied about the actual currency.
 interface OfficialExamClientProps {
-  initialEnergy: number;
-  maxEnergy: number;
-  energyCost: number;
+  coinBalance: number;
+  coinPrice: number;
   passThreshold: number;
   history: ExamHistorySummary;
 }
@@ -73,14 +74,13 @@ function formatTime(ms: number): string {
 }
 
 export default function OfficialExamClient({
-  initialEnergy,
-  maxEnergy,
-  energyCost,
+  coinBalance,
+  coinPrice,
   passThreshold,
   history,
 }: OfficialExamClientProps) {
   const [phase, setPhase] = useState<Phase>('idle');
-  const [energy, setEnergy] = useState(initialEnergy);
+  const [coins, setCoins] = useState(coinBalance);
   const [questions, setQuestions] = useState<ExamQuestion[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [answers, setAnswers] = useState<(number | null)[]>([]);
@@ -197,7 +197,7 @@ export default function OfficialExamClient({
       setVerdicts(Array.from({ length: res.questions.length }, () => null));
       setCurrent(0);
       setResult(null);
-      if (typeof res.energy === 'number') setEnergy(res.energy);
+      if (typeof res.balance === 'number') setCoins(res.balance);
       deadlineRef.current = Date.now() + EXAM_DURATION_MS;
       setRemainingMs(EXAM_DURATION_MS);
       setPhase('running');
@@ -497,7 +497,7 @@ export default function OfficialExamClient({
   }
 
   // ------------------------------------------------------------------ landing
-  const canAffordEnergy = energy >= energyCost;
+  const canAffordCoins = coins >= coinPrice;
   const lastPct =
     history.lastScore != null && history.lastTotal
       ? Math.round((history.lastScore / history.lastTotal) * 100)
@@ -531,7 +531,7 @@ export default function OfficialExamClient({
               <Button
                 variant="primary"
                 onPress={() => void start()}
-                isDisabled={isStarting || !canAffordEnergy}
+                isDisabled={isStarting || !canAffordCoins}
                 className="glow-primary gap-2 rounded-full px-8 py-4 text-[12px] font-bold uppercase tracking-[0.1em]"
               >
                 {isStarting ? <Spinner size="sm" tone="current" /> : null}
@@ -540,23 +540,17 @@ export default function OfficialExamClient({
               </Button>
             </div>
 
-            {/* Coins cannot buy exam entry since 0094, so the coin balance is
-                deliberately NOT printed here — showing it next to the price
-                implied it was a second payment option. Energy accumulates
-                across days, so it can exceed maxEnergy (the daily top-up);
-                the denominator is dropped once it no longer bounds the
-                balance rather than rendering e.g. "14/10". */}
+            {/* Coin entry is a pure SINK — nothing is earned back on a pass,
+                so only the current coin balance is shown next to the price. */}
             <p className="mt-4 flex flex-wrap items-center gap-1.5 text-[13px] text-on-surface-variant">
-              <EnergyIcon width={14} height={14} className="text-caution-orange" />
-              {energyCost} enerji ·{' '}
-              <span className="tabular-nums">
-                {energy > maxEnergy ? energy : `${energy}/${maxEnergy}`} qalıb
-              </span>
-              {!canAffordEnergy && (
+              <CoinIcon width={14} height={14} className="text-caution-orange" />
+              {coinPrice} coin ·{' '}
+              <span className="tabular-nums">{coins} qalıb</span>
+              {!canAffordCoins && (
                 <>
                   ·{' '}
                   <Link href="/coin-qazan" className="font-semibold text-primary hover:underline">
-                    Enerji al
+                    Coin qazan
                   </Link>
                 </>
               )}

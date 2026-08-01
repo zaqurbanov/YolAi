@@ -9,7 +9,9 @@
 --            treated as money-equivalent and must survive an attacker who can
 --            mint unlimited free accounts (email confirmation is disabled).
 --
---   ENERGY = GAMEPLAY currency. Powers every game and the official exam.
+--   ENERGY = GAMEPLAY currency. Powers every game. NOT the official exam —
+--            exam entry is coin-priced (see the OFFICIAL EXAM section below
+--            for why that is still invariant-safe).
 --
 -- ###########################################################################
 -- ## THE INVARIANT: ENERGY MUST NEVER BE CONVERTIBLE BACK INTO COINS,      ##
@@ -37,17 +39,44 @@
 --   daily chest (quests) ............ coins -> ENERGY
 --   sign speed ...................... coins -> ENERGY
 --   XO win .......................... coins -> ENERGY
---   official exam entry ............. coins OR energy -> ENERGY ONLY
+--   official exam entry ............. coins OR energy -> COIN ONLY, priced by
+--                                     exam_coin_price (admin-tunable)
 --   ad watch / referral / chat ...... unchanged (still coins)
---   NEW: claim_daily_grant .......... 3 coins + the daily energy top-up
+--   NEW: apply_daily_grant .......... AUTOMATIC once-per-Baku-day top-up of
+--                                     BOTH balances to their configured FLOOR
+--
+-- ###########################################################################
+-- ## THE DAILY GRANT IS A FLOOR, NOT AN INCREMENT.                         ##
+-- ##                                                                       ##
+-- ## Owner's requirement: "əgər istifadəçinin 6 coini varsa bu zaman 3     ##
+-- ## coin verilmir, yalnız limitdən az olanda limit qədər coini olur."     ##
+-- ##                                                                       ##
+-- ## For BOTH currencies, once per Baku day:                               ##
+-- ##   balance <  floor  ->  credit exactly (floor - balance)              ##
+-- ##   balance >= floor  ->  credit NOTHING, and never reduce the surplus  ##
+-- ##                                                                       ##
+-- ## There is NO claim button and no claim RPC. The top-up fires           ##
+-- ## automatically on the first server-side read of the user's balances    ##
+-- ## each day (lib/chat/coins.ts, lib/coins/dailyGrant.ts).                ##
+-- ###########################################################################
+--
+-- WHY apply_daily_grant REPLACED THE ADDITIVE claim_daily_grant: this file
+-- originally shipped a user-initiated "Günlük hədiyyə" that ADDED 3 coins on
+-- top of whatever the user already held, alongside the legacy floor-up that
+-- lived inside check_and_reserve_coins. That was two independent recurring
+-- coin incomes with two different shapes. There is now exactly ONE mechanism,
+-- with floor semantics, and it owns both currencies. The 3-coin
+-- `daily_grant_coins` setting is gone; the coin floor is the pre-existing,
+-- admin-exposed `daily_coin_grant` key (default 10).
 --
 -- STRUCTURAL FIX — grant_daily_energy no longer RESETS the balance.
 -- The 0067/0070 definition did `balance = p_daily_grant` on the first call of
 -- a new Baku day, i.e. unused energy was wiped. That was harmless while energy
 -- was purely an allowance, but it is fatal now that games PAY energy: the
--- reset would delete everything a player earned. It is now an ADDITIVE top-up
--- (`balance = balance + p_daily_grant`), still idempotent per Baku day via
--- last_grant_date so it cannot be spammed to refill.
+-- reset would delete everything a player earned. It is now a FLOOR top-up
+-- (`balance = greatest(balance, p_daily_grant)`), still idempotent per Baku
+-- day via last_grant_date so it cannot be spammed to refill. A player sitting
+-- at 25 energy earned from games is above the floor and loses nothing.
 --   * energy_purchase_max_balance stays a PURCHASE-time guard only. Earned
 --     energy is deliberately NOT capped by it — capping earnings would silently
 --     void a player's winnings, and the earning side is already bounded by the
@@ -61,8 +90,13 @@
 --     more importantly, stockpiled energy can no longer be turned into coins.
 --
 -- TOTAL DAILY ENERGY INCOME IS PROVABLY BOUNDED (per user, per Baku day) —
--- every energy source has a server-enforced daily bound:
+-- every energy source has a server-enforced daily bound. NOTE the daily grant
+-- line: as a FLOOR it contributes at most game_daily_energy (10) of NEW energy
+-- per day, and only to a user who ended the previous day below 10 — a player
+-- who is actively earning gets 0 from it. The worst case below therefore
+-- assumes a user who spends to 0 every night:
 --   daily grant ....... game_daily_energy (10)      once/day via user_energy.last_grant_date
+--                                                   AND capped by greatest(), so <= 10
 --   daily quiz ........ daily_quiz_reward (3)       once/day via unique(user_id, claim_date)
 --   streak milestone .. streak_milestone_bonuses    at most one milestone/day, max 75 (day 30)
 --   wheel ............. max wheel_prizes value (20) once/day via unique(user_id, spin_date)
@@ -70,10 +104,19 @@
 --   XO ................ tictactoe_win_reward (2) x tictactoe_daily_win_cap (3) = 6
 --   sign speed ........ sign_speed_daily_reward_cap (20)
 --   => 10 + 3 + 75 + 20 + 10 + 6 + 20 = 144 energy/day absolute worst case
---      (69/day on a normal, non-milestone day).
+--      (69/day on a normal, non-milestone day) — unchanged as an upper bound,
+--      but now unreachable in practice by anyone who already holds >= 10.
 -- Games ARE net-positive in energy for a skilled player. That is a deliberate
 -- product decision and it is safe ONLY because of the caps above AND because
 -- energy can never become coins.
+--
+-- MAXIMUM RECURRING DAILY COIN INCOME (per user, per Baku day):
+--   daily floor top-up  at most daily_coin_grant (10), and 0 for anyone
+--                       already at/above the floor
+--   ad watch            ad_watch_reward x ad_watch_daily_max
+--   referral            one-off per referred user, not recurring
+--   => the recurring coin ceiling is the floor itself (10) plus ad watch.
+--   The old "10 + 3" double income is gone: there is no additive 3-coin claim.
 --
 -- BALANCE SEMANTICS IN THE RETURNED JSON: every converted RPC keeps returning
 -- 'balance' as the user's COIN balance (a plain, unlocked read — never
@@ -88,7 +131,17 @@
 -- deadlock against it.
 --
 -- NO DATA MIGRATION: existing user_coins.balance values are untouched. Coins
--- users already hold carry over as-is.
+-- users already hold carry over as-is. Nobody's surplus is ever clawed back —
+-- greatest() only ever raises a balance.
+--
+-- check_and_reserve_coins IS ALSO REDEFINED HERE (it is defined in 0040 and
+-- redefined in 0070). It used to contain the OTHER daily grant — the
+-- `if v_last_reset_at < v_day_start then balance := greatest(balance, limit)`
+-- block. That block's SEMANTICS are what we adopted above, but it must not
+-- survive as a SECOND independent grant firing on a different marker
+-- (user_coins.last_reset_at) from apply_daily_grant's ledger row. It is moved
+-- into apply_daily_grant and check_and_reserve_coins becomes a pure
+-- affordability check.
 --
 -- Idempotent: safe to re-run. APPLY THIS BY HAND in the Supabase SQL editor,
 -- AFTER 0082-0093 (it create-or-replaces functions those files define —
@@ -134,13 +187,20 @@ grant select, insert, update on user_energy to service_role;
 
 
 -- ---------------------------------------------------------------------------
--- grant_daily_energy — WAS a reset, IS NOW an additive once-per-Baku-day
--- top-up. Everything else (idempotency marker, lock, return value) is the
--- 0070 definition unchanged. See the header for why the reset had to go.
+-- grant_daily_energy — WAS a reset (`balance = p_daily_grant`), IS NOW a
+-- once-per-Baku-day top-up TO A FLOOR (`balance = greatest(balance, grant)`).
+-- Everything else (idempotency marker, lock, seeding insert, return value) is
+-- the 0070 definition unchanged. See the header for why the reset had to go
+-- and why the floor — not an increment — is the correct shape.
 --
--- Idempotency: last_grant_date is written in the SAME update that adds the
--- grant, under the `for update` lock taken just above, so two concurrent
--- callers serialize and only one of them observes `v_last < v_today`.
+-- The seeding insert already seeds `balance = v_grant`, which IS the floor for
+-- a brand-new row, so it needs no change.
+--
+-- Idempotency: last_grant_date is written in the SAME update that applies the
+-- floor, under the `for update` lock taken just above, so two concurrent
+-- callers serialize and only one of them observes `v_last < v_today`. The
+-- greatest() makes a second application harmless anyway, but the date guard is
+-- what stops a user who spends down to 0 mid-day from being refilled.
 -- ---------------------------------------------------------------------------
 create or replace function grant_daily_energy(p_user_id uuid, p_daily_grant int)
 returns int
@@ -163,7 +223,7 @@ begin
 
   if v_last is null or v_last < v_today then
     update user_energy
-      set balance = balance + v_grant,
+      set balance = greatest(balance, v_grant),
           last_grant_date = v_today,
           updated_at = now()
       where user_id = p_user_id
@@ -179,15 +239,20 @@ grant execute on function grant_daily_energy(uuid, int) to service_role;
 
 
 -- ===========================================================================
--- NEW: the daily grant — 3 coins + the daily energy top-up, once per Baku day.
+-- NEW: the automatic daily grant — tops BOTH balances up to their floor, once
+-- per Baku day, with no user action.
 -- ===========================================================================
 
 -- ---------------------------------------------------------------------------
--- daily_grant_claims — the ledger AND the concurrency guard. unique(user_id,
--- grant_date) on the BAKU date is what makes a repeated or concurrent POST
--- impossible to pay twice: claim_daily_grant INSERTS HERE FIRST and only
--- credits after the insert has succeeded, so a unique violation rejects the
--- whole transaction before a single coin moves.
+-- daily_grant_claims — the TOP-UP LEDGER and the concurrency guard.
+-- (Named "claims" for history; nothing is claimed any more. A row means "the
+-- automatic top-up for this user on this Baku day has already run", and
+-- coins/energy record how much was ACTUALLY added, which is legitimately 0
+-- when the user was already at or above the floor.)
+--
+-- unique(user_id, grant_date) on the BAKU date is what makes a repeated or
+-- concurrent call impossible to pay twice: apply_daily_grant INSERTS HERE
+-- FIRST and only credits coins if that insert succeeded.
 --
 -- This is a COIN-granting table, so it gets the full treatment: RLS on,
 -- select-own only, no insert/update/delete policy at all (writes happen
@@ -216,84 +281,203 @@ grant select, insert, update on daily_grant_claims to service_role;
 create index if not exists daily_grant_claims_user_id_idx on daily_grant_claims(user_id);
 
 -- ---------------------------------------------------------------------------
--- claim_daily_grant — credits p_coins coins and tops up the daily energy.
+-- apply_daily_grant — the ONE automatic daily top-up. Raises the coin balance
+-- to p_coin_floor and the energy balance to p_energy_floor, once per Baku day,
+-- never lowering either. Called on READ paths (every balance read), so it is a
+-- silent no-op after the first call of the day — it must NOT raise
+-- 'already_claimed' or any other error on the repeat path.
 --
--- ENERGY IS DELEGATED TO grant_daily_energy ON PURPOSE. It is the SAME
--- once-per-Baku-day top-up the energy meter already triggers lazily, not a
--- second one — otherwise a user who opened the games page before claiming
--- would receive the daily energy twice. The returned 'energy' is therefore the
--- ACTUAL delta applied (0 if the lazy top-up already fired today), never an
--- assumed amount, so the UI cannot claim to have granted energy it didn't.
---
--- p_coins / p_daily_energy_grant are resolved server-side in
+-- p_coin_floor / p_energy_floor are resolved server-side in
 -- lib/coins/dailyGrant.ts from app_settings; this RPC never sees a
--- client-supplied amount.
+-- client-supplied amount. The per-user override user_coins.daily_limit still
+-- wins over p_coin_floor when set (same coalesce() the old
+-- check_and_reserve_coins used), so per-user limits keep working AND the
+-- transfer_coins "transferable = balance - daily_limit" reserve stays coherent.
+--
+-- ### THE CRITICAL PROPERTY: the LEDGER ROW is the gate, not the balance. ###
+-- `balance < floor` is NEVER on its own sufficient to top up. A user who
+-- receives the floor at 00:05 and spends it all by 00:10 stays at 0 for the
+-- rest of the day, because daily_grant_claims already holds their
+-- (user_id, today) row. This is the whole point of the table.
+--
+-- ### CONCURRENCY: two simultaneous requests cannot double-credit. ###
+-- T1 and T2 both call this for the same user on the same day, no ledger row
+-- yet. Both attempt the insert. Postgres' unique index on
+-- (user_id, grant_date) makes the SECOND inserter BLOCK on the first one's
+-- uncommitted tuple — it does not see "no row" and proceed. When T1 commits,
+-- T2's insert raises unique_violation; when T1 rolls back, T2's insert
+-- succeeds. Exactly one transaction ever owns the row, and only the owner runs
+-- the coin update. The plpgsql `exception when unique_violation` block is a
+-- SUBTRANSACTION, so catching it rolls back only the failed insert and the
+-- function continues — which is required, because the energy half must still
+-- run (see below). The coin update additionally takes `for update` on the
+-- user_coins row, so the read-then-greatest() is not itself racy against a
+-- concurrent spend.
+--
+-- ### ENERGY IS NOT GATED BY THE COIN LEDGER ROW. ###
+-- grant_daily_energy carries its OWN once-per-Baku-day marker
+-- (user_energy.last_grant_date) and is the same lazy top-up the games pages
+-- already trigger. It is therefore called UNCONDITIONALLY here, outside
+-- the unique_violation branch: if the coin insert lost the race, energy may
+-- still be owed (e.g. the row was written by a path that ran before the energy
+-- row existed). Double-granting energy is impossible regardless — its own date
+-- marker plus greatest() both prevent it. The recorded 'energy' is the ACTUAL
+-- delta, never an assumed amount.
+--
+-- LOCK ORDER: daily_grant_claims -> user_energy -> user_coins. The
+-- energy-before-coins suffix matches every other RPC in this schema
+-- (purchase_energy, settle_tictactoe, start_sign_speed_round), and nothing
+-- else in the schema writes daily_grant_claims, so the added prefix cannot
+-- deadlock against anything.
 -- ---------------------------------------------------------------------------
-create or replace function claim_daily_grant(
-  p_user_id            uuid,
-  p_coins              numeric,
-  p_daily_energy_grant int
+create or replace function apply_daily_grant(
+  p_user_id      uuid,
+  p_coin_floor   numeric,
+  p_energy_floor int
 )
 returns jsonb
 language plpgsql
 as $$
 declare
-  v_today          date := (now() at time zone 'Asia/Baku')::date;
+  v_today          date    := (now() at time zone 'Asia/Baku')::date;
+  v_coin_floor     numeric := greatest(0, coalesce(p_coin_floor, 0));
+  v_energy_floor   int     := greatest(0, coalesce(p_energy_floor, 0));
+  v_owns_today     boolean := true;
+  v_coin_before    numeric;
   v_coin_balance   numeric;
+  v_coins_granted  numeric := 0;
+  v_daily_limit    numeric;
+  v_effective_floor numeric;
   v_energy_before  int;
   v_energy_after   int;
-  v_energy_granted int;
+  v_energy_granted int := 0;
 begin
-  if p_coins is null or p_coins < 0 then
-    raise exception 'invalid_coins';
-  end if;
-  if p_daily_energy_grant is null or p_daily_energy_grant < 0 then
-    raise exception 'invalid_energy_grant';
-  end if;
-
-  -- (1) Claim the day FIRST. Nothing below runs unless this row is ours.
+  -- (1) Take the day. Losing this race means the top-up already ran today.
   begin
     insert into daily_grant_claims (user_id, grant_date, coins, energy)
-    values (p_user_id, v_today, p_coins, 0);
+    values (p_user_id, v_today, 0, 0);
   exception
     when unique_violation then
-      raise exception 'already_claimed';
+      v_owns_today := false;
   end;
 
-  -- (2) Energy before coins — repo-wide lock order.
+  -- (2) Energy first — repo-wide lock order. Unconditional; see header.
   select balance into v_energy_before from user_energy where user_id = p_user_id;
-  v_energy_after := grant_daily_energy(p_user_id, p_daily_energy_grant);
+  v_energy_after := grant_daily_energy(p_user_id, v_energy_floor);
   v_energy_granted := greatest(0, v_energy_after - coalesce(v_energy_before, 0));
 
-  -- (3) Coins. The insert seeds balance 0, NOT p_coins — the update below is
-  -- the single place the grant is applied, so a brand-new row can't be paid
-  -- the grant twice.
+  -- (3) Coins. Seeded at 0 — the greatest() below is the single place the
+  -- floor is ever applied, so a brand-new row cannot be granted twice.
   insert into user_coins (user_id, balance, daily_limit)
   values (p_user_id, 0, null)
   on conflict (user_id) do nothing;
 
-  update user_coins uc
-    set balance = uc.balance + p_coins
-    where uc.user_id = p_user_id
-    returning uc.balance into v_coin_balance;
+  if v_owns_today then
+    select uc.balance, uc.daily_limit
+      into v_coin_before, v_daily_limit
+      from user_coins uc
+      where uc.user_id = p_user_id
+      for update;
 
-  update daily_grant_claims
-    set energy = v_energy_granted
-    where user_id = p_user_id and grant_date = v_today;
+    v_effective_floor := coalesce(v_daily_limit, v_coin_floor);
+
+    update user_coins uc
+      set balance = greatest(uc.balance, v_effective_floor),
+          last_reset_at = now()
+      where uc.user_id = p_user_id
+      returning uc.balance into v_coin_balance;
+
+    v_coins_granted := greatest(0, v_coin_balance - v_coin_before);
+  else
+    select uc.balance into v_coin_balance
+      from user_coins uc
+      where uc.user_id = p_user_id;
+  end if;
+
+  -- Accumulate rather than overwrite: the losing transaction may still be the
+  -- one that applied the energy delta.
+  if v_coins_granted > 0 or v_energy_granted > 0 then
+    update daily_grant_claims dgc
+      set coins  = dgc.coins + v_coins_granted,
+          energy = dgc.energy + v_energy_granted
+      where dgc.user_id = p_user_id and dgc.grant_date = v_today;
+  end if;
 
   return jsonb_build_object(
-    'coins', p_coins,
+    'coinsGranted', v_coins_granted,
     'energyGranted', v_energy_granted,
-    'balance', v_coin_balance,
-    'energy', v_energy_after
+    'balance', coalesce(v_coin_balance, 0),
+    'energy', coalesce(v_energy_after, 0),
+    'applied', true
   );
 end;
 $$;
 
-revoke execute on function claim_daily_grant(uuid, numeric, int) from public, anon, authenticated;
-grant execute on function claim_daily_grant(uuid, numeric, int) to service_role;
+revoke execute on function apply_daily_grant(uuid, numeric, int) from public, anon, authenticated;
+grant execute on function apply_daily_grant(uuid, numeric, int) to service_role;
+
+-- The additive, user-initiated predecessor. Dropped so no code path and no
+-- stale PostgREST schema cache can reach it.
+drop function if exists claim_daily_grant(uuid, numeric, int);
 
 grant select, insert, update on user_coins to service_role;
+
+
+-- ---------------------------------------------------------------------------
+-- check_and_reserve_coins (was 0040, redefined 0070) — NOW A PURE
+-- AFFORDABILITY CHECK. The daily floor-up block it used to carry
+--
+--   if v_last_reset_at < v_day_start then
+--     v_balance := greatest(v_balance, v_effective_limit); ...
+--
+-- has MOVED into apply_daily_grant. Two recurring grants keyed on two
+-- different markers (user_coins.last_reset_at here vs the daily_grant_claims
+-- row there) would fight: this one would re-top-up a user who had already
+-- received and spent the day's floor, defeating the whole point of the ledger.
+--
+-- SIGNATURE CHANGE: p_default_daily_limit is gone — this function no longer
+-- has an opinion about the floor. Postgres cannot drop an argument via
+-- create-or-replace, so the 3-arg version is dropped explicitly.
+--
+-- The seeding insert now seeds balance 0, not the limit, for the same reason:
+-- apply_daily_grant is the only thing that may put coins into a row.
+-- lib/chat/coins.ts calls applyDailyGrant() BEFORE this, so a first-time user
+-- is already at the floor by the time affordability is evaluated.
+-- ---------------------------------------------------------------------------
+drop function if exists check_and_reserve_coins(uuid, numeric, numeric);
+
+-- `create OR REPLACE` — see the note on start_exam_session below: re-running
+-- this file must not fail with 42723 on the new signature.
+create or replace function check_and_reserve_coins(
+  p_user_id uuid,
+  p_price   numeric
+)
+returns table (
+  allowed     boolean,
+  balance     numeric,
+  daily_limit numeric
+)
+language plpgsql
+as $$
+declare
+  v_balance     numeric;
+  v_daily_limit numeric;
+begin
+  insert into user_coins (user_id, balance, daily_limit)
+  values (p_user_id, 0, null)
+  on conflict (user_id) do nothing;
+
+  select uc.balance, uc.daily_limit
+    into v_balance, v_daily_limit
+    from user_coins uc
+    where uc.user_id = p_user_id;
+
+  return query select (v_balance >= p_price), v_balance, v_daily_limit;
+end;
+$$;
+
+revoke execute on function check_and_reserve_coins(uuid, numeric) from public, anon, authenticated;
+grant execute on function check_and_reserve_coins(uuid, numeric) to service_role;
 
 
 -- ===========================================================================
@@ -314,7 +498,8 @@ grant select, insert, update on user_coins to service_role;
 -- ---------------------------------------------------------------------------
 drop function if exists claim_daily_quiz_reward(uuid, numeric, boolean);
 
-create function claim_daily_quiz_reward(
+-- `create OR REPLACE` — re-run safety, see start_exam_session below.
+create or replace function claim_daily_quiz_reward(
   p_user_id uuid,
   p_reward numeric,
   p_is_correct boolean
@@ -440,7 +625,8 @@ grant execute on function claim_daily_quiz_with_streak(uuid, numeric, boolean, j
 -- ---------------------------------------------------------------------------
 drop function if exists claim_wheel_spin(uuid, numeric, numeric);
 
-create function claim_wheel_spin(p_user_id uuid, p_prize numeric, p_max_prize numeric)
+-- `create OR REPLACE` — re-run safety, see start_exam_session below.
+create or replace function claim_wheel_spin(p_user_id uuid, p_prize numeric, p_max_prize numeric)
 returns jsonb
 language plpgsql
 as $$
@@ -768,32 +954,63 @@ grant execute on function claim_daily_chest(uuid, text[], numeric) to service_ro
 
 
 -- ===========================================================================
--- OFFICIAL EXAM — energy only. The coin entry path is removed end-to-end.
+-- OFFICIAL EXAM — COIN ONLY. The energy entry path is removed end-to-end.
+--
+-- This REVERSES an earlier revision of this same file, which had made the exam
+-- energy-funded. Owner's decision: the exam is a high-value feature and the
+-- premium currency is the right price tag for it. Coin previously had only two
+-- sinks (chat messages, garage/VIP plates); the exam becomes the third, which
+-- matters because coins are meant to be SOLD for real money later — a scarce
+-- currency needs somewhere to go.
+--
+-- THIS DOES NOT BREACH THE INVARIANT. Energy -> coin conversion would require
+-- the exam to PAY something, and it pays nothing: settle_exam_session credits
+-- neither currency (0082's header: "pure sink, never an earning path"). Money
+-- flows one way only — coins in, nothing out.
 -- ===========================================================================
 
--- New sessions are always energy-paid; the column and its check constraint are
--- kept (historical rows may legitimately hold 'coin') but now default to
--- 'energy' and are never written with anything else.
-alter table exam_sessions alter column payment_method set default 'energy';
+-- New sessions are always coin-paid; the column and its check constraint are
+-- kept (historical rows may legitimately hold 'energy') but now default to
+-- 'coin' and are never written with anything else.
+alter table exam_sessions alter column payment_method set default 'coin';
 
 -- ---------------------------------------------------------------------------
--- start_exam_session — SIGNATURE CHANGE: p_payment_method and p_coin_price are
--- gone. Postgres cannot drop arguments via create-or-replace, so the 7-arg
--- version is dropped explicitly. Entry costs ENERGY, full stop — there is no
--- longer any branch of this function that reads or writes user_coins for
--- payment (it only READS the coin balance for the response's shared meter).
+-- start_exam_session — SIGNATURE CHANGE: p_payment_method, p_energy_cost and
+-- p_daily_energy_grant are gone; a single p_coin_price replaces them.
+--
+-- Postgres cannot drop arguments via create-or-replace, so BOTH historical
+-- signatures are dropped explicitly, in the order they existed:
+--   (1) 0082's 7-arg "coin OR energy" chooser;
+--   (2) this file's own interim 5-arg energy-only version — which DOES exist
+--       in the owner's database from a partial run of this migration. Leaving
+--       it in place would let two overloads coexist, and PostgREST would then
+--       have to guess which one an RPC call means (or resolve to the stale
+--       one), so dropping it is not optional.
+--
+-- p_coin_price is `numeric` to match user_coins.balance and every other coin
+-- price in the schema (check_and_reserve_coins, purchase_energy, garage).
+--
+-- There is no grant_daily_energy / apply_daily_grant call here any more: the
+-- daily top-up is automatic on READ paths (apply_daily_grant, above), so a
+-- spend path repeating it would be both redundant and a second place where a
+-- grant could fire.
 --
 -- settle_exam_session is unchanged and still pays nothing: the exam remains a
 -- pure sink, never an earning path.
 -- ---------------------------------------------------------------------------
 drop function if exists start_exam_session(uuid, uuid[], smallint[], text, numeric, int, int);
+drop function if exists start_exam_session(uuid, uuid[], smallint[], int, int);
 
-create function start_exam_session(
+-- `create OR REPLACE`, not bare `create`: on a re-run of this file the NEW
+-- 4-arg signature already exists and a bare `create` fails with 42723
+-- (duplicate_function). Migrations here are applied by hand and get re-run
+-- after a partial failure, so every function in this file must be safe to
+-- apply twice.
+create or replace function start_exam_session(
   p_user_id             uuid,
   p_question_ids        uuid[],
   p_correct_indices     smallint[],
-  p_energy_cost         int,
-  p_daily_energy_grant  int
+  p_coin_price          numeric
 )
 returns jsonb
 language plpgsql
@@ -809,29 +1026,36 @@ begin
   if p_correct_indices is null or array_length(p_correct_indices, 1) <> 10 then
     raise exception 'invalid_questions';
   end if;
-  if p_energy_cost is null or p_energy_cost <= 0 then
-    raise exception 'invalid_energy_cost';
+  -- 0 is a VALID price (admin may make the exam free); only null/negative is a
+  -- misconfiguration.
+  if p_coin_price is null or p_coin_price < 0 then
+    raise exception 'invalid_coin_price';
   end if;
 
-  perform grant_daily_energy(p_user_id, p_daily_energy_grant);
+  insert into user_coins (user_id, balance, daily_limit)
+  values (p_user_id, 0, null)
+  on conflict (user_id) do nothing;
 
-  update user_energy
-    set balance = balance - p_energy_cost,
-        updated_at = now()
+  -- Conditional decrement, same pattern as every other coin sink: the
+  -- `balance >= price` predicate is what makes affordability and debit a
+  -- single atomic step, so two concurrent starts cannot both pass a check and
+  -- then both spend.
+  update user_coins
+    set balance = balance - p_coin_price
     where user_id = p_user_id
-      and balance >= p_energy_cost
-    returning balance into v_energy;
+      and balance >= p_coin_price
+    returning balance into v_balance;
 
-  if v_energy is null then
-    raise exception 'no_energy';
+  if v_balance is null then
+    raise exception 'insufficient_coins';
   end if;
 
-  -- Plain read of the coin balance for the response's shared meter. Never a
-  -- write: an energy-spending path must not touch user_coins (THE INVARIANT).
-  v_balance := coalesce((select uc.balance from user_coins uc where uc.user_id = p_user_id), 0);
+  -- Plain UNLOCKED read of the energy balance, for the response's shared
+  -- meter only. This path never writes user_energy.
+  v_energy := coalesce((select ue.balance from user_energy ue where ue.user_id = p_user_id), 0);
 
   insert into exam_sessions (user_id, question_ids, correct_indices, payment_method)
-  values (p_user_id, p_question_ids, p_correct_indices, 'energy')
+  values (p_user_id, p_question_ids, p_correct_indices, 'coin')
   returning id into v_session;
 
   return jsonb_build_object(
@@ -842,8 +1066,8 @@ begin
 end;
 $$;
 
-revoke execute on function start_exam_session(uuid, uuid[], smallint[], int, int) from public, anon, authenticated;
-grant execute on function start_exam_session(uuid, uuid[], smallint[], int, int) to service_role;
+revoke execute on function start_exam_session(uuid, uuid[], smallint[], numeric) from public, anon, authenticated;
+grant execute on function start_exam_session(uuid, uuid[], smallint[], numeric) to service_role;
 
 grant select, insert, update on exam_sessions to service_role;
 
@@ -851,8 +1075,17 @@ grant select, insert, update on exam_sessions to service_role;
 -- ===========================================================================
 -- app_settings keys (house convention — NO seed rows, TS defaults in code).
 --
--- NEW:
---   daily_grant_coins            -- default 3   (coins paid by claim_daily_grant; lib/coins/dailyGrant.ts)
+-- THE TWO RECURRING DAILY GRANTS — both are FLOORS, not increments, and both
+-- are applied by apply_daily_grant once per Baku day. There is exactly one key
+-- per currency; do not add a second.
+--   daily_coin_grant             -- default 10  (COIN floor; lib/chat/coins.ts,
+--                                   DAILY_COIN_GRANT_SETTING_KEY, admin UI at
+--                                   /api/admin/chat-meta. 0 is a VALID value —
+--                                   it switches the coin income off. Per-user
+--                                   override: user_coins.daily_limit.)
+--   game_daily_energy            -- default 10  (ENERGY floor; lib/coins/games.ts,
+--                                   plus the Prius garage perk via
+--                                   getEffectiveEnergyGrant)
 --
 -- CHANGED DEFAULT (same key, TS default only — no row to update):
 --   referral_bonus_amount        -- default 5 -> 2 (lib/coins/referrals.ts)
@@ -868,12 +1101,21 @@ grant select, insert, update on exam_sessions to service_role;
 --   sign_speed_daily_reward_cap  -- default 20  (lib/coins/signSpeed.ts)
 --   tictactoe_win_reward         -- default 2   (lib/coins/games.ts)
 --   tictactoe_daily_win_cap      -- default 3   (lib/coins/games.ts)
---   game_daily_energy            -- default 10  (lib/coins/games.ts) — now ADDITIVE per Baku day
 --
 -- STILL COINS (unchanged):
---   chat_message_price, daily_coin_grant, ad_watch_reward*, referral_*,
---   energy_purchase_*, garage/plate prices, lesson unlock/retry prices.
+--   chat_message_price, ad_watch_reward*, referral_*, energy_purchase_*,
+--   garage/plate prices, lesson unlock/retry prices.
+--
+-- NEWLY COINS (was energy in an earlier revision of this same file):
+--   exam_coin_price              -- default 5 (lib/exam/examPricing.ts). Chosen
+--                                   against the coin floor of 10, so the exam
+--                                   is affordable twice on a user's first day
+--                                   while still costing 5x a chat message.
+--                                   0 is a VALID value — a free exam.
 --
 -- REMOVED FROM USE (key may still exist as a row; nothing reads it anymore):
---   exam_coin_price              -- the exam's coin entry path no longer exists
+--   exam_energy_cost             -- the exam's energy entry path no longer
+--                                   exists; entry is coin-priced
+--   daily_grant_coins            -- the additive 3-coin claim is gone; the coin
+--                                   grant is daily_coin_grant, as a floor
 -- ===========================================================================

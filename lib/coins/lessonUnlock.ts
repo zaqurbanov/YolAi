@@ -4,13 +4,18 @@ import { isMissingRelationError } from '@/lib/supabase/missingRelation';
 import { isUserAdmin } from '@/lib/auth/isAdmin';
 import { logError } from '@/lib/logging/logError';
 
-// Coin-facing layer for the COURSE unlock economy (0060_lesson_courses.sql).
+// Energy-facing layer for the COURSE unlock economy (0060_lesson_courses.sql
+// + 0098_lesson_energy_unlock.sql). Since 0098 a course unlock and a topic-test
+// retry both cost ENERGY (user_energy), never coins — course pricing is a
+// gameplay spend, and the two RPCs this file calls are the energy-debiting
+// rewrites from 0098. This file never writes coins and never accepts a price
+// from a caller.
 //
 // Retargeted from the previous category-keyed model: a course is a row in
 // lesson_courses (one per source document), not an entry in a static 8-item
 // array, so the old isValidCategory/RULE_CATEGORIES gate is replaced by a real
 // existence check — "the course exists and is published". The completion-bonus
-// mechanic is gone entirely; Phase 3 defines how coins are earned.
+// mechanic is gone entirely.
 //
 // The fail-open/fail-closed split from lib/coins/adWatch.ts is preserved and
 // is the important thing to keep straight when editing this file:
@@ -66,10 +71,15 @@ async function readPositiveSetting(
   return value;
 }
 
-// The GLOBAL default price. Prefer getCourseUnlockPrice(), which honours a
-// per-course override; this is only the value to use when a course has none.
+// The GLOBAL default price, in ENERGY. Prefer getCourseUnlockPrice(), which
+// honours a per-course override; this is only the value to use when a course
+// has none. Rounded to an integer — energy balances are ints, so a fractional
+// price setting can only be a bad write and would otherwise drift from the
+// rounded amount the RPC actually charges.
 export async function getDefaultCourseUnlockPrice(): Promise<number> {
-  return readPositiveSetting(COURSE_UNLOCK_PRICE_KEY, DEFAULT_COURSE_UNLOCK_PRICE, false);
+  return Math.round(
+    await readPositiveSetting(COURSE_UNLOCK_PRICE_KEY, DEFAULT_COURSE_UNLOCK_PRICE, false)
+  );
 }
 
 export async function getTopicPassThreshold(): Promise<number> {
@@ -81,7 +91,7 @@ export async function getTopicQuestionsPerAttempt(): Promise<number> {
 }
 
 export async function getLessonRetryCost(): Promise<number> {
-  return readPositiveSetting(RETRY_COST_KEY, DEFAULT_RETRY_COST, false);
+  return Math.round(await readPositiveSetting(RETRY_COST_KEY, DEFAULT_RETRY_COST, false));
 }
 
 // Both settings are independently editable, so nothing stops an admin from
@@ -136,14 +146,15 @@ async function getPublishedCourse(courseId: string): Promise<CoursePricingRow | 
   return data ?? null;
 }
 
-// The price a specific course actually costs right now: its own override when
-// set, otherwise the global setting. `unlock_price` of 0 is a legitimate
-// override (a deliberately free-but-not-flagged course), hence the explicit
-// null check rather than a falsy one.
+// The price a specific course actually costs right now, in ENERGY: its own
+// override when set, otherwise the global setting. `unlock_price` of 0 is a
+// legitimate override (a deliberately free-but-not-flagged course), hence the
+// explicit null check rather than a falsy one. Rounded to an integer for the
+// same reason as getDefaultCourseUnlockPrice — the RPC charges round(price).
 export async function getCourseUnlockPrice(courseId: string): Promise<number | null> {
   const course = await getPublishedCourse(courseId);
   if (!course) return null;
-  if (course.unlock_price !== null) return Number(course.unlock_price);
+  if (course.unlock_price !== null) return Math.round(Number(course.unlock_price));
   return getDefaultCourseUnlockPrice();
 }
 
@@ -179,7 +190,7 @@ export async function canAccessCourse(userId: string, courseId: string): Promise
   if (!course) return false;
   if (course.is_free) return true;
   // Admins are exempt from the course-unlock paywall: any PUBLISHED course is
-  // fully accessible without spending coins. The draft gate above still holds
+  // fully accessible without spending energy. The draft gate above still holds
   // (getPublishedCourse already returned null for a draft), so this only ever
   // grants access to published content. isUserAdmin fails closed.
   if (await isUserAdmin(userId)) return true;
@@ -192,7 +203,7 @@ export type UnlockCourseResult =
       ok: false;
       error:
         | 'already_unlocked'
-        | 'insufficient_coins'
+        | 'insufficient_energy'
         | 'invalid_course'
         | 'already_free'
         | 'no_content'
@@ -241,7 +252,7 @@ export async function unlockLessonCourse(
 
   const price =
     course.unlock_price !== null
-      ? Number(course.unlock_price)
+      ? Math.round(Number(course.unlock_price))
       : await getDefaultCourseUnlockPrice();
 
   if (!Number.isFinite(price) || price < 0) {
@@ -259,7 +270,7 @@ export async function unlockLessonCourse(
   if (error) {
     const message = error.message ?? '';
     if (message.includes('already_unlocked')) return { ok: false, error: 'already_unlocked' };
-    if (message.includes('insufficient_coins')) return { ok: false, error: 'insufficient_coins' };
+    if (message.includes('insufficient_energy')) return { ok: false, error: 'insufficient_energy' };
     void logError('coins.lessonUnlock.unlockCourse', error, { userId, details: { courseId } });
     console.error('[coins/lessonUnlock] unlock_lesson_course RPC failed:', {
       message: error.message,
@@ -277,7 +288,7 @@ export async function unlockLessonCourse(
 
 export type PurchaseRetryResult =
   | { ok: true; balance: number; price: number }
-  | { ok: false; error: 'insufficient_coins' | 'invalid_topic' | 'error' };
+  | { ok: false; error: 'insufficient_energy' | 'invalid_topic' | 'error' };
 
 // Buys ONE extra same-day attempt at a topic (Phase 3 surface; the schema and
 // RPC exist now so Phase 3 needs no second migration). Fail-closed like every
@@ -320,7 +331,7 @@ export async function purchaseLessonRetry(
 
   if (error) {
     const message = error.message ?? '';
-    if (message.includes('insufficient_coins')) return { ok: false, error: 'insufficient_coins' };
+    if (message.includes('insufficient_energy')) return { ok: false, error: 'insufficient_energy' };
     void logError('coins.lessonUnlock.purchaseRetry', error, { userId, details: { topicId } });
     console.error('[coins/lessonUnlock] purchase_lesson_retry RPC failed:', {
       message: error.message,

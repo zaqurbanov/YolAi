@@ -56,7 +56,13 @@ const OPTIONS_PER_QUESTION = 4;
 // distractor) — comfortable minimum per the plan.
 const MIN_POOL_SIZE = 14;
 
-async function readNumericSetting(key: string, fallback: number): Promise<number> {
+// `allowZero` mirrors lib/coins/games.ts: 0 is a legitimate PRICE (free play,
+// set from the admin panel) but a "couldn't read it" signal for a reward/cap.
+async function readNumericSetting(
+  key: string,
+  fallback: number,
+  options?: { allowZero?: boolean }
+): Promise<number> {
   const { data, error } = await createAdminClient()
     .from('app_settings')
     .select('value')
@@ -66,8 +72,17 @@ async function readNumericSetting(key: string, fallback: number): Promise<number
   if (error || !data) return fallback;
 
   const value = typeof data.value === 'number' ? data.value : Number(data.value);
-  if (!Number.isFinite(value) || value <= 0) return fallback;
+  if (!Number.isFinite(value)) return fallback;
+  if (options?.allowZero ? value < 0 : value <= 0) return fallback;
   return value;
+}
+
+// The Nişan Sürəti round price in ENERGY (for display). Fails open to the TS
+// default; the authoritative charge is start_sign_speed_round's decrement.
+export async function getSignSpeedEnergyCost(): Promise<number> {
+  return readNumericSetting(SIGN_SPEED_ENERGY_COST_KEY, DEFAULT_SIGN_SPEED_ENERGY_COST, {
+    allowZero: true,
+  });
 }
 
 // Fisher-Yates using crypto randomInt — never Math.random() for anything that
@@ -130,7 +145,9 @@ export async function startSignSpeedRound(userId: string): Promise<SignSpeedStar
 
   const [baseDailyEnergyGrant, energyCost] = await Promise.all([
     readNumericSetting(GAME_DAILY_ENERGY_KEY, DEFAULT_GAME_DAILY_ENERGY),
-    readNumericSetting(SIGN_SPEED_ENERGY_COST_KEY, DEFAULT_SIGN_SPEED_ENERGY_COST),
+    readNumericSetting(SIGN_SPEED_ENERGY_COST_KEY, DEFAULT_SIGN_SPEED_ENERGY_COST, {
+      allowZero: true,
+    }),
   ]);
   const dailyEnergyGrant = await getEffectiveEnergyGrant(userId, baseDailyEnergyGrant);
 

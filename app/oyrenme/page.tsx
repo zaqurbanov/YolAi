@@ -5,7 +5,7 @@ import { buttonVariants } from '@heroui/styles';
 import { createClient } from '@/lib/supabase/server';
 import Footer from '@/components/Footer';
 import { getCourses, getCourseTopics, type TopicSummary } from '@/lib/quiz/lessons';
-import { getCoinBalanceStatus } from '@/lib/chat/coins';
+import { getEnergyStatus } from '@/lib/coins/games';
 import DesignSwitch from '@/components/design3d/DesignSwitch';
 import OyrenmePage3D from '@/components/design3d/OyrenmePage3D';
 import { getServerDesign } from '@/lib/design/getServerDesign';
@@ -25,9 +25,12 @@ export default async function OyrenmePage() {
 
   if (!user) redirect('/login');
 
+  // `balance` is ENERGY since 0098 — course unlocks spend energy, not coins.
+  // getEnergyStatus applies the lazy daily energy top-up as a side effect, so
+  // a user who opens /oyrenme already has today's grant before any buy dialog.
   const [courses, balance] = await Promise.all([
     getCourses(user.id),
-    getCoinBalanceStatus(user.id)
+    getEnergyStatus(user.id)
       .then((s) => s.balance)
       .catch(() => null),
   ]);

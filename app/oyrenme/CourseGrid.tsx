@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { Chip } from '@heroui/react';
 import { buttonVariants } from '@heroui/styles';
 import { ACCENT_STYLES } from '@/components/CategoryCard';
-import { CoinIcon, LockIcon } from '@/components/icons';
+import { EnergyIcon, LockIcon } from '@/components/icons';
 import type { CourseSummary } from '@/lib/quiz/lessons';
 import UnlockCourseCard from './UnlockCourseCard';
 
@@ -14,7 +14,7 @@ interface CourseGridProps {
 
 // Server component. Only the LOCKED branch is interactive: it is wrapped in
 // <UnlockCourseCard> (client), which turns the card into a real button and owns
-// the coin purchase dialog. Free/open/empty cards ship no JS.
+// the energy purchase dialog. Free/open/empty cards ship no JS.
 //
 // Free and already-unlocked cards link to /oyrenme/[courseId] (the topic list),
 // which exists as of Phase 2. A <Link> ships no JS, so this branch stays
@@ -110,7 +110,7 @@ export default function CourseGrid({ courses, balance }: CourseGridProps) {
 
               {isLocked && (
                 <span className="flex items-center gap-1 text-label-sm font-semibold text-safety-yellow">
-                  <CoinIcon width={15} height={15} />
+                  <EnergyIcon width={15} height={15} />
                   {course.price}
                 </span>
               )}

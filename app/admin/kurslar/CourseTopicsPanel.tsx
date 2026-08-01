@@ -394,7 +394,7 @@ export default function CourseTopicsPanel({
       <div className="glass-card rounded-2xl p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="mono-label text-on-surface-variant uppercase">Qiymət</div>
+            <div className="mono-label text-on-surface-variant uppercase">Enerji qiyməti</div>
             <div className="mt-2 flex items-center gap-2">
               {course.isFree ? (
                 <Chip size="sm" variant="soft" color="success" className="mono-label">
@@ -402,7 +402,7 @@ export default function CourseTopicsPanel({
                 </Chip>
               ) : course.unlockPrice !== null ? (
                 <Chip size="sm" variant="soft" color="default" className="mono-label">
-                  {course.unlockPrice} coin
+                  {course.unlockPrice} enerji
                 </Chip>
               ) : (
                 <p className="text-label-sm text-on-surface-variant">
@@ -442,8 +442,8 @@ export default function CourseTopicsPanel({
                 isDisabled={priceIsFree}
                 className="w-48"
               >
-                <Label>Qiymət (boş = qlobal standart)</Label>
-                <Input type="number" min={0} step={0.01} placeholder="standart" />
+                <Label>Enerji qiyməti (boş = qlobal standart)</Label>
+                <Input type="number" min={0} step={1} placeholder="standart" />
               </TextField>
             </div>
 

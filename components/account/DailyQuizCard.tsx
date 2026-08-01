@@ -47,12 +47,16 @@ export default function DailyQuizCard({ question, options, alreadyClaimed, rewar
     startTransition(async () => {
       const state = await claimDailyQuizReward(Number(selected));
       setResult(state);
-      // Live-updates the navbar CoinBadge without a page refresh. Since 0094
-      // the quiz pays ENERGY, so this balance is unchanged by the claim — it is
-      // still forwarded so the badge re-syncs with the server's latest value
-      // (same contract app/chat/ChatClient.tsx uses after a message's spend).
+      // Live-updates the navbar badges without a page refresh. Since 0094
+      // the quiz pays ENERGY: `balance` (coins) is unchanged and is still
+      // forwarded so the coin badge re-syncs with the server's latest value
+      // (same contract app/chat/ChatClient.tsx uses after a message's spend);
+      // `energy` is the new ENERGY balance, which the EnergyBadge needs.
       if (state.status === 'correct' && state.balance != null) {
         window.dispatchEvent(new CustomEvent('coin-balance-update', { detail: { balance: state.balance } }));
+      }
+      if (state.status === 'correct' && state.energy != null) {
+        window.dispatchEvent(new CustomEvent('energy-balance-update', { detail: { balance: state.energy } }));
       }
       if (state.status === 'correct' && state.streak != null) {
         setLiveStreak(state.streak);

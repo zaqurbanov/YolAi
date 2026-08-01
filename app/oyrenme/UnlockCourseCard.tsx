@@ -3,7 +3,7 @@
 import { useState, useTransition, type CSSProperties, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button, Modal } from '@heroui/react';
-import { CoinIcon, LockIcon } from '@/components/icons';
+import { EnergyIcon, LockIcon } from '@/components/icons';
 import { formatCoinBalance } from '@/lib/format/coins';
 import { unlockCourseAction, type UnlockCourseState } from './actions';
 
@@ -22,6 +22,10 @@ interface UnlockCourseCardProps {
 // Client wrapper around a LOCKED course card: the card itself is the trigger and
 // the purchase dialog lives here. Only this branch is interactive, so CourseGrid
 // stays a server component and free/open cards ship no JS.
+//
+// Since 0098 the unlock costs ENERGY (user_energy) — the price rows and the
+// «Enerji qazan» exit are energy-themed, and the action's balance/missing
+// fields carry energy balances.
 //
 // courseId is the only thing handed to the server action. The price rendered
 // here is decoration; unlockLessonCourse() resolves and charges its own.
@@ -63,7 +67,14 @@ export default function UnlockCourseCard({
       }
 
       setResult(res);
-      if (res.status === 'success') router.refresh();
+      if (res.status === 'success') {
+        // 0098: the unlock debits ENERGY — `res.balance` is the new energy
+        // balance, so the navbar EnergyBadge must drop without a refresh.
+        if (typeof res.balance === 'number') {
+          window.dispatchEvent(new CustomEvent('energy-balance-update', { detail: { balance: res.balance } }));
+        }
+        router.refresh();
+      }
       if (res.status === 'no_content') setUnavailable(true);
     });
   }
@@ -111,7 +122,7 @@ export default function UnlockCourseCard({
               <Modal.Heading>
                 {status === 'success'
                   ? 'Kurs açıldı'
-                  : status === 'insufficient_coins'
+                  : status === 'insufficient_energy'
                     ? 'Balans kifayət etmir'
                     : 'Kursu aç'}
               </Modal.Heading>
@@ -125,14 +136,14 @@ export default function UnlockCourseCard({
                   <div className="flex items-center justify-between gap-4">
                     <dt className="text-label-sm text-on-surface-variant">Qiymət</dt>
                     <dd className="flex items-center gap-1 text-label-sm font-semibold text-safety-yellow">
-                      <CoinIcon width={15} height={15} />
+                      <EnergyIcon width={15} height={15} />
                       {formatCoinBalance(price)}
                     </dd>
                   </div>
                   <div className="flex items-center justify-between gap-4">
-                    <dt className="text-label-sm text-on-surface-variant">Balansınız</dt>
+                    <dt className="text-label-sm text-on-surface-variant">Enerji balansınız</dt>
                     <dd className="flex items-center gap-1 text-label-sm text-on-surface">
-                      <CoinIcon width={15} height={15} />
+                      <EnergyIcon width={15} height={15} />
                       {balance != null ? formatCoinBalance(balance) : '—'}
                     </dd>
                   </div>
@@ -141,7 +152,7 @@ export default function UnlockCourseCard({
 
               {status === undefined && (
                 <p className="mt-3 text-label-sm text-on-surface-variant">
-                  Birdəfəlik ödəniş — kurs həmişəlik açıq qalır.
+                  Birdəfəlik enerji ödənişi — kurs həmişəlik açıq qalır.
                 </p>
               )}
 
@@ -149,34 +160,34 @@ export default function UnlockCourseCard({
                 <div className="mt-4 space-y-2 rounded-2xl border border-go-green/30 bg-go-green/5 p-4">
                   <p className="text-label-sm text-go-green">{result?.message}</p>
                   <div className="flex items-center justify-between gap-4">
-                    <span className="text-label-sm text-on-surface-variant">Yeni balans</span>
+                    <span className="text-label-sm text-on-surface-variant">Yeni enerji balansı</span>
                     <span className="flex items-center gap-1 text-label-sm font-semibold text-on-surface">
-                      <CoinIcon width={15} height={15} />
+                      <EnergyIcon width={15} height={15} />
                       {shownBalance != null ? formatCoinBalance(shownBalance) : '—'}
                     </span>
                   </div>
                 </div>
               )}
 
-              {status === 'insufficient_coins' && (
+              {status === 'insufficient_energy' && (
                 <div className="mt-4 space-y-3 rounded-2xl border border-outline-variant/40 p-4">
                   <div className="flex items-center justify-between gap-4">
                     <span className="text-label-sm text-on-surface-variant">Qiymət</span>
                     <span className="flex items-center gap-1 text-label-sm text-on-surface">
-                      <CoinIcon width={15} height={15} />
+                      <EnergyIcon width={15} height={15} />
                       {formatCoinBalance(shownPrice)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between gap-4">
-                    <span className="text-label-sm text-on-surface-variant">Balansınız</span>
+                    <span className="text-label-sm text-on-surface-variant">Enerji balansınız</span>
                     <span className="flex items-center gap-1 text-label-sm text-on-surface">
-                      <CoinIcon width={15} height={15} />
+                      <EnergyIcon width={15} height={15} />
                       {shownBalance != null ? formatCoinBalance(shownBalance) : '—'}
                     </span>
                   </div>
                   <p className="text-label-sm font-semibold text-safety-yellow">
                     {missing != null
-                      ? `${formatCoinBalance(missing)} coin çatmır.`
+                      ? `${formatCoinBalance(missing)} enerji çatmır.`
                       : result?.message}
                   </p>
                 </div>
@@ -225,8 +236,12 @@ export default function UnlockCourseCard({
                 </Button>
               )}
 
-              {status === 'insufficient_coins' && (
+              {status === 'insufficient_energy' && (
                 <div className="flex w-full flex-col gap-2">
+                  {/* /coin-qazan is the earning center — energy comes from the
+                      daily grant, games, quests and the wheel, all of which
+                      live there. Energy is earned, not bought (0094: it is the
+                      gameplay currency), so there is no «al» exit. */}
                   <Button
                     className="glow-primary w-full"
                     variant="primary"
@@ -235,19 +250,7 @@ export default function UnlockCourseCard({
                       router.push('/coin-qazan');
                     }}
                   >
-                    Coin qazan
-                  </Button>
-                  {/* /qiymetler is a "Tezliklə" page — there is no checkout yet,
-                      so the label says so rather than promising a purchase. */}
-                  <Button
-                    className="w-full"
-                    variant="outline"
-                    onPress={() => {
-                      setIsOpen(false);
-                      router.push('/qiymetler');
-                    }}
-                  >
-                    Coin al (tezliklə)
+                    Enerji qazan
                   </Button>
                 </div>
               )}

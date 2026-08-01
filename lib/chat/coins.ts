@@ -4,6 +4,8 @@ import { formatMsUntilReset } from '@/lib/format/coins';
 import { ADMIN_CONTACT_EMAIL } from '@/lib/contact';
 import { logError } from '@/lib/logging/logError';
 import { getActiveGaragePerk } from '@/lib/garage/perks';
+import { msUntilNextBakuDayStart } from '@/lib/date/baku';
+import { applyDailyGrant } from '@/lib/coins/dailyGrant';
 
 // Hardcoded TS default (not an env var) — this is a brand-new concept with
 // no prior env var to preserve compatibility with, unlike
@@ -46,9 +48,9 @@ export async function getGlobalMessagePrice(): Promise<number> {
 // falling back to DEFAULT_DAILY_LIMIT when no row exists or the query errors
 // — same fail-open bias as getGlobalMessagePrice above.
 //
-// 0 IS A VALID CONFIGURED VALUE (`value >= 0`, not `> 0`). This top-up is the
-// app's oldest and largest coin income — check_and_reserve_coins raises the
-// balance to it once per Baku day — and coins are money-equivalent since the
+// 0 IS A VALID CONFIGURED VALUE (`value >= 0`, not `> 0`). This is the FLOOR
+// the balance is raised to once per Baku day by apply_daily_grant (0094) — the
+// app's oldest and largest coin income — and coins are money-equivalent since the
 // two-currency split (0094). Rejecting 0 as "not configured" meant the owner
 // literally could not switch this income off. The fallback still applies to a
 // MISSING or non-numeric value, so an infra hiccup can't silently zero it.
@@ -67,13 +69,19 @@ export async function getGlobalDailyCoinGrant(): Promise<number> {
 }
 
 // Checks whether the user has enough balance to afford one message at the
-// current global price, resetting/creating their user_coins row as needed,
-// but does NOT decrement — see debitCoins below. Called before any
-// conversation/message rows are created or any retrieval/LLM work starts, so
-// a rejected request costs nothing.
+// current global price, creating their user_coins row as needed, but does NOT
+// decrement — see debitCoins below. Called before any conversation/message
+// rows are created or any retrieval/LLM work starts, so a rejected request
+// costs nothing.
+//
+// applyDailyGrant runs FIRST and deliberately so: a user sitting at 0 coins
+// must be topped up to today's floor before being told they cannot afford a
+// message. The RPC itself no longer contains any grant logic (0094).
 export async function checkAndReserveCoins(
   userId: string,
 ): Promise<{ allowed: boolean; balance: number | null; dailyLimit: number | null; price: number; message: string | null }> {
+  await applyDailyGrant(userId);
+
   const price = await getGlobalMessagePrice();
   const baseDailyGrant = await getGlobalDailyCoinGrant();
   // Mercedes G-Class garage perk: +chatDailyBonus flat on top of the global
@@ -84,7 +92,6 @@ export async function checkAndReserveCoins(
     .rpc('check_and_reserve_coins', {
       p_user_id: userId,
       p_price: price,
-      p_default_daily_limit: dailyGrant,
     })
     .single<ReserveCoinsResult>();
 
@@ -104,10 +111,10 @@ export async function checkAndReserveCoins(
   }
 
   if (!data.allowed) {
-    // Only on the (rare) rejection path — worth one extra read to give an
-    // exact reset time instead of a vague "sabah" (tomorrow), reusing the
-    // same last_reset_at-based calculation the account page's countdown uses.
-    const { msUntilReset } = await getCoinBalanceStatus(userId);
+    // The reset boundary is a Baku CALENDAR day, so the countdown is pure
+    // arithmetic — no extra DB read (and no recursive applyDailyGrant call via
+    // getCoinBalanceStatus, which this used to do).
+    const msUntilReset = msUntilNextBakuDayStart();
     const effectiveLimit = data.daily_limit ?? dailyGrant;
     return {
       allowed: false,
@@ -144,25 +151,35 @@ export async function debitCoins(userId: string, price: number): Promise<number 
   return typeof data === 'number' ? data : null;
 }
 
-// Read-only balance lookup for GET /api/chat?type=quota and the account page —
-// deliberately bypasses check_and_reserve_coins (which inserts/locks/resets)
-// and reads user_coins directly via the service-role client. Reapplies the
-// same "24h since last_reset_at -> raise balance to the floor if below it" rule the SQL
-// function uses internally (greatest(balance, effectiveLimit), never
-// lowers), without writing anything, so viewing the balance never itself
-// triggers a reset a moment before the user's next real request would.
-const RESET_INTERVAL_MS = 24 * 60 * 60 * 1000;
-
+// Balance lookup for GET /api/chat?type=quota, the account page and every
+// other server-rendered coin meter.
+//
+// It APPLIES today's automatic top-up first (0094) and then reads the real
+// row. It used to instead SIMULATE the top-up — `resetDue ? max(balance,
+// limit) : balance` — showing a floored figure the table didn't actually hold.
+// With the grant automatic there is nothing to simulate: the number displayed
+// is the number stored. applyDailyGrant is idempotent per Baku day, so the
+// many read paths that call this cannot compound it.
+//
+// The countdown is now "ms until the next Baku 00:00" (lib/date/baku.ts) —
+// the same boundary the SQL uses — instead of a rolling 24h off
+// user_coins.last_reset_at. last_reset_at is still WRITTEN by
+// apply_daily_grant (it is a useful "when did this user last receive the
+// floor" audit column and other tooling may read it), it is just no longer
+// what the countdown is derived from.
 export async function getCoinBalanceStatus(
   userId: string,
 ): Promise<{ balance: number; dailyLimit: number | null; price: number; msUntilReset: number }> {
+  await applyDailyGrant(userId);
+
   const price = await getGlobalMessagePrice();
   const baseDailyGrant = await getGlobalDailyCoinGrant();
   const garagePerk = await getActiveGaragePerk(userId);
   const dailyGrant = baseDailyGrant + garagePerk.chatDailyBonus;
+  const msUntilReset = msUntilNextBakuDayStart();
   const { data, error } = await createAdminClient()
     .from('user_coins')
-    .select('balance, daily_limit, last_reset_at')
+    .select('balance, daily_limit')
     .eq('user_id', userId)
     .maybeSingle();
 
@@ -170,21 +187,14 @@ export async function getCoinBalanceStatus(
     void logError('chat.coins.balanceStatus', error, { userId });
     console.error('[chat] coin balance status read failed:', error);
     // fail open, consistent with checkAndReserveCoins
-    return { balance: dailyGrant, dailyLimit: null, price, msUntilReset: RESET_INTERVAL_MS };
+    return { balance: dailyGrant, dailyLimit: null, price, msUntilReset };
   }
-  if (!data) return { balance: dailyGrant, dailyLimit: null, price, msUntilReset: RESET_INTERVAL_MS };
-
-  const effectiveLimit = data.daily_limit ?? dailyGrant;
-  const lastResetAt = new Date(data.last_reset_at).getTime();
-  const msSinceReset = Date.now() - lastResetAt;
-  const resetDue = msSinceReset >= RESET_INTERVAL_MS;
+  if (!data) return { balance: dailyGrant, dailyLimit: null, price, msUntilReset };
 
   return {
-    balance: resetDue ? Math.max(data.balance, effectiveLimit) : data.balance,
+    balance: data.balance,
     dailyLimit: data.daily_limit,
     price,
-    // Only meaningful when !resetDue — a real request hitting checkAndReserveCoins
-    // resets the window server-side before this could ever be read as negative.
-    msUntilReset: resetDue ? 0 : RESET_INTERVAL_MS - msSinceReset,
+    msUntilReset,
   };
 }

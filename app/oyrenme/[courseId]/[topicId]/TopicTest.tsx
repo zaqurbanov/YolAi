@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Alert, Button, Chip, Radio, RadioGroup } from '@heroui/react';
 import { buttonVariants } from '@heroui/styles';
 import { Spinner } from '@/components/Spinner';
-import { CheckIcon, CloseIcon, CoinIcon, LockIcon } from '@/components/icons';
+import { CheckIcon, CloseIcon, EnergyIcon, LockIcon } from '@/components/icons';
 import {
   startTopicAttemptAction,
   submitTopicAttemptAction,
@@ -250,8 +250,8 @@ export default function TopicTest({
                     variant="outline"
                     onPress={() => setRetryOpen(true)}
                   >
-                    <CoinIcon width={15} height={15} />
-                    Təkrar cəhd al ({retryCost} coin)
+                    <EnergyIcon width={15} height={15} />
+                    Təkrar cəhd al ({retryCost} enerji)
                   </Button>
                 </div>
               )}

@@ -187,8 +187,8 @@ export default function CourseCreateForm({ nextOrderIndex, onCreated }: CourseCr
             </TextField>
 
             <TextField value={unlockPrice} onChange={setUnlockPrice} isDisabled={isFree}>
-              <Label>Qiymət (boş = qlobal standart)</Label>
-              <Input type="number" min={0} step={0.01} placeholder="standart" />
+              <Label>Enerji qiyməti (boş = qlobal standart)</Label>
+              <Input type="number" min={0} step={1} placeholder="standart" />
             </TextField>
           </div>
 

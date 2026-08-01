@@ -49,17 +49,18 @@ Yalnız giriş etmiş istifadəçilər üçün görünür: **Coin Qazan** və **
 ## Coin Qazan səhifəsi (`/coin-qazan`) — nələr var?
 
 Bu, tətbiqin ən zəngin səhifəsidir. **İki valyuta var** (`0094`-dən sonra): **coin** premium
-valyutadır və yalnız chat mesajlarına, qaraja və VIP nömrələrə xərclənir; **enerji** isə oyun
-valyutasıdır və bütün oyunlara və rəsmi imtahana gedir. Enerji heç vaxt coin-ə çevrilmir — detallar:
-`docs/PLATFORM_OVERVIEW.md` § 4.
+valyutadır və chat mesajlarına, rəsmi imtahana, qaraja və VIP nömrələrə xərclənir; **enerji** isə oyun
+valyutasıdır və bütün oyunlara gedir. Enerji coin-ə yalnız gündəlik-məhdud `energy_to_coin` yolu ilə
+çevrilir (100 → 1.5, gündəlik tavan) — detallar: `docs/PLATFORM_OVERVIEW.md` § 4.
 
-- **Gündəlik pay** — gündə bir dəfə **3 coin + 10 enerji**
+- **Gündəlik pay** — gündə bir dəfə **10 coin + 10 enerji**
 - **Gündəlik test sualı** (quiz) — düzgün cavaba görə **enerji**, səhv cavab da qeydə alınır (növbəti cəhd üçün)
 - **Reklam izləmə** — reklama baxıb **coin** qazanmaq (server tərəfindən təsdiqlənən müddət və tək-istifadəlik token ilə qorunur)
-- **Gündəlik tapşırıqlar (Daily Quests)** — enerji
+- **Gündəlik tapşırıqlar (Daily Quests)** — hər missiya tamamlananda ayrıca **enerji**; **həftəlik marafon** sandığı — **PULSUZ**, hər gün açıla bilər, 7 gün ardıcıl açan **coin** qazanır
 - **Referans (dəvət) sistemi** — dostunu dəvət et, o, ilk mesajı göndərəndə **coin** qazanırsan
 - **Həftəlik liderlik lövhəsi** kartı
 - **Oyunlar** — XO (tic-tac-toe), Çarx (Wheel), Nişan Sürəti — enerji xərcləyir və enerji qazandırır
+- **Enerji → Coin çevirici** — 100 enerji ≈ 1.5 coin, gündəlik limitlə (admin dəyişir)
 - **Virtual Qaraj** — avtomobil "tier"ləri, aktiv perklər (**coin** ilə alınır)
 - **Nömrə bazarı (Plate Market)** — VIP avtomobil nömrələri (**coin** ilə alınır)
 

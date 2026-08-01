@@ -23,8 +23,10 @@ məqsədidir və yığılan valyuta buna uyğundur. Mərhələ 1–4-ün kodu d�
 
 > ~~"coin qazanmağın yeganə yolu isə qaydaları öyrənmək, AI ilə danışmaq və test həll etməkdir"~~
 
-Yeni modeldə test həll etmək, oyun oynamaq və dərs keçmək **enerji** qazandırır, coin yox. Coin
-gəliri yalnız gündəlik pay (3) + reklam izləmədir, və gələcəkdə coin real pula satılacaq.
+Yeni modeldə oyun oynamaq və dərs keçmək **enerji** qazandırır, coin yox; rəsmi imtahan isə **coin
+sink**-dir (mükafat vermir). Coin gəliri: gündəlik pay (10) + reklam izləmə + həftəlik marafonun
+Bazar sandığı + gündəlik-məhdud enerji→coin çevirməsi (`0095`, `0096`), və gələcəkdə coin real
+pula satılacaq.
 
 **Nəticə — həll olunmamış dizayn gərginliyi:** "öyrən → maşın al" döngəsi qırılıb. İstifadəçi
 qaydaları nə qədər öyrənsə də, bu onu maşına yaxınlaşdırmır; maşın üçün ya günlərlə gözləməli, ya da
@@ -112,7 +114,7 @@ hesablanmalıdır.
 ### Mərhələ 2 — Maşın perkləri
 
 **Nə qurulur:** Hər pillənin konkret, ölçülə bilən effekti:
-- Lada 2107: XO-da +10% coin.
+- Lada 2107: XO-da +10% **enerji** mükafatı.
 - Toyota Prius: daha yüksək gündəlik enerji tavanı (daha çox oyun).
 - G-Class/Range Rover: gündəlik əlavə pulsuz AI sualları + Leaderboard-da qızılı vurğu.
 

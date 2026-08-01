@@ -101,43 +101,71 @@ ayrı valyutaya böldü:
 
 | | **Coin** — premium | **Enerji** — oyun |
 |---|---|---|
-| Xərc yerləri | Chat mesajları, qaraj maşınları, VIP nömrələr | Bütün oyunlar, rəsmi imtahan |
-| Gəlir | Gündəlik pay (3) + reklam izləmə | Gündəlik pay (10) + bütün oyun mükafatları |
+| Xərc yerləri | Chat mesajları, rəsmi imtahan, qaraj maşınları, VIP nömrələr | Bütün oyunlar |
+| Gəlir | Gündəlik pay (10) + reklam izləmə + həftəlik marafon (7-ci streak günü sandığı) + enerji→coin | Gündəlik pay (10) + bütün oyun mükafatları + missiya başına enerji |
 | Gələcək | **Real pula satılacaq** (~50 coin ≈ 20 ₼) | Satılmır |
 
-### Dəyişməz qayda: enerji HEÇ VAXT coin-ə çevrilmir
+### Qayda: enerji coin-ə çevrilə bilər — yalnız bir gündəlik-məhdud yolla (`0096`)
 
-Coin → enerji alışı qalır (indi legitim pul sink-idir). Əks istiqamət nə birbaşa, nə dolayı yolla
-mövcud olmamalıdır. Ferma döngəsini *struktur olaraq* öldürən budur — heç bir oyun artıq coin
-vermir, ona görə geri fermalayacaq bir şey yoxdur. Yeni bir oyun və ya enerji-xərcləyən yol coin
-kreditləyirsə, döngə yenidən açılır.
+Coin → enerji alışı qalır (legitim pul sink-idir). Əks istiqamət yalnız **bir** sahibin təsdiqlədiyi
+yol kimi mövcuddur: `energy_to_coin` — default **100 enerji → 1.5 coin**, hər hesaba hər Bakı
+günündə `energy_to_coin_daily_cap` (default 100 enerji) ilə məhdud, `energy_to_coin_conversions`
+cədvəlində qeydə alınır. Bu tavan enerjini xərcləyən yollardan coin çıxaran yeganə istisnadır —
+enerji→coin→enerji döngəsi ~97% itkili olduğu üçün vektor deyil; **pulsuz enerji vektordur**, onu
+bağlayan tavanı qoruyun. Yeni bir enerji-xərcləyən yol coin kreditləyirsə, döngə yenidən açılır.
 
 ### Valyuta xəritəsi
 
 | Mexanizm | Fayl | Valyuta | Qeyd |
 |---|---|---|---|
-| **Gündəlik pay (yeni)** | `lib/coins/dailyGrant.ts` | **3 coin + 10 enerji** | Baku gününə görə idempotent, atomik claim |
+| **Gündəlik hədiyyə** | `lib/coins/dailyGrant.ts` | **coin + enerji** | **Avtomatik top-up, əlavə deyil** — aşağıda ayrıca bax |
 | Gündəlik sual (quiz) | `lib/coins/quiz.ts` | enerji | Səhv cavab da qeydə alınır (attempt itir) |
 | Ardıcıllıq (streak) bonusu | miqrasiya `0064` | enerji | Mərhələlər: 3/7/14/30 gün |
-| Günlük sandıq | miqrasiya `0085` | enerji | |
+| Günlük sandıq (həftəlik marafon) | `0097` + `lib/coins/weeklyMarathon.ts` | streak günü 1-6 enerji + **streak günü 7 coin** | **PULSUZ** (missiya qapısı yoxdur); streak: 1-ci gün = ilk açma, bir gün buraxılsa → gün 1. Admin panelindən 7 günlük cədvəl dəyişir |
 | Çarx (Wheel of Fortune) | `lib/coins/wheel.ts` | enerji | Gündə bir pulsuz fırlanma |
 | XO oyunu | `lib/coins/games.ts` | enerji | Enerji xərcləyir, gündəlik qazanc tavanı var |
 | Nişan Sürəti | `lib/coins/signSpeed.ts` | enerji | Düzgün cavab başına, gündəlik tavan |
-| Günlük tapşırıqlar | miqrasiya `0081` | enerji | |
+| Günlük tapşırıqlar | miqrasiya `0081` + `0097` | enerji | Hər missiya ayrıca enerji verir (`daily_mission_reward`), missiya başına claim |
 | **Reklam izləmə** | `lib/coins/adWatch.ts` | **coin** | Server nonce + server saatı yoxlanışı |
 | **Dost dəvəti (referral)** | `lib/coins/referrals.ts` | **coin** | Yalnız real istifadədə ödəyir; 30 günlük tavan; məbləğ 5 → 2 azaldılıb |
 | Push bildiriş aktivləşdirmə | `lib/coins/pushNotifications.ts` | coin | Bir dəfəlik |
-| Rəsmi imtahan girişi | `lib/exam/examPricing.ts` | **yalnız enerji** | Coin yolu tam silinib |
+| Rəsmi imtahan girişi | `lib/exam/examPricing.ts` | **yalnız coin** | Enerji yolu tam silinib (default 5 coin) |
 | Qaraj / VIP nömrə | `0083`, `0084` | **coin** | Uzunmüddətli status məqsədi |
 | Coin transferi | `lib/coins/transfers.ts` | coin | Min hesab yaşı + gündəlik qəbul tavanı |
-| Coin → enerji alışı | miqrasiya `0072` | coin sink | Tək istiqamətli, əksi yoxdur |
+| Kurs açma / təkrar cəhd | `0098` + `lib/coins/lessonUnlock.ts` | **enerji sink** | `unlock_lesson_course` / `purchase_lesson_retry` — yalnız `user_energy` debit edir, heç vaxt `user_coins` yazmır |
+| Coin → enerji alışı | miqrasiya `0072` | coin sink | `purchase_energy` |
+| **Enerji → coin çevirmə** | `0096` + `lib/coins/energyToCoin.ts` | **coin** | 100 → 1.5, gündəlik limit, `energy_to_coin_conversions` |
+
+### Gündəlik hədiyyə: top-up, əlavə deyil
+
+Gündə bir dəfə (Bakı günü) balans konfiqurasiya olunmuş **döşəməyə qaldırılır** — üstünə əlavə
+edilmir və heç vaxt azaldılmır:
+
+- balans < döşəmə → döşəməyə qaldırılır
+- balans ≥ döşəmə → **heç nə verilmir**
+
+Məsələn coin döşəməsi 3-dürsə: 2 coin → 3 olur; 6 coin → 6 qalır, heç nə əlavə olunmur.
+
+**Claim düyməsi yoxdur** — `applyDailyGrant()` günün ilk server oxunuşunda avtomatik işləyir
+(`checkAndReserveCoins`, `getCoinBalanceStatus`, `/coin-qazan`).
+
+🚨 **`balans < döşəmə` tək başına kifayət DEYİL.** Qapı `daily_grant_claims` cədvəlindəki gün
+sətridir. Əks halda istifadəçi 3 coin alır, chat-a xərcləyib 0-a düşür, növbəti oxunuş `0 < 3`
+görüb yenidən doldurur — sonsuz coin. Rəqabət `unique(user_id, grant_date)` indeksi ilə həll
+olunur: ikinci yazan birincinin commit olunmamış sətrində **bloklanır**, "sətir yoxdur" görmür.
+Enerji tərəfin öz markeri var (`user_energy.last_grant_date`).
+
+**İki döşəmə açarı:** `daily_coin_grant` (coin, default 10) və `game_daily_energy` (enerji,
+default 10). Əvvəlki əlavə `daily_grant_coins` açarı ləğv olundu — iki müstəqil gündəlik coin payı
+məhz üst-üstə düşmə problemini yaradırdı.
 
 ### Məhdud gündəlik gəlir (defolt dəyərlərlə, istifadəçi başına)
 
-- **Enerji: ən pis halda 144/gün**, adi (mərhələsiz) gündə 69. Oyunlar mahir oyunçu üçün net müsbət
-  ola bilər — bu **yalnız ona görə təhlükəsizdir ki, hər oyunun server tərəfdə məcburi gündəlik
-  qazanc tavanı var.** Tavansız yeni oyun bu həddi pozar.
-- **Coin: təkrarlanan 13–18/gün** — 10 köhnə top-up + 3 gündəlik pay + 5 reklam.
+- **Enerji: ən pis halda 144/gün**, adi (mərhələsiz) gündə 69. Döşəmə ən çox 10 verir (yalnız
+  boşalmış balansa), qalanı oyun mükafatlarıdır və onlar əlavə olunur. Oyunlar mahir oyunçu üçün
+  net müsbət ola bilər — bu **yalnız ona görə təhlükəsizdir ki, hər oyunun server tərəfdə məcburi
+  gündəlik qazanc tavanı var.** Tavansız yeni oyun bu həddi pozar.
+- **Coin: ən çox 15/gün** — döşəmə 10 (yalnız balans 0-a düşübsə) + reklam 5.
 
 **Bütün məbləğlər `app_settings`-dədir**, TS tərəfdə default ilə — miqrasiya olmadan tənzimlənə bilir.
 
@@ -147,14 +175,15 @@ server-tərəfli təsdiqlənir** — heç bir server action client-in göndərdi
 bayrağını qəbul etmir, hamısı `app_settings`-dən server-side oxunur. Coin pula bərabər olduğuna görə
 bu qayda artıq daha ciddidir: pulsuz coin verən istənilən yeni yol birbaşa gəlir itkisidir.
 
-### Açıq qərarlar (sahibin qərarı, hələ verilməyib)
+### Açıq qərarlar
 
-1. **`daily_coin_grant` (köhnə pulsuz top-up, default 10)** yeni 3-coin-lik payla üst-üstə düşür və
-   coin qıtlığını mənasızlaşdırır. `0094` `getGlobalDailyCoinGrant()`-ı `0` qəbul edəcək şəkildə
-   dəyişdi (əvvəl rədd edirdi), yəni indi söndürmək **mümkündür**. `0` etmək eyni zamanda pulsuz
-   chat payını da silir.
+1. ✅ **Həll olundu.** İki üst-üstə düşən gündəlik coin payı bir mexanizmə birləşdirildi:
+   `daily_coin_grant` qaldı, əlavə `daily_grant_coins` ləğv olundu. **Defolt hələ 10-dur** — sahib
+   admin panelindən istədiyi rəqəmi (məsələn 3) təyin edə bilər. `0` da qəbul olunur (əvvəl rədd
+   edilirdi), amma `0` etmək pulsuz chat payını tamamilə silir.
 2. **Köhnə balanslar qəsdən silinməyib/çevrilməyib** — 10–20 coin/gün dövründə qazanılmış balans
-   yeni qıtlıq şəraitində xeyli dəyərlidir.
+   yeni qıtlıq şəraitində xeyli dəyərlidir. Top-up semantikası bunu daha da vacib edir: döşəmədən
+   yuxarı balans heç vaxt azaldılmır, yəni köhnə yığım qalır.
 
 ---
 
@@ -188,11 +217,12 @@ etibar edilmir.
 - `lib/lessons/` — kurs strukturu (`courses.ts`), AI ilə mövzu təklifi (`aiProposeTopics.ts`,
   `proposeTopics.ts`), mövzu məzmununun AI ilə generasiyası (`generateTopicContent.ts`), böyük
   mövzuların bölünməsi (`splitTopic.ts`).
-- `lib/coins/lessonUnlock.ts` / `lessonQuiz.ts` — kursun açılması (unlock) və testin nəticəsinə görə
-  coin/irəliləyiş.
+- `lib/coins/lessonUnlock.ts` / `lessonQuiz.ts` — kursun açılması (unlock) və mövzu testinin təkrar
+  cəhdi. **`0098`-dən bəri hər ikisi ENERJİ ilə ödənilir** (`user_energy`), coin-lə deyil — RPC-lər
+  enerji debiti edir və heç vaxt `user_coins` yazmır. Qiymətlər tam ədəddir (`round(p_price)::int`).
 - `lib/quiz/topicTest.ts`, `lessons.ts` — mövzu sonu testlərinin sual bankı və qiymətləndirməsi.
-- İrəliləyiş izlənilir, istifadəçi hər mövzunu bitirdikcə növbəti kursun açılması coin/test nəticəsi
-  ilə şərtlənə bilər.
+- İrəliləyiş izlənilir, istifadəçi hər mövzunu bitirdikcə növbəti kursun/mövzunun açılması ödənişli
+  kursda enerji ilə (unlock), pulsuz kursda test nəticəsi ilə şərtlənir.
 
 ---
 

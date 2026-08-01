@@ -62,14 +62,35 @@ import {
   DEFAULT_ENERGY_PURCHASE_ENERGY_AMOUNT,
   ENERGY_PURCHASE_MAX_BALANCE_KEY,
   DEFAULT_ENERGY_PURCHASE_MAX_BALANCE,
+  ENERGY_PURCHASE_MAX_MULTIPLIER_KEY,
+  DEFAULT_ENERGY_PURCHASE_MAX_MULTIPLIER,
   TICTACTOE_WIN_REWARD_KEY,
   DEFAULT_TICTACTOE_WIN_REWARD,
+  GAME_DAILY_ENERGY_KEY,
+  DEFAULT_GAME_DAILY_ENERGY,
+  GAME_ENERGY_COST_KEY,
+  DEFAULT_GAME_ENERGY_COST,
+  TICTACTOE_DAILY_WIN_CAP_KEY,
+  DEFAULT_TICTACTOE_DAILY_WIN_CAP,
 } from '@/lib/coins/games';
+import {
+  ENERGY_TO_COIN_ENERGY_UNIT_KEY,
+  DEFAULT_ENERGY_TO_COIN_ENERGY_UNIT,
+  ENERGY_TO_COIN_COIN_RATE_KEY,
+  DEFAULT_ENERGY_TO_COIN_COIN_RATE,
+  ENERGY_TO_COIN_DAILY_CAP_KEY,
+  DEFAULT_ENERGY_TO_COIN_DAILY_CAP,
+} from '@/lib/coins/energyToCoin';
+import { EXAM_COIN_PRICE_KEY, DEFAULT_EXAM_COIN_PRICE } from '@/lib/exam/examPricing';
 import { DAILY_CHEST_REWARD_KEY, DEFAULT_DAILY_CHEST_REWARD } from '@/lib/coins/dailyQuests';
 import { QUIZ_REWARD_KEY, DEFAULT_QUIZ_REWARD } from '@/lib/coins/quiz';
 import {
   SIGN_SPEED_PER_CORRECT_REWARD_KEY,
   DEFAULT_SIGN_SPEED_PER_CORRECT_REWARD,
+  SIGN_SPEED_DAILY_REWARD_CAP_KEY,
+  DEFAULT_SIGN_SPEED_DAILY_REWARD_CAP,
+  SIGN_SPEED_ENERGY_COST_KEY,
+  DEFAULT_SIGN_SPEED_ENERGY_COST,
 } from '@/lib/coins/signSpeed';
 import type { CarTier } from '@/lib/garage/carTiers';
 import {
@@ -82,6 +103,13 @@ import {
 } from '@/lib/garage/perks';
 import { VIP_PLATE_PRICE_KEY, DEFAULT_VIP_PLATE_PRICE } from '@/lib/garage/plates';
 import { WHEEL_PRIZES_KEY, getWheelPrizes, type WheelPrize } from '@/lib/coins/wheel';
+import {
+  WEEKLY_MARATHON_REWARDS_KEY,
+  DEFAULT_WEEKLY_MARATHON_SCHEDULE,
+  DAILY_MISSION_REWARD_KEY,
+  DEFAULT_DAILY_MISSION_REWARD,
+  type WeeklyMarathonSlot,
+} from '@/lib/coins/weeklyMarathon';
 import { bakuTodayDate } from '@/lib/date/baku';
 
 // Inherited from the folded-in documents/quiz-questions routes: PDF ingestion
@@ -138,10 +166,15 @@ const ASSIGNABLE_ROLES = new Set(['admin', 'user']);
 // (e.g. 0.5 grant) — bounds chosen only to reject fat-fingered input.
 const MAX_ALLOWED_DAILY_COIN_LIMIT = 100000;
 const MAX_ALLOWED_COIN_GRANT = 100000;
+const MAX_ALLOWED_ENERGY_GRANT = 100000;
 
 // Daily chest reward is a per-quest-completion coin amount, not a daily
 // aggregate limit — a much lower sane ceiling than MAX_ALLOWED applies.
 const MAX_ALLOWED_CHEST_REWARD = 1000;
+
+// Weekly-marathon slot reward is a per-day chest payout, not an aggregate —
+// same rationale as MAX_ALLOWED_CHEST_REWARD above.
+const MAX_ALLOWED_MARATHON_REWARD = 1000;
 
 // Daily quiz reward is a per-answer coin amount, not an aggregate — same
 // rationale as MAX_ALLOWED_CHEST_REWARD above.
@@ -271,9 +304,51 @@ const ENERGY_ECONOMY_FIELDS = [
     min: 1,
     max: 100000,
   },
+  {
+    param: 'energyPurchaseMaxMultiplier',
+    key: ENERGY_PURCHASE_MAX_MULTIPLIER_KEY,
+    defaultValue: DEFAULT_ENERGY_PURCHASE_MAX_MULTIPLIER,
+    integerOnly: true,
+    min: 1,
+    max: 100,
+  },
 ] as const;
 
 const ENERGY_ECONOMY_KEYS = ENERGY_ECONOMY_FIELDS.map((f) => f.key);
+
+// The energy -> COIN conversion tunables (0096_energy_to_coin.sql), exposed
+// through their own `?type=energy-to-coin` group — same field/validation/response
+// shape as the groups above. These are the ONLY three numbers that control the
+// single owner-sanctioned energy->coin path; the daily cap is the real bound
+// against the free-account abuse model (see the migration's header).
+const ENERGY_TO_COIN_FIELDS = [
+  {
+    param: 'energyUnit',
+    key: ENERGY_TO_COIN_ENERGY_UNIT_KEY,
+    defaultValue: DEFAULT_ENERGY_TO_COIN_ENERGY_UNIT,
+    integerOnly: true,
+    min: 1,
+    max: 10000,
+  },
+  {
+    param: 'coinRate',
+    key: ENERGY_TO_COIN_COIN_RATE_KEY,
+    defaultValue: DEFAULT_ENERGY_TO_COIN_COIN_RATE,
+    integerOnly: false,
+    min: 0.01,
+    max: 1000,
+  },
+  {
+    param: 'dailyCap',
+    key: ENERGY_TO_COIN_DAILY_CAP_KEY,
+    defaultValue: DEFAULT_ENERGY_TO_COIN_DAILY_CAP,
+    integerOnly: true,
+    min: 1,
+    max: 10000,
+  },
+] as const;
+
+const ENERGY_TO_COIN_KEYS = ENERGY_TO_COIN_FIELDS.map((f) => f.key);
 
 // Per-game coin rewards, exposed through their own `?type=game-rewards`
 // group — the XO (tic-tac-toe) win reward and the Nişan Sürəti per-correct
@@ -299,6 +374,73 @@ const GAME_REWARD_FIELDS = [
 ] as const;
 
 const GAME_REWARD_KEYS = GAME_REWARD_FIELDS.map((f) => f.key);
+
+// The energy FLOOR / per-day CAPS / round PRICES that previously had no admin
+// surface at all (SQL-only), exposed through their own `?type=energy-tuning`
+// group — same field/validation/response shape as the groups above.
+//
+// energyPurchaseMaxBalance is deliberately NOT duplicated here: it already
+// lives in `?type=energy-economy`, and two writers for one app_settings key
+// would let the admin UI show two different "current" values.
+//
+// The three PRICE fields allow min 0 — free play / free exam entry is a real
+// configuration the owner may want, and lib/coins/games.ts +
+// lib/coins/signSpeed.ts now read prices with allowZero so the stored 0 is
+// honoured instead of silently falling back to 1. The floor/cap fields keep
+// min 1, where 0 would just disable the feature by accident.
+const ENERGY_TUNING_FIELDS = [
+  {
+    param: 'gameDailyEnergy',
+    key: GAME_DAILY_ENERGY_KEY,
+    defaultValue: DEFAULT_GAME_DAILY_ENERGY,
+    integerOnly: true,
+    min: 1,
+    max: 100000,
+  },
+  {
+    param: 'gameEnergyCost',
+    key: GAME_ENERGY_COST_KEY,
+    defaultValue: DEFAULT_GAME_ENERGY_COST,
+    integerOnly: true,
+    min: 0,
+    max: 1000,
+  },
+  {
+    param: 'tictactoeDailyWinCap',
+    key: TICTACTOE_DAILY_WIN_CAP_KEY,
+    defaultValue: DEFAULT_TICTACTOE_DAILY_WIN_CAP,
+    integerOnly: true,
+    min: 1,
+    max: 1000,
+  },
+  {
+    param: 'signSpeedEnergyCost',
+    key: SIGN_SPEED_ENERGY_COST_KEY,
+    defaultValue: DEFAULT_SIGN_SPEED_ENERGY_COST,
+    integerOnly: true,
+    min: 0,
+    max: 1000,
+  },
+  {
+    param: 'signSpeedDailyRewardCap',
+    key: SIGN_SPEED_DAILY_REWARD_CAP_KEY,
+    defaultValue: DEFAULT_SIGN_SPEED_DAILY_REWARD_CAP,
+    integerOnly: false,
+    min: 1,
+    max: MAX_ALLOWED_PRICE,
+  },
+  {
+    // COIN, not energy — the exam is the premium currency's third sink.
+    param: 'examCoinPrice',
+    key: EXAM_COIN_PRICE_KEY,
+    defaultValue: DEFAULT_EXAM_COIN_PRICE,
+    integerOnly: false,
+    min: 0,
+    max: MAX_ALLOWED_PRICE,
+  },
+] as const;
+
+const ENERGY_TUNING_KEYS = ENERGY_TUNING_FIELDS.map((f) => f.key);
 
 // Virtual Qaraj Phase 2 (Mərhələ 2) per-tier perk tunables, exposed through
 // their own `?type=garage-perks` group — same shared field/validation/response
@@ -370,6 +512,21 @@ type BusyPhraseStage = (typeof BUSY_PHRASE_STAGES)[number];
 
 function isBusyPhraseStage(value: unknown): value is BusyPhraseStage {
   return typeof value === 'string' && (BUSY_PHRASE_STAGES as readonly string[]).includes(value);
+}
+
+// Weekly-marathon schedule validation — all-or-nothing: exactly 7 slots, each
+// with type ∈ {'energy','coins'} and a finite amount > 0. A single bad entry
+// invalidates the WHOLE schedule (the claim path falls back to the TS default,
+// so a partially-bad table value must never be half-applied). Mirrors
+// lib/coins/weeklyMarathon.ts's rule.
+function isValidWeeklyMarathonSchedule(value: unknown): value is WeeklyMarathonSlot[] {
+  if (!Array.isArray(value) || value.length !== 7) return false;
+  return value.every((entry) => {
+    if (typeof entry !== 'object' || entry === null) return false;
+    const type = (entry as Record<string, unknown>).type;
+    const amount = (entry as Record<string, unknown>).amount;
+    return (type === 'energy' || type === 'coins') && typeof amount === 'number' && Number.isFinite(amount) && amount > 0;
+  });
 }
 
 export async function GET(request: NextRequest) {
@@ -723,6 +880,24 @@ export async function GET(request: NextRequest) {
     });
   }
 
+  if (type === 'daily-mission-reward') {
+    const { data, error } = await createAdminClient()
+      .from('app_settings')
+      .select('value')
+      .eq('key', DAILY_MISSION_REWARD_KEY)
+      .maybeSingle();
+
+    if (error) return serverError(error, 'Ayarları oxumaq uğursuz oldu');
+
+    const tableValue = data ? Number(data.value) : null;
+    const isTableConfigured = tableValue !== null && Number.isFinite(tableValue) && tableValue > 0;
+
+    return NextResponse.json({
+      dailyMissionReward: isTableConfigured ? tableValue : DEFAULT_DAILY_MISSION_REWARD,
+      source: isTableConfigured ? 'table' : 'default',
+    });
+  }
+
   if (type === 'daily-quiz-reward') {
     const { data, error } = await createAdminClient()
       .from('app_settings')
@@ -800,6 +975,39 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ settings });
   }
 
+  if (type === 'energy-to-coin') {
+    const { data, error } = await createAdminClient()
+      .from('app_settings')
+      .select('key, value')
+      .in('key', ENERGY_TO_COIN_KEYS);
+
+    if (error) return serverError(error, 'Ayarları oxumaq uğursuz oldu');
+
+    const byKey = new Map((data ?? []).map((row) => [row.key, row.value]));
+
+    // Flat { energyUnit, coinRate, dailyCap } config (unlike the per-field
+    // value/source objects the other groups return) plus a single source: the
+    // frontend just needs the effective numbers and whether any is overridden.
+    const config = Object.fromEntries(
+      ENERGY_TO_COIN_FIELDS.map((field) => {
+        const raw = byKey.get(field.key);
+        const value = raw === undefined || raw === null ? null : Number(raw);
+        const isConfigured = value !== null && isValidLessonEconomyValue(field, value);
+        return [field.param, isConfigured ? value : field.defaultValue];
+      })
+    ) as { energyUnit: number; coinRate: number; dailyCap: number };
+
+    const source = ENERGY_TO_COIN_FIELDS.some((field) => {
+      const raw = byKey.get(field.key);
+      const value = raw === undefined || raw === null ? null : Number(raw);
+      return value !== null && isValidLessonEconomyValue(field, value);
+    })
+      ? 'table'
+      : 'default';
+
+    return NextResponse.json({ config, source });
+  }
+
   if (type === 'game-rewards') {
     const { data, error } = await createAdminClient()
       .from('app_settings')
@@ -812,6 +1020,34 @@ export async function GET(request: NextRequest) {
 
     const settings = Object.fromEntries(
       GAME_REWARD_FIELDS.map((field) => {
+        const raw = byKey.get(field.key);
+        const value = raw === undefined || raw === null ? null : Number(raw);
+        const isConfigured = value !== null && isValidLessonEconomyValue(field, value);
+        return [
+          field.param,
+          {
+            value: isConfigured ? value : field.defaultValue,
+            source: isConfigured ? 'table' : 'default',
+          },
+        ];
+      })
+    );
+
+    return NextResponse.json({ settings });
+  }
+
+  if (type === 'energy-tuning') {
+    const { data, error } = await createAdminClient()
+      .from('app_settings')
+      .select('key, value')
+      .in('key', ENERGY_TUNING_KEYS);
+
+    if (error) return serverError(error, 'Ayarları oxumaq uğursuz oldu');
+
+    const byKey = new Map((data ?? []).map((row) => [row.key, row.value]));
+
+    const settings = Object.fromEntries(
+      ENERGY_TUNING_FIELDS.map((field) => {
         const raw = byKey.get(field.key);
         const value = raw === undefined || raw === null ? null : Number(raw);
         const isConfigured = value !== null && isValidLessonEconomyValue(field, value);
@@ -916,6 +1152,30 @@ export async function GET(request: NextRequest) {
   if (type === 'wheel-prizes') {
     const prizes = await getWheelPrizes();
     return NextResponse.json({ prizes });
+  }
+
+  // Heftəlik marafon — the 7-slot chest schedule, STREAK-DAY-indexed since
+  // 0097 (index 0 = streak day 1 .. index 6 = streak day 7 = COINS; no longer
+  // weekday-anchored). Read directly (not just getWeeklyMarathonSchedule) so
+  // we can report whether the table value is actually configured ('table') or
+  // the TS default is in effect ('default') — same source convention as
+  // daily-chest-reward above. Fail-open on an invalid shape: the default is
+  // what the claim path will actually resolve, so showing it here is honest.
+  if (type === 'weekly-marathon') {
+    const { data, error } = await createAdminClient()
+      .from('app_settings')
+      .select('value')
+      .eq('key', WEEKLY_MARATHON_REWARDS_KEY)
+      .maybeSingle();
+
+    if (error) return serverError(error, 'Ayarları oxumaq uğursuz oldu');
+
+    const raw = data?.value;
+    const isValid = isValidWeeklyMarathonSchedule(raw);
+    return NextResponse.json({
+      schedule: isValid ? (raw as WeeklyMarathonSlot[]) : DEFAULT_WEEKLY_MARATHON_SCHEDULE,
+      source: isValid ? 'table' : 'default',
+    });
   }
 
   // Moderation list of all custom (paid) plates, with the owning user's
@@ -1343,6 +1603,38 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ dailyChestReward, source: 'table' });
   }
 
+  if (type === 'daily-mission-reward') {
+    const body = await request.json().catch(() => null);
+    const dailyMissionReward = body?.dailyMissionReward;
+
+    if (
+      dailyMissionReward !== null &&
+      dailyMissionReward !== undefined &&
+      (typeof dailyMissionReward !== 'number' ||
+        !Number.isInteger(dailyMissionReward) ||
+        dailyMissionReward <= 0 ||
+        dailyMissionReward > MAX_ALLOWED_CHEST_REWARD)
+    ) {
+      return apiError(400, `dailyMissionReward null və ya 1-${MAX_ALLOWED_CHEST_REWARD} arasında tam ədəd olmalıdır`);
+    }
+
+    const admin = createAdminClient();
+
+    if (dailyMissionReward === null || dailyMissionReward === undefined) {
+      const { error } = await admin.from('app_settings').delete().eq('key', DAILY_MISSION_REWARD_KEY);
+      if (error) return serverError(error, 'Ayarı sıfırlamaq uğursuz oldu');
+      return NextResponse.json({ dailyMissionReward: DEFAULT_DAILY_MISSION_REWARD, source: 'default' });
+    }
+
+    const { error } = await admin
+      .from('app_settings')
+      .upsert({ key: DAILY_MISSION_REWARD_KEY, value: dailyMissionReward, updated_at: new Date().toISOString() });
+
+    if (error) return serverError(error, 'Ayarı yeniləmək uğursuz oldu');
+
+    return NextResponse.json({ dailyMissionReward, source: 'table' });
+  }
+
   if (type === 'daily-quiz-reward') {
     const body = await request.json().catch(() => null);
     const dailyQuizReward = body?.dailyQuizReward;
@@ -1513,6 +1805,75 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ settings });
   }
 
+  if (type === 'energy-to-coin') {
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== 'object') return apiError(400, 'Gövdə düzgün deyil');
+
+    // Partial update, all-or-nothing validation, null-resets-to-default — same
+    // convention as lesson-economy above.
+    const present = ENERGY_TO_COIN_FIELDS.filter((f) => body[f.param] !== undefined);
+
+    if (present.length === 0) {
+      return apiError(400, `Yeniləmək üçün heç olmasa bir sahə tələb olunur: ${ENERGY_TO_COIN_FIELDS.map((f) => f.param).join(', ')}`);
+    }
+
+    for (const field of present) {
+      const value = body[field.param];
+      if (value === null) continue;
+      if (typeof value !== 'number' || !isValidLessonEconomyValue(field, value)) {
+        return apiError(
+          400,
+          `${field.param} null və ya ${field.min}-${field.max} arasında ${field.integerOnly ? 'tam ' : ''}ədəd olmalıdır`
+        );
+      }
+    }
+
+    const admin = createAdminClient();
+
+    for (const field of present) {
+      const value = body[field.param];
+
+      if (value === null) {
+        const { error } = await admin.from('app_settings').delete().eq('key', field.key);
+        if (error) return serverError(error, 'Ayarı sıfırlamaq uğursuz oldu');
+        continue;
+      }
+
+      const { error } = await admin
+        .from('app_settings')
+        .upsert({ key: field.key, value, updated_at: new Date().toISOString() });
+      if (error) return serverError(error, 'Ayarı yeniləmək uğursuz oldu');
+    }
+
+    const { data, error } = await admin
+      .from('app_settings')
+      .select('key, value')
+      .in('key', ENERGY_TO_COIN_KEYS);
+
+    if (error) return serverError(error, 'Ayarları oxumaq uğursuz oldu');
+
+    const byKey = new Map((data ?? []).map((row) => [row.key, row.value]));
+
+    const config = Object.fromEntries(
+      ENERGY_TO_COIN_FIELDS.map((field) => {
+        const raw = byKey.get(field.key);
+        const numeric = raw === undefined || raw === null ? null : Number(raw);
+        const isConfigured = numeric !== null && isValidLessonEconomyValue(field, numeric);
+        return [field.param, isConfigured ? numeric : field.defaultValue];
+      })
+    ) as { energyUnit: number; coinRate: number; dailyCap: number };
+
+    const source = ENERGY_TO_COIN_FIELDS.some((field) => {
+      const raw = byKey.get(field.key);
+      const value = raw === undefined || raw === null ? null : Number(raw);
+      return value !== null && isValidLessonEconomyValue(field, value);
+    })
+      ? 'table'
+      : 'default';
+
+    return NextResponse.json({ config, source });
+  }
+
   if (type === 'game-rewards') {
     const body = await request.json().catch(() => null);
     if (!body || typeof body !== 'object') return apiError(400, 'Gövdə düzgün deyil');
@@ -1564,6 +1925,73 @@ export async function PATCH(request: NextRequest) {
 
     const settings = Object.fromEntries(
       GAME_REWARD_FIELDS.map((field) => {
+        const raw = byKey.get(field.key);
+        const numeric = raw === undefined || raw === null ? null : Number(raw);
+        const isConfigured = numeric !== null && isValidLessonEconomyValue(field, numeric);
+        return [
+          field.param,
+          {
+            value: isConfigured ? numeric : field.defaultValue,
+            source: isConfigured ? 'table' : 'default',
+          },
+        ];
+      })
+    );
+
+    return NextResponse.json({ settings });
+  }
+
+  if (type === 'energy-tuning') {
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== 'object') return apiError(400, 'Gövdə düzgün deyil');
+
+    // Partial update, all-or-nothing validation, null-resets-to-default — same
+    // convention as game-rewards above.
+    const present = ENERGY_TUNING_FIELDS.filter((f) => body[f.param] !== undefined);
+
+    if (present.length === 0) {
+      return apiError(400, `Yeniləmək üçün heç olmasa bir sahə tələb olunur: ${ENERGY_TUNING_FIELDS.map((f) => f.param).join(', ')}`);
+    }
+
+    for (const field of present) {
+      const value = body[field.param];
+      if (value === null) continue;
+      if (typeof value !== 'number' || !isValidLessonEconomyValue(field, value)) {
+        return apiError(
+          400,
+          `${field.param} null və ya ${field.min}-${field.max} arasında ${field.integerOnly ? 'tam ' : ''}ədəd olmalıdır`
+        );
+      }
+    }
+
+    const admin = createAdminClient();
+
+    for (const field of present) {
+      const value = body[field.param];
+
+      if (value === null) {
+        const { error } = await admin.from('app_settings').delete().eq('key', field.key);
+        if (error) return serverError(error, 'Ayarı sıfırlamaq uğursuz oldu');
+        continue;
+      }
+
+      const { error } = await admin
+        .from('app_settings')
+        .upsert({ key: field.key, value, updated_at: new Date().toISOString() });
+      if (error) return serverError(error, 'Ayarı yeniləmək uğursuz oldu');
+    }
+
+    const { data, error } = await admin
+      .from('app_settings')
+      .select('key, value')
+      .in('key', ENERGY_TUNING_KEYS);
+
+    if (error) return serverError(error, 'Ayarları oxumaq uğursuz oldu');
+
+    const byKey = new Map((data ?? []).map((row) => [row.key, row.value]));
+
+    const settings = Object.fromEntries(
+      ENERGY_TUNING_FIELDS.map((field) => {
         const raw = byKey.get(field.key);
         const numeric = raw === undefined || raw === null ? null : Number(raw);
         const isConfigured = numeric !== null && isValidLessonEconomyValue(field, numeric);
@@ -1757,6 +2185,49 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ prizes: parsed });
   }
 
+  // Heftəlik marafon — replaces all 7 chest slots at once (type + amount per
+  // slot). Slots are STREAK-DAY-indexed since 0097 (index 0 = streak day 1 ..
+  // index 6 = streak day 7 = COINS; no longer weekday-anchored) — the code
+  // shape is unchanged: still exactly 7 slots, type+amount, all-or-nothing.
+  // The ENTIRE array is validated before anything is written, so a bad slot
+  // can never leave a half-applied cycle that would pay the wrong currency on
+  // some days. Amounts are integer-only and bounded by MAX_ALLOWED_MARATHON_REWARD.
+  if (type === 'weekly-marathon') {
+    const body = await request.json().catch(() => null);
+    const schedule = body?.schedule;
+
+    if (!Array.isArray(schedule) || schedule.length !== 7) {
+      return apiError(400, 'schedule tam olaraq 7 element olan massiv olmalıdır');
+    }
+
+    const parsed: WeeklyMarathonSlot[] = [];
+    for (const entry of schedule) {
+      const type = entry?.type;
+      const amount = entry?.amount;
+      if (type !== 'energy' && type !== 'coins') {
+        return apiError(400, 'Hər slotun type sahəsi "energy" və ya "coins" olmalıdır');
+      }
+      if (
+        typeof amount !== 'number' ||
+        !Number.isInteger(amount) ||
+        amount < 1 ||
+        amount > MAX_ALLOWED_MARATHON_REWARD
+      ) {
+        return apiError(400, `Hər slotun amount sahəsi 1-${MAX_ALLOWED_MARATHON_REWARD} arasında tam ədəd olmalıdır`);
+      }
+      parsed.push({ type, amount });
+    }
+
+    const admin = createAdminClient();
+    const { error } = await admin
+      .from('app_settings')
+      .upsert({ key: WEEKLY_MARATHON_REWARDS_KEY, value: parsed, updated_at: new Date().toISOString() });
+
+    if (error) return serverError(error, 'Ayarı yeniləmək uğursuz oldu');
+
+    return NextResponse.json({ schedule: parsed, source: 'table' });
+  }
+
   if (type === 'category-content') {
     const body = await request.json().catch(() => null);
     const incoming = body?.overrides;
@@ -1834,9 +2305,10 @@ export async function PATCH(request: NextRequest) {
     const hasRole = body?.role !== undefined;
     const hasDailyCoinLimit = body?.dailyCoinLimit !== undefined;
     const hasGrantCoins = body?.grantCoins !== undefined;
+    const hasGrantEnergy = body?.grantEnergy !== undefined;
 
-    if (!hasRole && !hasDailyCoinLimit && !hasGrantCoins) {
-      return apiError(400, 'role, dailyCoinLimit və ya grantCoins göndərilməlidir');
+    if (!hasRole && !hasDailyCoinLimit && !hasGrantCoins && !hasGrantEnergy) {
+      return apiError(400, 'role, dailyCoinLimit, grantCoins və ya grantEnergy göndərilməlidir');
     }
 
     // dailyCoinLimit/grantCoins are handled separately below (they write to
@@ -1861,6 +2333,13 @@ export async function PATCH(request: NextRequest) {
       const grantCoins = body.grantCoins;
       if (typeof grantCoins !== 'number' || !Number.isFinite(grantCoins) || grantCoins === 0 || Math.abs(grantCoins) > MAX_ALLOWED_COIN_GRANT) {
         return apiError(400, `grantCoins sıfırdan fərqli, mütləq dəyəri ${MAX_ALLOWED_COIN_GRANT}-dən az ədəd olmalıdır`);
+      }
+    }
+
+    if (hasGrantEnergy) {
+      const grantEnergy = body.grantEnergy;
+      if (typeof grantEnergy !== 'number' || !Number.isInteger(grantEnergy) || grantEnergy === 0 || Math.abs(grantEnergy) > MAX_ALLOWED_ENERGY_GRANT) {
+        return apiError(400, `grantEnergy sıfırdan fərqli, mütləq dəyəri ${MAX_ALLOWED_ENERGY_GRANT}-dən az tam ədəd olmalıdır`);
       }
     }
 
@@ -1954,7 +2433,48 @@ export async function PATCH(request: NextRequest) {
       coins = coinRow ?? null;
     }
 
-    return NextResponse.json({ profile, coins });
+    // user_energy is RLS select-own only (0067), so like user_coins above the
+    // service-role client is mandatory — legitimate only because requireAdmin()
+    // has already gated this whole handler.
+    let energy: { balance: number } | null = null;
+    if (hasGrantEnergy) {
+      const admin = createAdminClient();
+      const grantEnergy = body.grantEnergy;
+      if (grantEnergy > 0) {
+        // credit_energy (0094) is the sanctioned energy-credit path:
+        // insert-if-missing + balance += greatest(0, round(amount)); service-role-only.
+        const { error } = await admin.rpc('credit_energy', { p_user_id: id, p_amount: grantEnergy });
+        if (error) return serverError(error, 'Enerji hədiyyə etmək uğursuz oldu');
+      } else {
+        // credit_energy clamps negatives to 0, so subtraction is a direct
+        // service-role update: read current, clamp at 0 in JS, write back.
+        // No row -> effective balance 0, subtraction is a silent no-op (correct).
+        const { data: current, error: readError } = await admin
+          .from('user_energy')
+          .select('balance')
+          .eq('user_id', id)
+          .maybeSingle();
+        if (readError) return serverError(readError, 'Enerji balansını oxumaq uğursuz oldu');
+        if (current) {
+          const newBalance = Math.max(0, Number(current.balance) + grantEnergy);
+          const { error: updateError } = await admin
+            .from('user_energy')
+            .update({ balance: newBalance })
+            .eq('user_id', id);
+          if (updateError) return serverError(updateError, 'Enerji çıxartmaq uğursuz oldu');
+        }
+      }
+      // Read the fresh balance for the response (works for both branches).
+      const { data: energyRow, error: energyReadError } = await admin
+        .from('user_energy')
+        .select('balance')
+        .eq('user_id', id)
+        .maybeSingle();
+      if (energyReadError) return serverError(energyReadError, 'Enerji məlumatını oxumaq uğursuz oldu');
+      energy = energyRow ? { balance: Number(energyRow.balance) } : null;
+    }
+
+    return NextResponse.json({ profile, coins, energy });
   }
 
   // Global daily LLM circuit breaker cap (0093). Mirrors the rate-limit branch

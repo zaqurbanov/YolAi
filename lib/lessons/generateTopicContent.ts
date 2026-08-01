@@ -103,8 +103,8 @@ export type GeneratedTopicContent = z.infer<typeof readingContentSchema>;
 
 // OUTPUT FORMAT: a restricted Markdown subset — `##`/`###` headings, `-`
 // bullets, `**bold**`, `>` blockquote, blank-line-separated paragraphs. No
-// tables, no HTML, no code fences, no images. The learner-side topic reader
-// does not exist yet (Phase 2), so this is the contract it must render; the
+// tables, no HTML, no code fences, no images. The learner side renders this
+// with components/LessonMarkdown.tsx, which implements exactly this subset; the
 // admin editor shows the raw text in a textarea, which the subset stays legible
 // in. Note this is DELIBERATELY the opposite of lib/rag/buildPrompt.ts, which
 // forbids markdown — the chat transcript renders plain text, a lesson page does
@@ -113,28 +113,32 @@ export type GeneratedTopicContent = z.infer<typeof readingContentSchema>;
 // "ENGAGING" IS NOT A LICENCE TO INVENT. The whole reason this app exists is
 // that a plausible-sounding invented fine, duration or article number is worse
 // than no answer, and it is worse here than in chat because this text is
-// persisted and read by many learners. The examples the prompt asks for are
-// ILLUSTRATIONS of a rule that is literally in the source — never new rules,
-// numbers or exceptions. That sentence is in the prompt itself, not just here.
-const READING_SYSTEM_PROMPT = `Sən Azərbaycan Yol Hərəkəti Qaydaları üzrə onlayn kurs üçün DƏRS VƏSAİTİ yazan təcrübəli müəllimsən. Sənə rəsmi sənədin bir bölməsinin mətni veriləcək. Vəzifən həmin mətni oxumaq maraqlı və başa düşülən olan, yaxşı strukturlaşdırılmış dərs materialına çevirməkdir.
+// persisted and read by many learners. The narrative framing the prompt asks
+// for — each lesson is built around one everyday driving scene — is DECORATION,
+// not facts: the scene can only ever illustrate rules that are literally in the
+// source, never introduce new ones, and must never name invented people, places
+// or specific events. That sentence is in the prompt itself, not just here.
+const READING_SYSTEM_PROMPT = `Sən Azərbaycan Yol Hərəkəti Qaydaları üzrə onlayn kurs üçün DƏRS VƏSAİTİ yazan təcrübəli müəllimsən. Sənə rəsmi sənədin bir bölməsinin mətni veriləcək. Vəzifən həmin mətni oxumaq MARAQLI və canlı — sanki sürücünün gündəlik həyatından bir səhnə kimi oxunan, amma yenə də tam dəqiq və etibarlı dərs materialına çevirməkdir. Məqsəd oxucunu quru qayda əzbərləməyə yox, real yol vəziyyətini başa düşməyə aparan dərs yazmaqdır.
 
 MÜTLƏQ ƏMƏL EDİLMƏLİ OLAN ƏSAS QAYDA — HEÇ NƏ UYDURMA:
 - YALNIZ verilən mətndə HƏRFİ VƏ AYDIN ŞƏKİLDƏ dəstəklənən məlumatlara əsaslan.
 - Mətndə olmayan maddə nömrəsi, cərimə məbləği, müddət, məsafə, sürət həddi, yaş həddi, faiz və ya hər hansı digər rəqəm və fakt YAZMA — hətta ümumi biliyinlə doğru olduğunu düşünsən belə.
-- Materialı maraqlı etmək bəhanəsi ilə yeni qayda, istisna və ya nüans əlavə etmək QADAĞANDIR. Gətirdiyin nümunələr yalnız mətndəki qaydanın necə tətbiq olunduğunu göstərməlidir — nümunə heç vaxt yeni qayda gətirməməlidir.
+- HEKAYƏ FORMASI DEKORATİVDİR, FAKT DEYİL. Səhnə yalnız qaydanın gündəlik həyatda necə işlədiyini göstərən çərçivədir. Səhnəyə görə YENİ qayda, istisna və ya nüans əlavə etmək QADAĞANDIR. Səhnədəki bütün qaydalar, rəqəmlər və hərəkətlər mətnin özündən gəlməlidir.
+- Ad, məkan adı, konkret hadisə və ya mətndə olmayan aydın vəziyyət uydurma. Səhnə yalnız ümumi gündəlik şəraitdən ibarət ola bilər ("səhər tezdən işə gedirsən", "axşam yağışda şəhər yolu ilə gedirsən" və s.) — səhnə heç vaxt mətndə olmayan fərziyyə yaratmamalıdır.
+- Gətirdiyin nümunələr yalnız mətndəki qaydanın necə tətbiq olunduğunu göstərməlidir — nümunə heç vaxt yeni qayda gətirməməlidir.
 - Mətnin hansısa hissəsi qeyri-aydındırsa və ya dərsə çevirmək üçün kifayət etmirsə, o hissəni SADƏCƏ BURAX. Az, lakin etibarlı material çox, lakin şübhəli materialdan yaxşıdır.
 - Mətndə dərs üçün yararlı heç nə yoxdursa, content sahəsini boş sətir kimi qaytar.
 
-DƏRSİN QURULUŞU (content sahəsi, Markdown):
-1. Qısa giriş (2-4 cümlə): bu qaydanın nəyə aid olduğu və sürücü üçün praktikada niyə vacib olduğu. Yalnız mətndən çıxan məna əsasında.
-2. "## " ilə başlayan bölmə başlıqları, lazım olduqda "### " ilə alt başlıqlar. Hər başlıq altında qısa abzaslar (2-4 cümlə).
-3. Qaydaların özünü "- " ilə sadalama şəklində, aydın və qısa cümlələrlə ver. Ən vacib ifadələri **qalın** yaz.
-4. Mümkün olduqda "### Nümunə" bölməsi: qaydanın gündəlik həyatda necə işlədiyini göstərən konkret, sadə səhnə (məsələn sürücünün hansısa vəziyyətdə nə etməli olduğu). Nümunə YALNIZ mətndəki qaydanı izah etməlidir.
+DƏRSİN QURULUŞU (content sahəsi, Markdown) — DƏRS BİR GÜNDƏLİK SƏHNƏ ƏTRAFINDA QURULUR:
+1. AÇILIŞ (2-4 cümlə, başlıqdan dərhal sonra, başlıqsız): oxucunu bu qaydanın hökm sürdüyü gündəlik yol vəziyyətinə qoyan qısa, canlı səhnə. "Sən..." formasında yaz ("Səhər tezdən məktəb rayonundan keçirsən..."). Səhnə oxucunu maraqlandırmalı, amma heç bir yeni qayda gətirməməlidir.
+2. "## " bölmə başlıqları altında hekayə irəliləyir: hər bölmə səhnənin bir mərhələsini göstərir və o mərhələdə tətbiq olunan qaydaları sıx siyahı halında DEYİL, hərəkəti və onun səbəbini izah edən qısa abzaslarla (2-4 cümlə) verir. Qaydaları səhnənin axınına qur — oxucu qaydanı "nə etməliyəm" kimi deyil, "niyə belə edirəm" kimi başa düşməlidir. Ən vacib ifadələri **qalın** yaz.
+3. Yalnız həqiqətən ardıcıl yoxlama tələb edən yerlərdə "- " sadalama işlət (məsələn addım-addım hərəkət sırası). Hər qaydanı siyahıya çevirmə.
+4. Mümkün olduqda "### Niyə vacibdir" alt başlığı: qaydanın arxasındakı səbəbi izah et — yalnız mətndən çıxan mənaya əsaslanaraq.
 5. Mətn ümumi səhvə və ya diqqət tələb edən məqama işarə edirsə, "> **Diqqət:** ..." formatında bir sitat bloku əlavə et. Mətn belə bir şeyə əsas vermirsə, bu bölməni tamamilə burax.
-6. Sonda "## Yekun" başlığı altında 3-5 bənddən ibarət qısa xülasə.
+6. Sonda "## Yekun" başlığı altında 3-5 bənddən ibarət qısa xülasə (burada sadalama uyğundur).
 
 ÜSLUB VƏ FORMAT:
-- Hər şeyi Azərbaycan dilində yaz. Sadə, canlı, birbaşa oxucuya müraciət edən dil işlət ("siz" formasında). Quru rəsmi dildən qaç, amma məzmunu dəyişmə.
+- Hər şeyi Azərbaycan dilində yaz. Sadə, canlı, birbaşa oxucuya müraciət edən dil işlət ("sən/siz" formasında). Quru rəsmi dildən qaç, amma məzmunu dəyişmə.
 - Rəsmi mətni olduğu kimi köçürmə — izah et. Uzun hüquqi cümlələri qısa cümlələrə böl.
 - Konkret qaydadan danışarkən mənbə maddəni mətndə göründüyü kimi mötərizədə qeyd et (məsələn "(Maddə 45)"), belə ki oxucu mənbəyə qayıda bilsin. Mətndə olmayan maddə nömrəsi yazma.
 - Yalnız bu Markdown elementlərindən istifadə et: ## və ### başlıqlar, "- " sadalama, **qalın**, "> " sitat bloku, boş sətirlə ayrılmış abzaslar. Cədvəl, HTML, kod bloku və şəkil İSTİFADƏ ETMƏ.

@@ -4,10 +4,16 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { claimAdWatchReward, issueAdViewToken } from '@/lib/coins/adWatch';
 import { playTicTacToe, purchaseEnergy } from '@/lib/coins/games';
+import { convertEnergyToCoins } from '@/lib/coins/energyToCoin';
 import { spinWheel } from '@/lib/coins/wheel';
 import { startSignSpeedRound, submitSignSpeedRound, type SignSpeedQuestion } from '@/lib/coins/signSpeed';
-import { claimDailyChest } from '@/lib/coins/dailyQuests';
-import { claimDailyGrant } from '@/lib/coins/dailyGrant';
+import {
+  startNisanTapmacasiRound,
+  submitNisanTapmacasiRound,
+  type NisanTapmacasiQuestion,
+} from '@/lib/coins/nisanTapmacasi';
+import { claimDailyChest, claimDailyMission } from '@/lib/coins/dailyQuests';
+import type { MarathonRewardType } from '@/lib/coins/weeklyMarathon';
 import { startExamSession, submitExamSession } from '@/lib/exam/examSession';
 import { generateExamShareLink } from '@/lib/exam/examShare';
 import type { ExamQuestion } from '@/lib/exam/examPool';
@@ -193,8 +199,9 @@ export async function playTicTacToeAction(userMoves: number[]): Promise<TicTacTo
 
 // ---------------------------------------------------------------------------
 // Buy energy with coins (0072_energy_purchase.sql, lib/coins/games.ts) — a
-// coin SINK, not a new extraction path. No arguments: the exchange rate is
-// resolved entirely server-side in purchaseEnergy().
+// coin SINK, not a new extraction path. The optional multiplier is passed
+// through to purchaseEnergy() and clamped server-side there; amounts/rates
+// are never client-supplied.
 // ---------------------------------------------------------------------------
 export interface PurchaseEnergyState {
   status: 'success' | 'insufficient_coins' | 'energy_cap_reached' | 'unavailable' | 'error';
@@ -203,7 +210,7 @@ export interface PurchaseEnergyState {
   energy?: number;
 }
 
-export async function purchaseEnergyAction(): Promise<PurchaseEnergyState> {
+export async function purchaseEnergyAction(multiplier?: number): Promise<PurchaseEnergyState> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -213,7 +220,7 @@ export async function purchaseEnergyAction(): Promise<PurchaseEnergyState> {
     return { status: 'error', message: 'Giriş tələb olunur' };
   }
 
-  const result = await purchaseEnergy(user.id);
+  const result = await purchaseEnergy(user.id, multiplier);
   if (!result.ok) {
     if (result.error === 'insufficient_coins') {
       return { status: 'insufficient_coins', message: 'Kifayət qədər coin yoxdur' };
@@ -233,6 +240,57 @@ export async function purchaseEnergyAction(): Promise<PurchaseEnergyState> {
     message: 'Enerji alındı!',
     coinBalance: result.coinBalance,
     energy: result.energy,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Enerji -> coin konversiyası (0096_energy_to_coin.sql, lib/coins/energyToCoin.ts) —
+// the ONE owner-sanctioned energy->coin path. The energy amount is the ONLY
+// client input; the unit/rate/daily cap are resolved server-side in
+// convertEnergyToCoins from app_settings and re-checked by the RPC.
+// ---------------------------------------------------------------------------
+export type EnergyToCoinActionState =
+  | { status: 'success'; message: string; coinBalance: number; energy: number; coinsCredited: number }
+  | { status: 'insufficient_energy' | 'daily_cap_reached' | 'invalid_amount' | 'unavailable' | 'error'; message: string };
+
+export async function convertEnergyToCoinsAction(energyAmount: number): Promise<EnergyToCoinActionState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { status: 'error', message: 'Giriş tələb olunur' };
+  }
+
+  if (typeof energyAmount !== 'number' || !Number.isInteger(energyAmount) || energyAmount <= 0) {
+    return { status: 'invalid_amount', message: 'Yanlış məbləğ' };
+  }
+
+  const result = await convertEnergyToCoins(user.id, energyAmount);
+  if (!result.ok) {
+    if (result.error === 'insufficient_energy') {
+      return { status: 'insufficient_energy', message: 'Kifayət qədər enerji yoxdur' };
+    }
+    if (result.error === 'daily_cap_reached') {
+      return { status: 'daily_cap_reached', message: 'Bugünkü çevirmə limitinə çatmısan' };
+    }
+    if (result.error === 'invalid_amount') {
+      return { status: 'invalid_amount', message: 'Yanlış məbləğ' };
+    }
+    if (result.error === 'unavailable') {
+      return { status: 'unavailable', message: 'Bu funksiya hazırda əlçatan deyil' };
+    }
+    return { status: 'error', message: 'Xəta baş verdi. Bir az sonra yenidən cəhd edin' };
+  }
+
+  revalidatePath('/coin-qazan');
+  return {
+    status: 'success',
+    message: 'Konversiya edildi!',
+    coinBalance: result.coinBalance,
+    energy: result.energy,
+    coinsCredited: result.coinsCredited,
   };
 }
 
@@ -409,38 +467,182 @@ export async function submitSignSpeedRoundAction(
 }
 
 // ---------------------------------------------------------------------------
+// Nişan Tapmacası — road sign riddle (0099_nisan_tapmacasi.sql,
+// lib/coins/nisanTapmacasi.ts), an exact architectural mirror of Nişan Sürəti.
+// Server picks the 10-question set + correct answers at round-start and spends
+// the round's energy atomically with that pick (see the migration's top
+// comment for why energy is spent at start, not at settle). The client only
+// ever receives { sessionId, questions: [{ code, hint, imageUrl, options }] } —
+// never which option is correct — and submits its 10 answers once at the end.
+// ---------------------------------------------------------------------------
+
+export interface StartNisanTapmacasiState {
+  status: 'success' | 'no_energy' | 'pool_too_small' | 'unavailable' | 'error';
+  message: string;
+  sessionId?: string;
+  questions?: NisanTapmacasiQuestion[];
+}
+
+export async function startNisanTapmacasiRoundAction(): Promise<StartNisanTapmacasiState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { status: 'error', message: 'Giriş tələb olunur' };
+  }
+
+  const result = await startNisanTapmacasiRound(user.id);
+  if (!result.ok) {
+    if (result.error === 'no_energy') {
+      return { status: 'no_energy', message: 'Enerjin bitib. Sabah yenilənəcək' };
+    }
+    if (result.error === 'pool_too_small') {
+      return { status: 'pool_too_small', message: 'Oyun hazırda əlçatan deyil' };
+    }
+    if (result.error === 'unavailable') {
+      return { status: 'unavailable', message: 'Oyun hazırda əlçatan deyil' };
+    }
+    return { status: 'error', message: 'Xəta baş verdi. Bir az sonra yenidən cəhd edin' };
+  }
+
+  return {
+    status: 'success',
+    message: 'Uğurla başladı',
+    sessionId: result.sessionId,
+    questions: result.questions,
+  };
+}
+
+export interface SubmitNisanTapmacasiState {
+  status:
+    | 'success'
+    | 'session_not_found'
+    | 'already_used'
+    | 'session_expired'
+    | 'invalid_answers'
+    | 'unavailable'
+    | 'error';
+  message: string;
+  correctCount?: number;
+  correctFlags?: boolean[];
+  correctIndices?: number[];
+  reward?: number;
+  energy?: number;
+  balance?: number;
+}
+
+export async function submitNisanTapmacasiRoundAction(
+  sessionId: string,
+  answers: number[]
+): Promise<SubmitNisanTapmacasiState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { status: 'error', message: 'Giriş tələb olunur' };
+  }
+
+  if (typeof sessionId !== 'string' || sessionId.length === 0) {
+    return { status: 'invalid_answers', message: 'Yanlış sessiya' };
+  }
+
+  if (
+    !Array.isArray(answers) ||
+    answers.length !== 10 ||
+    !answers.every((a) => Number.isInteger(a) && a >= 0 && a <= 3)
+  ) {
+    return { status: 'invalid_answers', message: 'Yanlış cavablar' };
+  }
+
+  const result = await submitNisanTapmacasiRound(user.id, sessionId, answers);
+  if (!result.ok) {
+    if (result.error === 'session_not_found') {
+      return { status: 'session_not_found', message: 'Sessiya tapılmadı' };
+    }
+    if (result.error === 'already_used') {
+      return { status: 'already_used', message: 'Bu tur artıq təqdim edilib' };
+    }
+    if (result.error === 'session_expired') {
+      return { status: 'session_expired', message: 'Vaxt bitib. Yenidən başlayın' };
+    }
+    if (result.error === 'invalid_answers') {
+      return { status: 'invalid_answers', message: 'Yanlış cavablar' };
+    }
+    if (result.error === 'unavailable') {
+      return { status: 'unavailable', message: 'Oyun hazırda əlçatan deyil' };
+    }
+    return { status: 'error', message: 'Xəta baş verdi. Bir az sonra yenidən cəhd edin' };
+  }
+
+  revalidatePath('/coin-qazan');
+  return {
+    status: 'success',
+    message: `${result.correctCount}/10 doğru! +${result.reward} enerji`,
+    correctCount: result.correctCount,
+    correctFlags: result.correctFlags,
+    correctIndices: result.correctIndices,
+    reward: result.reward,
+    energy: result.energy,
+    balance: result.balance,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Gündəlik Missiyalar + Günün Sandığı — daily quests + daily chest
-// (0081_daily_quests.sql, lib/coins/dailyQuests.ts). No input: which quests
-// are complete and the reward amount are both resolved entirely server-side.
+// (0081_daily_quests.sql, lib/coins/dailyQuests.ts). Since 0097 the missions
+// and the chest are SEPARATE: each mission pays its own ENERGY via
+// claimDailyMissionAction, and the chest is FREE (no mission gate). No input:
+// which missions are complete and the reward amounts are both resolved
+// entirely server-side.
 // ---------------------------------------------------------------------------
 export interface DailyChestClaimState {
-  status: 'success' | 'already_claimed' | 'quests_incomplete' | 'unavailable' | 'error';
+  status: 'success' | 'already_claimed' | 'unavailable' | 'error';
   message: string;
-  /** ENERGY paid by the chest (since 0094). */
+  /** Reward paid by the chest — ENERGY or COINS depending on rewardType. */
   reward?: number;
+  /** Which currency the chest actually paid ('coins' | 'energy'). */
+  rewardType?: MarathonRewardType;
   balance?: number;
-  /** New ENERGY balance. */
+  /** New ENERGY balance (unchanged by a coin chest). */
   energy?: number;
+}
+
+export interface DailyMissionClaimState {
+  status: 'success' | 'already_claimed' | 'mission_not_available' | 'mission_incomplete' | 'unavailable' | 'error';
+  message: string;
+  /** ENERGY reward paid for the mission. */
+  reward?: number;
+  /** New ENERGY balance after the reward. */
+  energy?: number;
+  /** READ-ONLY coin balance, for the shared meter (missions never write coins). */
+  balance?: number;
 }
 
 // ---------------------------------------------------------------------------
 // Sınaq İmtahanı — real exam simulator (0082_exam_simulator.sql,
 // lib/exam/examSession.ts). A 15-minute, 10-question, all-topics-mixed timed
-// mock exam. Entry costs ENERGY only (the coin path was removed in 0094) —
-// pure SINK, no reward on completion (unlike the mini-games above). Result can
-// be shared via a link.
+// mock exam. Entry costs COINS only (0094's energy-only rule was reversed by
+// the owner; see lib/exam/examSession.ts's header) — pure SINK, no reward on
+// completion (unlike the mini-games above). Result can be shared via a link.
 // ---------------------------------------------------------------------------
 
 export interface StartExamState {
-  status: 'success' | 'no_energy' | 'pool_too_small' | 'unavailable' | 'error';
+  status: 'success' | 'insufficient_coins' | 'pool_too_small' | 'unavailable' | 'error';
   message: string;
   sessionId?: string;
   questions?: ExamQuestion[];
+  /** COIN balance after the debit. */
   balance?: number;
+  /** Energy balance, untouched — for the shared meter only. */
   energy?: number;
 }
 
-// Takes NO payment method since 0094: the exam is energy-funded, full stop.
+// Takes NO payment method and NO price: both the currency and the amount are
+// fixed server-side (app_settings.exam_coin_price).
 export async function startExamSessionAction(): Promise<StartExamState> {
   const supabase = await createClient();
   const {
@@ -453,8 +655,8 @@ export async function startExamSessionAction(): Promise<StartExamState> {
 
   const result = await startExamSession(user.id);
   if (!result.ok) {
-    if (result.error === 'no_energy') {
-      return { status: 'no_energy', message: 'Enerjin bitib. Sabah yenilənəcək' };
+    if (result.error === 'insufficient_coins') {
+      return { status: 'insufficient_coins', message: 'Kifayət qədər coin yoxdur' };
     }
     if (result.error === 'pool_too_small') {
       return { status: 'pool_too_small', message: 'İmtahan hazırda əlçatan deyil' };
@@ -836,9 +1038,6 @@ export async function claimDailyChestAction(): Promise<DailyChestClaimState> {
     if (result.error === 'already_claimed') {
       return { status: 'already_claimed', message: 'Bugünkü sandığı artıq açmısan' };
     }
-    if (result.error === 'quests_incomplete') {
-      return { status: 'quests_incomplete', message: 'Bütün missiyaları tamamlamalısan' };
-    }
     if (result.error === 'unavailable') {
       return { status: 'unavailable', message: 'Sandıq hazırda əlçatan deyil' };
     }
@@ -848,34 +1047,22 @@ export async function claimDailyChestAction(): Promise<DailyChestClaimState> {
   revalidatePath('/coin-qazan');
   return {
     status: 'success',
-    message: `Sandıq açıldı! +${result.reward} enerji`,
+    message:
+      result.rewardType === 'coins'
+        ? `Sandıq açıldı! +${result.reward} coin`
+        : `Sandıq açıldı! +${result.reward} enerji`,
     reward: result.reward,
+    rewardType: result.rewardType,
     balance: result.balance,
     energy: result.energy,
   };
 }
 
-// ---------------------------------------------------------------------------
-// Günlük hədiyyə — the daily grant (0094_two_currency_economy.sql,
-// lib/coins/dailyGrant.ts). A COIN-granting path: takes no input at all, the
-// amounts come from app_settings server-side, and the once-per-Baku-day
-// guarantee is a unique-index violation inside claim_daily_grant, so repeated
-// or concurrent POSTs cannot pay twice.
-// ---------------------------------------------------------------------------
-export interface DailyGrantClaimState {
-  status: 'success' | 'already_claimed' | 'unavailable' | 'error';
-  message: string;
-  /** Coins credited. */
-  coins?: number;
-  /** Energy actually added (0 if today's top-up had already fired). */
-  energyGranted?: number;
-  /** New coin balance. */
-  balance?: number;
-  /** New energy balance. */
-  energy?: number;
-}
-
-export async function claimDailyGrantAction(): Promise<DailyGrantClaimState> {
+// Per-mission ENERGY claim (0097_daily_quest_split.sql). Mirrors
+// claimDailyChestAction's pattern: the reward amount is resolved server-side
+// (app_settings.daily_mission_reward) inside claimDailyMission — the client
+// only supplies which mission key to claim. Fail-closed on every error path.
+export async function claimDailyMissionAction(missionKey: string): Promise<DailyMissionClaimState> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -885,29 +1072,33 @@ export async function claimDailyGrantAction(): Promise<DailyGrantClaimState> {
     return { status: 'error', message: 'Giriş tələb olunur' };
   }
 
-  const result = await claimDailyGrant(user.id);
+  if (typeof missionKey !== 'string' || missionKey.trim().length === 0) {
+    return { status: 'error', message: 'Yanlış missiya' };
+  }
+
+  const result = await claimDailyMission(user.id, missionKey);
   if (!result.ok) {
     if (result.error === 'already_claimed') {
-      return { status: 'already_claimed', message: 'Bugünkü hədiyyəni artıq almısan' };
+      return { status: 'already_claimed', message: 'Bu missiyanı artıq tamamlamısan' };
+    }
+    if (result.error === 'mission_not_available') {
+      return { status: 'mission_not_available', message: 'Bu missiya hazırda əlçatan deyil' };
+    }
+    if (result.error === 'mission_incomplete') {
+      return { status: 'mission_incomplete', message: 'Missiyanı əvvəlcə tamamlamalısan' };
     }
     if (result.error === 'unavailable') {
-      return { status: 'unavailable', message: 'Bu funksiya hazırda əlçatan deyil' };
+      return { status: 'unavailable', message: 'Missiya sistemi hazırda əlçatan deyil' };
     }
     return { status: 'error', message: 'Xəta baş verdi. Bir az sonra yenidən cəhd edin' };
   }
 
   revalidatePath('/coin-qazan');
-  revalidatePath('/account');
-
-  const parts = [`+${result.coins} coin`];
-  if (result.energyGranted > 0) parts.push(`+${result.energyGranted} enerji`);
-
   return {
     status: 'success',
-    message: `Günlük hədiyyə alındı! ${parts.join(', ')}`,
-    coins: result.coins,
-    energyGranted: result.energyGranted,
-    balance: result.balance,
+    message: `+${result.reward} enerji qazandınız`,
+    reward: result.reward,
     energy: result.energy,
+    balance: result.balance,
   };
 }

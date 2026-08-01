@@ -9,7 +9,7 @@ import { useNavState } from '@/components/useNavState';
 import { useTour } from '@/components/onboarding/TourProvider';
 import { useDarkMode } from '@/lib/theme/useDarkMode';
 import InstallAppButton from '@/components/InstallAppButton';
-import { CoinIcon, MoonIcon, SunIcon } from '@/components/icons';
+import { CoinIcon, MoonIcon, PlusIcon, SunIcon } from '@/components/icons';
 
 function initialsFrom(name: string | null | undefined, email: string | null): string {
   const source = name?.trim() || email || '';
@@ -130,6 +130,14 @@ export default function MobileAccountMenu() {
 
             <Link href="/chat" className={itemClass} onClick={closeMenu}>
               Chat
+            </Link>
+
+            {/* "Bizə yazın" lives in the desktop sidebar footer; on mobile that
+                sidebar is hidden, so this popover (present at every breakpoint)
+                is where the /sual shortcut must also live to stay reachable. */}
+            <Link href="/sual" className={itemClass} onClick={closeMenu}>
+              <PlusIcon width={16} height={16} />
+              Bizə yazın
             </Link>
 
             {nav.isAdmin && (

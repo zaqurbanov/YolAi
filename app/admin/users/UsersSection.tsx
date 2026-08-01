@@ -9,7 +9,8 @@ import GlobalRateLimitControl from './GlobalRateLimitControl';
 import LlmCircuitBreakerControl from './LlmCircuitBreakerControl';
 import GlobalCoinPriceControl from './GlobalCoinPriceControl';
 import GlobalDailyCoinGrantControl from './GlobalDailyCoinGrantControl';
-import DailyChestRewardControl from './DailyChestRewardControl';
+import WeeklyMarathonControl from './WeeklyMarathonControl';
+import DailyMissionRewardControl from './DailyMissionRewardControl';
 import QuizRewardControl from './QuizRewardControl';
 import BackgroundImageControl from './BackgroundImageControl';
 import LogoControl from './LogoControl';
@@ -18,6 +19,7 @@ import SendBroadcastNotificationControl from './SendBroadcastNotificationControl
 import EmbeddingModelControl from './EmbeddingModelControl';
 import LessonEconomyControl from './LessonEconomyControl';
 import GameRewardsControl from './GameRewardsControl';
+import EnergyToCoinControl from './EnergyToCoinControl';
 import WheelPrizesControl from './WheelPrizesControl';
 import GaragePerksControl from './GaragePerksControl';
 import CategoryContentControl from './CategoryContentControl';
@@ -42,7 +44,8 @@ export default async function UsersSection() {
         <GlobalRateLimitControl />
         <LlmCircuitBreakerControl />
         <GlobalDailyCoinGrantControl />
-        <DailyChestRewardControl />
+        <WeeklyMarathonControl />
+        <DailyMissionRewardControl />
         <QuizRewardControl />
         <GlobalCoinPriceControl />
         <BackgroundImageControl />
@@ -52,6 +55,7 @@ export default async function UsersSection() {
         <EmbeddingModelControl />
         <LessonEconomyControl />
         <GameRewardsControl />
+        <EnergyToCoinControl />
         <WheelPrizesControl />
         <GaragePerksControl />
         <CategoryContentControl />

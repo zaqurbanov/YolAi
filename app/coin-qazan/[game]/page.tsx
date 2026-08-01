@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { getCoinBalanceStatus } from '@/lib/chat/coins';
 import {
   getEnergyStatus,
+  getEnergyPurchaseConfig,
   getTicTacToeTodayCount,
   getTicTacToeWinReward,
 } from '@/lib/coins/games';
@@ -44,11 +45,12 @@ export default async function GamePage({ params }: GamePageProps) {
   // meter that can never move.
   if (profile?.role === 'admin') redirect('/account');
 
-  const [coinStatus, energyStatus, todayCount, winReward] = await Promise.all([
+  const [coinStatus, energyStatus, todayCount, winReward, energyPurchaseConfig] = await Promise.all([
     getCoinBalanceStatus(user.id),
     getEnergyStatus(user.id),
     getTicTacToeTodayCount(user.id),
     getTicTacToeWinReward(),
+    getEnergyPurchaseConfig(),
   ]);
 
   return (
@@ -59,6 +61,7 @@ export default async function GamePage({ params }: GamePageProps) {
       maxEnergy={energyStatus.max}
       initialTodayCount={todayCount}
       winReward={winReward}
+      energyPurchaseConfig={energyPurchaseConfig}
     />
   );
 }

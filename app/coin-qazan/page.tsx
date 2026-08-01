@@ -13,13 +13,11 @@ import {
 import { getDailyQuestionForUser } from '@/lib/quiz/questions';
 import { getWeeklyLeaderboard } from '@/lib/coins/leaderboard';
 import { getCoinBalanceStatus } from '@/lib/chat/coins';
-import {
-  getEnergyStatus,
-  getEnergyPurchaseConfig,
-} from '@/lib/coins/games';
+import { getEnergyStatus, getEnergyPurchaseConfig } from '@/lib/coins/games';
+import { getEnergyToCoinStatus } from '@/lib/coins/energyToCoin';
 import { getWheelStatus } from '@/lib/coins/wheel';
 import { getDailyQuestStatus } from '@/lib/coins/dailyQuests';
-import { getDailyGrantStatus } from '@/lib/coins/dailyGrant';
+import { applyDailyGrant, getDailyGrantStatus } from '@/lib/coins/dailyGrant';
 import { getCarTiers } from '@/lib/garage/carTiers';
 import { getUserGarage } from '@/lib/garage/garage';
 import { getActiveGaragePerk } from '@/lib/garage/perks';
@@ -29,6 +27,8 @@ import WheelGame from '@/components/games/WheelGame';
 import DailyQuizCard from '@/components/account/DailyQuizCard';
 import DailyQuestCard from '@/components/coins/DailyQuestCard';
 import DailyGrantCard from '@/components/coins/DailyGrantCard';
+import EnergyConverterCard from '@/components/coins/EnergyConverterCard';
+import EnergyToCoinConverterCard from '@/components/coins/EnergyToCoinConverterCard';
 import GarageCard from '@/components/coins/GarageCard';
 import MobileCoinQazan from '@/components/coins/MobileCoinQazan';
 import PlateMarketCard from '@/components/coins/PlateMarketCard';
@@ -60,6 +60,12 @@ export default async function CoinQazanPage() {
   // earn towards, so send them back rather than show an empty/irrelevant page.
   if (profile?.role === 'admin') redirect('/account');
 
+  // The daily floor top-up is automatic (0094). Awaited BEFORE the Promise.all
+  // below rather than inside it, so every balance/status read in that batch —
+  // coin meter, energy meter, and the informational grant card — observes the
+  // same post-top-up state instead of racing it. Idempotent per Baku day.
+  await applyDailyGrant(user.id);
+
   const [
     quizReward,
     quizAlreadyClaimed,
@@ -82,6 +88,7 @@ export default async function CoinQazanPage() {
     garagePerk,
     plateNumber,
     vipPlatePrice,
+    energyToCoinStatus,
   ] = await Promise.all([
     getQuizRewardAmount(),
     hasClaimedToday(user.id),
@@ -107,6 +114,7 @@ export default async function CoinQazanPage() {
     // safe inside this page's render-time Promise.all.
     ensureFreePlate(user.id),
     getVipPlatePrice(),
+    getEnergyToCoinStatus(user.id),
   ]);
 
   // ensureFreePlate only returns the plate string; isCustom comes from a
@@ -132,6 +140,20 @@ export default async function CoinQazanPage() {
   // untouched either way; only the surrounding chrome differs per design.
   const dailyQuestCard = <DailyQuestCard status={dailyQuestStatus} />;
   const dailyGrantCard = <DailyGrantCard status={dailyGrantStatus} />;
+  const energyConverterCard = (
+    <EnergyConverterCard
+      initialBalance={coinStatus.balance}
+      initialEnergy={energyStatus.balance}
+      maxEnergy={energyStatus.max}
+      maxBalance={energyPurchaseConfig.maxBalance}
+      coinCost={energyPurchaseConfig.coinCost}
+      energyAmount={energyPurchaseConfig.energyAmount}
+      maxMultiplier={energyPurchaseConfig.maxMultiplier}
+    />
+  );
+  const energyToCoinConverterCard = (
+    <EnergyToCoinConverterCard status={energyToCoinStatus} initialCoinBalance={coinStatus.balance} />
+  );
   const weeklyLeaderboardCard = <WeeklyLeaderboardCard leaderboard={weeklyLeaderboard} />;
   const garageCard = (
     <GarageCard tiers={carTiers} garage={userGarage} coinBalance={coinStatus.balance} perk={garagePerk} />
@@ -171,8 +193,6 @@ export default async function CoinQazanPage() {
       initialBalance={coinStatus.balance}
       initialEnergy={energyStatus.balance}
       maxEnergy={energyStatus.max}
-      energyPurchaseCoinCost={energyPurchaseConfig.coinCost}
-      energyPurchaseEnergyAmount={energyPurchaseConfig.energyAmount}
     />
   );
   const wheelGame = <WheelGame prizes={wheelStatus.prizes} initialStatus={wheelStatus.status} />;
@@ -192,6 +212,8 @@ export default async function CoinQazanPage() {
             streakDays={streakStatus.current}
             longestStreak={streakStatus.longest}
             dailyGrantCard={dailyGrantCard}
+            energyConverterCard={energyConverterCard}
+            energyToCoinConverterCard={energyToCoinConverterCard}
             dailyQuestCard={dailyQuestCard}
             dailyQuizCard={dailyQuizCard}
             gamesSection={gamesSection}
@@ -222,6 +244,8 @@ export default async function CoinQazanPage() {
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             {dailyGrantCard}
+            {energyConverterCard}
+            {energyToCoinConverterCard}
             {dailyQuestCard}
             {weeklyLeaderboardCard}
             {garageCard}
@@ -242,6 +266,8 @@ export default async function CoinQazanPage() {
           coinBalance={coinStatus.balance}
           streakDays={streakStatus.current}
           dailyGrantCard={dailyGrantCard}
+          energyConverterCard={energyConverterCard}
+          energyToCoinConverterCard={energyToCoinConverterCard}
           dailyQuestCard={dailyQuestCard}
           weeklyLeaderboardCard={weeklyLeaderboardCard}
           garageCard={garageCard}

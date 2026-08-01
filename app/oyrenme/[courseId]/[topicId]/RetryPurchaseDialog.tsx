@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button, Modal } from '@heroui/react';
-import { CoinIcon, LockIcon } from '@/components/icons';
+import { EnergyIcon, LockIcon } from '@/components/icons';
 import { formatCoinBalance } from '@/lib/format/coins';
 import { purchaseRetryAction, type PurchaseRetryState } from '../../actions';
 
@@ -19,13 +19,17 @@ interface RetryPurchaseDialogProps {
   onPurchased: () => void;
 }
 
-// Paid same-day retry for one topic test. Deliberately a near-copy of
-// UnlockCourseCard's dialog: PurchaseRetryState carries the same
-// balance/price/missing shape as UnlockCourseState, so the pricing rows and the
-// «Coin qazan» / «Coin al (tezliklə)» exits behave identically to the course
+// Paid same-day retry for one topic test, priced in ENERGY since 0098.
+// Deliberately a near-copy of UnlockCourseCard's dialog: PurchaseRetryState
+// carries the same balance/price/missing shape as UnlockCourseState, so the
+// pricing rows and the «Enerji qazan» exit behave identically to the course
 // unlock the user already went through. UnlockCourseCard itself is untouched —
 // it owns a card trigger and a different action, and only the dialog body is
 // actually common.
+//
+// NOTE: no coin-balance event is dispatched on success — the returned balance
+// is ENERGY, and firing the navbar's coin-balance-update event with it would
+// set the coin badge to the energy value.
 export default function RetryPurchaseDialog({
   topicId,
   price,
@@ -51,14 +55,14 @@ export default function RetryPurchaseDialog({
       setResult(res);
 
       if (res.status === 'success' || res.status === 'already_has_retry') {
-        onPurchased();
-        if (typeof res.balance === 'number') {
-          // Same contract components/CoinBadge.tsx listens on — keeps the
-          // navbar balance honest without a full reload.
+        if (res.status === 'success' && typeof res.balance === 'number') {
+          // 0098: the retry debits ENERGY — `res.balance` is the new energy
+          // balance, so the navbar EnergyBadge drops without a refresh.
           window.dispatchEvent(
-            new CustomEvent('coin-balance-update', { detail: { balance: res.balance } })
+            new CustomEvent('energy-balance-update', { detail: { balance: res.balance } }),
           );
         }
+        onPurchased();
         router.refresh();
       }
     });
@@ -89,7 +93,7 @@ export default function RetryPurchaseDialog({
             <Modal.Heading>
               {status === 'success'
                 ? 'Təkrar cəhd alındı'
-                : status === 'insufficient_coins'
+                : status === 'insufficient_energy'
                   ? 'Balans kifayət etmir'
                   : 'Təkrar cəhd al'}
             </Modal.Heading>
@@ -107,14 +111,14 @@ export default function RetryPurchaseDialog({
                   <div className="flex items-center justify-between gap-4">
                     <dt className="text-label-sm text-on-surface-variant">Qiymət</dt>
                     <dd className="flex items-center gap-1 text-label-sm font-semibold text-safety-yellow">
-                      <CoinIcon width={15} height={15} />
+                      <EnergyIcon width={15} height={15} />
                       {formatCoinBalance(price)}
                     </dd>
                   </div>
                   <div className="flex items-center justify-between gap-4">
-                    <dt className="text-label-sm text-on-surface-variant">Balansınız</dt>
+                    <dt className="text-label-sm text-on-surface-variant">Enerji balansınız</dt>
                     <dd className="flex items-center gap-1 text-label-sm text-on-surface">
-                      <CoinIcon width={15} height={15} />
+                      <EnergyIcon width={15} height={15} />
                       {balance != null ? formatCoinBalance(balance) : '—'}
                     </dd>
                   </div>
@@ -129,33 +133,33 @@ export default function RetryPurchaseDialog({
               <div className="mt-4 space-y-2 rounded-2xl border border-go-green/30 bg-go-green/5 p-4">
                 <p className="text-label-sm text-go-green">{result?.message}</p>
                 <div className="flex items-center justify-between gap-4">
-                  <span className="text-label-sm text-on-surface-variant">Yeni balans</span>
+                  <span className="text-label-sm text-on-surface-variant">Yeni enerji balansı</span>
                   <span className="flex items-center gap-1 text-label-sm font-semibold text-on-surface">
-                    <CoinIcon width={15} height={15} />
+                    <EnergyIcon width={15} height={15} />
                     {shownBalance != null ? formatCoinBalance(shownBalance) : '—'}
                   </span>
                 </div>
               </div>
             )}
 
-            {status === 'insufficient_coins' && (
+            {status === 'insufficient_energy' && (
               <div className="mt-4 space-y-3 rounded-2xl border border-outline-variant/40 p-4">
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-label-sm text-on-surface-variant">Qiymət</span>
                   <span className="flex items-center gap-1 text-label-sm text-on-surface">
-                    <CoinIcon width={15} height={15} />
+                    <EnergyIcon width={15} height={15} />
                     {formatCoinBalance(shownPrice)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between gap-4">
-                  <span className="text-label-sm text-on-surface-variant">Balansınız</span>
+                  <span className="text-label-sm text-on-surface-variant">Enerji balansınız</span>
                   <span className="flex items-center gap-1 text-label-sm text-on-surface">
-                    <CoinIcon width={15} height={15} />
+                    <EnergyIcon width={15} height={15} />
                     {shownBalance != null ? formatCoinBalance(shownBalance) : '—'}
                   </span>
                 </div>
                 <p className="text-label-sm font-semibold text-safety-yellow">
-                  {missing != null ? `${formatCoinBalance(missing)} coin çatmır.` : result?.message}
+                  {missing != null ? `${formatCoinBalance(missing)} enerji çatmır.` : result?.message}
                 </p>
               </div>
             )}
@@ -208,8 +212,12 @@ export default function RetryPurchaseDialog({
               </Button>
             )}
 
-            {status === 'insufficient_coins' && (
+            {status === 'insufficient_energy' && (
               <div className="flex w-full flex-col gap-2">
+                {/* /coin-qazan is the earning center — energy comes from the
+                    daily grant, games, quests and the wheel, all of which
+                    live there. Energy is earned, not bought (0094: it is the
+                    gameplay currency), so there is no «al» exit. */}
                 <Button
                   className="glow-primary w-full"
                   variant="primary"
@@ -218,19 +226,7 @@ export default function RetryPurchaseDialog({
                     router.push('/coin-qazan');
                   }}
                 >
-                  Coin qazan
-                </Button>
-                {/* /qiymetler is a "Tezliklə" page — there is no checkout yet,
-                    so the label says so rather than promising a purchase. */}
-                <Button
-                  className="w-full"
-                  variant="outline"
-                  onPress={() => {
-                    handleOpenChange(false);
-                    router.push('/qiymetler');
-                  }}
-                >
-                  Coin al (tezliklə)
+                  Enerji qazan
                 </Button>
               </div>
             )}
