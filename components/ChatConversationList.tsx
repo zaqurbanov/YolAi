@@ -171,7 +171,15 @@ function SwipeToDeleteRow({
   }
 
   return (
-    <div className="relative overflow-hidden rounded-lg">
+    // shrink-0: this wrapper is a flex item of the list container. With
+    // overflow-hidden (needed to clip the row during swipe-hint/swipe), the
+    // flex algorithm's automatic minimum size drops to 0, so when the list
+    // container is shorter than its content the wrapper SHRINKS below the
+    // row's fixed h-11 height and overflow-hidden clips the title text out of
+    // sight. shrink-0 forbids that shrink — the row keeps its height, the
+    // container's own overflow-y-auto scrolls instead, and every title stays
+    // visible.
+    <div className="relative shrink-0 overflow-hidden rounded-lg">
       {/* Sits behind the row; only ever seen through the gap the drag opens.
           Mirrored on both edges since either direction deletes. */}
       <div
@@ -331,7 +339,14 @@ export function ChatConversationList() {
   }
 
   return (
-    <div className="mt-4 flex min-h-0 flex-1 flex-col px-3">
+    <div className="mt-4 flex min-h-[200px] flex-1 flex-col px-3">
+      {/* min-h-[200px] (not min-h-0) is a deliberate floor: with flex-1 the flex
+          basis is 0%, so when the sidebar's fixed chrome (logo + nav + bottom
+          actions + footer) fills the available height the free space goes
+          negative and the browser collapses this container to 0px — the whole
+          conversation list silently disappears on short windows. A 200px floor
+          keeps ~3 rows visible and the inner list scrollable (all conversations
+          stay reachable); on tall windows flex-1 still grows it as before. */}
       <span className="mono-label px-1 pb-1.5 uppercase text-muted">Söhbətlər</span>
 
       <button
@@ -375,8 +390,11 @@ export function ChatConversationList() {
               // Only the first row, and only until the gesture has been used.
               showHint={index === 0 && !swipeHintSeen}
             >
+            {/* h-11 fixes every row at the same height so a conversation title
+                can never change the row size (uniform list, stable look); the
+                title button truncates with an ellipsis regardless of length. */}
             <div
-              className={`group flex items-center gap-1 rounded-lg border px-3 py-2.5 text-sm transition-colors ${
+              className={`group flex h-11 items-center gap-1 rounded-lg border px-3 text-sm transition-colors ${
                 isActive
                   ? 'border-primary/30 bg-accent-soft text-accent-soft-foreground'
                   : 'border-transparent text-muted hover:bg-surface-hover hover:text-foreground'

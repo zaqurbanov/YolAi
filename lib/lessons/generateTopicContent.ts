@@ -1,13 +1,13 @@
 import 'server-only';
-import { generateObject } from 'ai';
 import { z } from 'zod';
 import {
-  getChatModel,
+  getChatModelChain,
   getChatModelId,
-  getRewriteModel,
+  getRewriteModelChain,
   getRewriteModelId,
   getProviderCallOptions,
 } from '@/lib/llm';
+import { generateObjectWithRouting } from '@/lib/llm/fallback';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { logError } from '@/lib/logging/logError';
 
@@ -179,9 +179,7 @@ export async function generateTopicReadingContent(
   }
 
   try {
-    const { object } = await generateObject({
-      model: getChatModel(),
-      schema: readingContentSchema,
+    const { object } = await generateObjectWithRouting(getChatModelChain(), readingContentSchema, {
       system: READING_SYSTEM_PROMPT,
       providerOptions: getProviderCallOptions(),
       prompt: `Mövzunun təxmini adı: ${topicTitle}\n\nSənədin bu mövzuya aid hissəsi:\n"""\n${sourceText}\n"""`,
@@ -249,9 +247,7 @@ export async function generateTopicQuestions(
   }
 
   try {
-    const { object } = await generateObject({
-      model: getRewriteModel(),
-      schema: generatedQuestionsSchema,
+    const { object } = await generateObjectWithRouting(getRewriteModelChain(), generatedQuestionsSchema, {
       system: QUESTIONS_SYSTEM_PROMPT,
       providerOptions: getProviderCallOptions(),
       prompt: `Mövzu: ${topicTitle}\n\nMənbə mətni:\n"""\n${sourceText}\n"""`,

@@ -2,10 +2,10 @@ import Link from 'next/link';
 import Image from 'next/image';
 import type { ComponentType, SVGProps } from 'react';
 import { buttonVariants } from '@heroui/styles';
-import DailyQuizCard from '@/components/account/DailyQuizCard';
-import FeatureRail from '@/components/home/FeatureRail';
+import LazyDailyQuizCard from '@/components/home/LazyDailyQuizCard';
+import LazyFeatureRail from '@/components/home/LazyFeatureRail';
 import { CategoryCard } from '@/components/CategoryCard';
-import ScrollReveal from '@/components/ScrollReveal';
+import LazyScrollReveal from '@/components/home/LazyScrollReveal';
 import Footer from '@/components/Footer';
 import { ArrowRightIcon, CoinIcon, FlameIcon, ShieldIcon } from '@/components/icons';
 import type { RuleCategory } from '@/lib/content/ruleCategories';
@@ -311,7 +311,7 @@ export default function EditorialHome({
               Bir sual, bir dəqiqə, bir enerji.
             </h2>
             <div className="editorial-quiz mt-6 rounded-[32px] border border-border/40 bg-surface p-6 shadow-sm md:p-8">
-              <DailyQuizCard
+              <LazyDailyQuizCard
                 question={dailyQuiz.question}
                 options={dailyQuiz.options}
                 alreadyClaimed={dailyQuiz.alreadyClaimed}
@@ -334,7 +334,7 @@ export default function EditorialHome({
               never intersected, so they would sit invisible until scrolled to,
               which defeats the peek that tells you they exist). */}
           <div className="mt-8">
-            <FeatureRail>
+            <LazyFeatureRail>
               {featureCards.map((feature) => {
                 const Icon = feature.icon;
                 return (
@@ -367,7 +367,7 @@ export default function EditorialHome({
                   </div>
                 );
               })}
-            </FeatureRail>
+            </LazyFeatureRail>
           </div>
         </section>
 
@@ -415,14 +415,14 @@ export default function EditorialHome({
           </div>
           <div className="editorial-topics mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {topics.map((topic, i) => (
-              <ScrollReveal key={topic.title} delayMs={i * 60}>
+              <LazyScrollReveal key={topic.title} delayMs={i * 60}>
                 <CategoryCard
                   category={topic}
                   index={i}
                   href={`/chat?q=${encodeURIComponent(topic.question)}`}
                   questionCount={questionCounts[topic.title]}
                 />
-              </ScrollReveal>
+              </LazyScrollReveal>
             ))}
           </div>
         </section>

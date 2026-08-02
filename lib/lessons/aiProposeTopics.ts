@@ -1,7 +1,7 @@
 import 'server-only';
-import { generateObject } from 'ai';
 import { z } from 'zod';
-import { getRewriteModel, getRewriteModelId, getProviderCallOptions } from '@/lib/llm';
+import { getRewriteModelChain, getRewriteModelId, getProviderCallOptions } from '@/lib/llm';
+import { generateObjectWithRouting } from '@/lib/llm/fallback';
 import {
   buildDocumentUnits,
   packUnitRuns,
@@ -187,9 +187,7 @@ async function groupBatch(
       : '';
 
   try {
-    const { object } = await generateObject({
-      model: getRewriteModel(),
-      schema: outlineGroupsSchema,
+    const { object } = await generateObjectWithRouting(getRewriteModelChain(), outlineGroupsSchema, {
       system: OUTLINE_SYSTEM_PROMPT,
       providerOptions: getProviderCallOptions(),
       prompt: `${contextBlock}Təyin edilməli vahidlər (#${start}–#${end}) — hamısı mövzulara bölünməlidir:\n${assignLines.join('\n')}`,

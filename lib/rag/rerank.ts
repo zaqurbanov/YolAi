@@ -1,6 +1,6 @@
 import 'server-only';
-import { getRewriteModel, getRewriteModelFallback, getProviderCallOptions } from '@/lib/llm';
-import { generateTextWithFallback } from '@/lib/llm/fallback';
+import { getRewriteModelChain, getProviderCallOptions } from '@/lib/llm';
+import { generateTextWithRouting } from '@/lib/llm/fallback';
 import type { RetrievedChunk } from '@/lib/retrieval/search';
 import { logError } from '@/lib/logging/logError';
 
@@ -80,7 +80,7 @@ export async function rerankChunks(
   try {
     const capped = candidates.slice(0, MAX_RERANK_CANDIDATES);
 
-    const { text } = await generateTextWithFallback(getRewriteModel(), getRewriteModelFallback(), {
+    const { text } = await generateTextWithRouting(getRewriteModelChain(), {
       system: RERANK_PROMPT,
       prompt: `İstifadəçinin sualı: "${query}"\n\nSənəd parçaları:\n${buildCandidateList(capped)}`,
       providerOptions: getProviderCallOptions(),

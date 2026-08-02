@@ -252,7 +252,11 @@ export default async function CoinQazanPage() {
           </div>
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            {gamesSection}
+            {/* The games terminal gets the full row — same rationale as the 3D
+                tree's lg:col-span-2 on gamesSection: three game cards inside a
+                half-width cell each drop to ~1/6 of the container and feel
+                squeezed. */}
+            <div className="lg:col-span-2">{gamesSection}</div>
             {wheelGame}
             {dailyGrantCard}
             {energyConverterCard}

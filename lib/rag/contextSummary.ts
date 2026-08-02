@@ -1,6 +1,6 @@
 import 'server-only';
-import { getChatModel, getChatModelFallback } from '@/lib/llm';
-import { generateTextWithFallback } from '@/lib/llm/fallback';
+import { getChatModelChain, getProviderCallOptions } from '@/lib/llm';
+import { generateTextWithRouting } from '@/lib/llm/fallback';
 import { logError } from '@/lib/logging/logError';
 
 export interface ConversationContextSummary {
@@ -64,8 +64,9 @@ export async function updateContextSummary(
       .map((m) => `${m.role === 'user' ? 'İstifadəçi' : 'Köməkçi'}: ${m.content}`)
       .join('\n');
 
-    const { text } = await generateTextWithFallback(getChatModel(), getChatModelFallback(), {
+    const { text } = await generateTextWithRouting(getChatModelChain(), {
       system: SUMMARY_PROMPT,
+      providerOptions: getProviderCallOptions(),
       prompt: `Əvvəlki xülasə:\n${JSON.stringify(previousSummary)}\n\nYeni mesajlar:\n${conversationText}`,
     });
 

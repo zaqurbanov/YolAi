@@ -86,14 +86,25 @@ export default function NotificationBell({
                       <button
                         type="button"
                         onClick={() => void handleSelect(n)}
-                        className={`block w-full px-4 py-3 text-left text-sm transition-colors hover:bg-surface-tertiary/40 ${
+                        className={`flex w-full items-start gap-3 px-4 py-3 text-left text-sm transition-colors hover:bg-surface-tertiary/40 ${
                           n.read ? 'text-on-surface-variant' : 'text-on-surface'
                         }`}
                       >
-                        <p>{n.message}</p>
-                        <p className="mono-label mt-1 text-xs text-on-surface-variant">
-                          {formatAzDateTime(n.createdAt)}
-                        </p>
+                        {/* Unread dot — the at-a-glance read/unread signal, on
+                            top of bold text for unread rows. Read rows show
+                            nothing in its place. */}
+                        <span
+                          aria-hidden
+                          className={`mt-1.5 size-2 shrink-0 rounded-full ${
+                            n.read ? 'bg-transparent' : 'bg-primary'
+                          }`}
+                        />
+                        <span className="min-w-0 flex-1">
+                          <p className={n.read ? '' : 'font-semibold'}>{n.message}</p>
+                          <p className="mono-label mt-1 text-xs text-on-surface-variant">
+                            {formatAzDateTime(n.createdAt)}
+                          </p>
+                        </span>
                       </button>
                     </li>
                   ))}

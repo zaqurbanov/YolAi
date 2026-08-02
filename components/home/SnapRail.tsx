@@ -16,6 +16,12 @@ interface DragState {
   dragged: boolean;
 }
 
+// Minimum drag distance, as a fraction of one card step, that advances the
+// rail to the next/previous card. 25% is deliberately lighter than the 50% a
+// nearest-neighbor round demands — a short "nudge" of a quarter card grabs the
+// next card, instead of needing to drag half way across it.
+const SNAP_THRESHOLD = 0.25;
+
 /**
  * One-card-per-drag horizontal snap rail.
  *
@@ -145,12 +151,14 @@ export function useSnapRail<T extends HTMLElement>(count: number) {
       const startIndex = Math.round(drag.startScrollLeft / step);
       let target = startIndex;
       if (drag.dragged) {
-        // At most ONE card per drag. The rail may have been pulled past
-        // several cards during pointermove, so the destination is clamped to
-        // startIndex ± 1 — or startIndex itself when the drag ended within the
-        // same card (e.g. a jitter that crossed the 6px drag threshold).
-        const currentIndex = Math.round(rail.scrollLeft / step);
-        target = Math.max(startIndex - 1, Math.min(startIndex + 1, currentIndex));
+        // Advance only once the drag has moved SNAP_THRESHOLD of a card in
+        // either direction (not the 50% a nearest-neighbor round requires), so
+        // a quarter-card nudge grabs the next card. The destination is still
+        // capped at startIndex ± 1 — however far the finger travels, one drag
+        // moves at most one card.
+        const offset = rail.scrollLeft - drag.startScrollLeft;
+        if (offset > step * SNAP_THRESHOLD) target = startIndex + 1;
+        else if (offset < -step * SNAP_THRESHOLD) target = startIndex - 1;
       }
       target = clampIndex(target);
       rail.scrollTo({ left: target * step, behavior: 'smooth' });

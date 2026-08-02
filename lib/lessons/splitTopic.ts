@@ -1,7 +1,7 @@
 import 'server-only';
-import { generateObject } from 'ai';
 import { z } from 'zod';
-import { getRewriteModel, getRewriteModelId, getProviderCallOptions } from '@/lib/llm';
+import { getRewriteModelChain, getRewriteModelId, getProviderCallOptions } from '@/lib/llm';
+import { generateObjectWithRouting } from '@/lib/llm/fallback';
 import { createAdminClient } from '@/lib/supabase/admin';
 import {
   buildCitations,
@@ -237,9 +237,7 @@ export async function suggestTopicSplit(
     .join('\n');
 
   try {
-    const { object } = await generateObject({
-      model: getRewriteModel(),
-      schema: adviceSchema,
+    const { object } = await generateObjectWithRouting(getRewriteModelChain(), adviceSchema, {
       system: ADVICE_SYSTEM_PROMPT,
       providerOptions: getProviderCallOptions(),
       prompt: `Mövzu: ${loaded.topic.row.title}\nParça sayı: ${chunks.length}\n\nParçalar:\n${numbered}`,

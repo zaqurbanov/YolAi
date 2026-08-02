@@ -1,21 +1,22 @@
 import {
   convertToModelMessages,
   toUIMessageStream,
+  createUIMessageStream,
   createUIMessageStreamResponse,
   APICallError,
   RetryError,
   type UIMessage,
   type FileUIPart,
 } from 'ai';
-import { getChatModel, getChatModelFallback, getChatModelId, getChatModelFallbackId, getProviderCallOptions, isVisionAvailable, chatModelSupportsVision } from '@/lib/llm';
-import { streamTextWithFallback } from '@/lib/llm/streamWithFallback';
+import { getChatModelChain, getProviderCallOptions, isVisionAvailable, chatModelSupportsVision } from '@/lib/llm';
+import { streamTextWithRouting } from '@/lib/llm/streamWithFallback';
 import { identifySignFromImage } from '@/lib/rag/identifySignFromImage';
 import { logError } from '@/lib/logging/logError';
 import { retrieveCombinedChunks, retrieveChunksByArticle, embedQueryWithActiveModel, type RetrievedChunk } from '@/lib/retrieval/search';
 import { extractArticleReferences, articleLabelPrefixes, isPureArticleReferenceQuery } from '@/lib/retrieval/articleQuery';
 import { buildSystemPrompt, buildContextBlock, buildCitations, filterCitedChunks } from '@/lib/rag/buildPrompt';
 import { shouldUpdateSummary, updateContextSummary } from '@/lib/rag/contextSummary';
-import { rewriteQuery } from '@/lib/rag/rewriteQuery';
+import { rewriteQuery, pickScopeRefusal, type ClassifierTurn } from '@/lib/rag/rewriteQuery';
 import { rerankChunks } from '@/lib/rag/rerank';
 import { randomBytes } from 'crypto';
 import { createClient } from '@/lib/supabase/server';
@@ -42,8 +43,50 @@ type ServerSupabase = Awaited<ReturnType<typeof createClient>>;
 
 const MESSAGE_WINDOW = 10;
 const IMAGE_PLACEHOLDER_CONTENT = '[Şəkil göndərildi]';
+// chat_request_logs.model_used marker for the deterministic scope-gate refusal
+// path, so refusals are identifiable in the admin logs dashboard (no answering
+// model ran on those rows).
+const SCOPE_REFUSAL_MODEL_LABEL = 'scope-gate:refusal';
 
 export const maxDuration = 60;
+
+// Conversation context handed to the scope-gate classifier. A legitimate
+// follow-up ("bəs nə qədər ödəniş edəcəm?") carries no traffic-law vocabulary
+// of its own and reads as off-topic when judged standalone, so the classifier
+// must see the preceding exchange. Kept to the previous user+assistant turn and
+// hard-truncated: only the TOPIC of that exchange matters, and every character
+// here is input tokens on every text chat request (~2 x 400 chars, roughly
+// 250-400 extra prompt tokens for Azerbaijani).
+const CLASSIFIER_TURNS = 2;
+const CLASSIFIER_TURN_MAX_CHARS = 400;
+
+function messageToPlainText(message: UIMessage): string {
+  return (message.parts ?? [])
+    .map((p) => ('text' in p ? p.text : ''))
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function extractClassifierTurns(messages: UIMessage[], lastUserIndex: number): ClassifierTurn[] {
+  const turns: ClassifierTurn[] = [];
+  for (let i = Math.max(lastUserIndex, 0) - 1; i >= 0 && turns.length < CLASSIFIER_TURNS; i--) {
+    const message = messages[i];
+    if (message.role !== 'user' && message.role !== 'assistant') continue;
+    const text = messageToPlainText(message);
+    // File-only messages flatten to '' — skipped rather than sent as an empty
+    // quoted turn, which would just be noise in the classifier prompt.
+    if (text.length === 0) continue;
+    turns.unshift({
+      role: message.role,
+      text:
+        text.length > CLASSIFIER_TURN_MAX_CHARS
+          ? `${text.slice(0, CLASSIFIER_TURN_MAX_CHARS)}…`
+          : text,
+    });
+  }
+  return turns;
+}
 
 function findImagePart(message: UIMessage | undefined): FileUIPart | null {
   const part = message?.parts?.find(
@@ -220,9 +263,11 @@ export async function POST(request: Request) {
     });
   }
 
-  const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user');
+  const lastUserIndex = messages.map((m) => m.role).lastIndexOf('user');
+  const lastUserMessage = lastUserIndex >= 0 ? messages[lastUserIndex] : undefined;
   const query = lastUserMessage?.parts?.map((p) => ('text' in p ? p.text : '')).join(' ') ?? '';
   const imagePart = findImagePart(lastUserMessage);
+  const classifierTurns = extractClassifierTurns(messages, lastUserIndex);
 
   // isVisionAvailable() is a sync, no-network check — safe to gate here,
   // before any DB call (user/profile lookup, coin reservation, conversation
@@ -441,9 +486,123 @@ export async function POST(request: Request) {
     }
   }
 
+  // messageMetadata's exact shape is read by the frontend (ChatMessageMetadata
+  // in app/chat/ChatClient.tsx) — shared by the normal streaming path and the
+  // scope-gate refusal path below so the two can't drift. Reads coinBalance at
+  // call time, so it reports the post-debit balance.
+  function buildMessageMetadata(citations: ReturnType<typeof buildCitations>, model: string) {
+    const conversationIdMeta = conversation?.id;
+    if (isAdmin) return { citations, modelUsed: model, messageId: assistantMessageId, conversationId: conversationIdMeta };
+    if (coinPrice !== null && coinBalance !== null) {
+      return { citations, coins: { balance: coinBalance, price: coinPrice }, conversationId: conversationIdMeta };
+    }
+    return { citations, conversationId: conversationIdMeta };
+  }
+
   const rewriteStart = performance.now();
-  const retrievalQuery = await rewriteQuery(retrievalSourceText, conversation?.contextSummary);
+  // The scope gate rides this existing rewrite call — no extra LLM call, and no
+  // extra latency for a normal question (see rewriteQuery.ts for the one case
+  // that does cost latency: >=25-word messages, which used to skip the rewrite
+  // entirely). Deliberately OFF for image requests: what
+  // gets passed here is then the vision model's identification string (or, if
+  // identification failed, just the caption/"[Şəkil göndərildi]" placeholder),
+  // not the user's own question, so classifying it risks refusing a perfectly
+  // legitimate traffic photo. recentTurns is what stops the gate refusing
+  // legitimate elliptical follow-ups ("bəs nə qədər ödəniş edəcəm?"), which
+  // carry no traffic-law vocabulary of their own and read as off-topic when
+  // classified standalone. An attached photo in a traffic-law app is
+  // in-scope by construction, and the far more expensive vision call has
+  // already run by this point anyway.
+  const { outOfScope, query: retrievalQuery } = await rewriteQuery(
+    retrievalSourceText,
+    conversation?.contextSummary,
+    { scopeGate: imagePart === null, recentTurns: classifierTurns },
+  );
   const rewriteMs = performance.now() - rewriteStart;
+
+  // Deterministic refusal: retrieval, embedding, rerank and the answering model
+  // are all skipped. The prompt-level rule in buildPrompt.ts stays as the
+  // second line of defense, but models at the head of getChatModelChain()
+  // don't reliably obey "refuse and STOP" — they refuse and then answer anyway.
+  if (outOfScope) {
+    const refusalText = pickScopeRefusal();
+
+    // The coin IS debited here, exactly as on the normal path: (1) a real LLM
+    // call (the rewrite/classifier) already happened, so the request is not
+    // free to the project; (2) free refusals would be an unmetered classifier
+    // endpoint burning provider tokens at zero coin cost; (3) messageMetadata
+    // reports a balance and it must match what actually happened. Same
+    // conditions as the normal path's debit — coinBalance === null means
+    // checkAndReserveCoins failed open, so the debit is skipped too.
+    if (user && !isAdmin && coinPrice !== null && coinBalance !== null) {
+      const newBalance = await debitCoins(user.id, coinPrice);
+      if (newBalance !== null) coinBalance = newBalance;
+    }
+
+    // Deliberately NOT calling claimPendingReferral() here: the referral bonus
+    // pays on real usage (0059 D.2), and an off-topic question that was never
+    // answered isn't that. A referred user reaches the credit with their first
+    // actual traffic-law question instead.
+
+    if (assistantMessageId) {
+      const { error: refusalUpdateError } = await supabase
+        .from('messages')
+        .update({ content: refusalText, citations: [] })
+        .eq('id', assistantMessageId);
+      if (refusalUpdateError) {
+        console.error('[chat] failed to persist scope refusal message:', refusalUpdateError);
+        void logError('chat.persistScopeRefusal', refusalUpdateError, {
+          userId: user.id,
+          requestId,
+          details: { conversationId: conversation?.id, messageId: assistantMessageId },
+        });
+      }
+    }
+
+    createAdminClient()
+      .from('chat_request_logs')
+      .insert({
+        request_id: requestId,
+        conversation_id: conversation?.id ?? null,
+        message_id: assistantMessageId,
+        query,
+        rewrite_ms: rewriteMs,
+        embed_ms: null,
+        db_search_ms: null,
+        rerank_ms: null,
+        llm_first_token_ms: null,
+        llm_total_ms: null,
+        used_fallback: false,
+        model_used: SCOPE_REFUSAL_MODEL_LABEL,
+        prompt_tokens: null,
+        completion_tokens: null,
+        total_tokens: null,
+      })
+      .then(({ error }) => {
+        if (error) {
+          console.error('[chat] failed to persist scope refusal log:', error);
+          void logError('chat.timingLog.persist', error, { userId: user.id, requestId });
+        }
+      });
+
+    const refusalMetadata = buildMessageMetadata([], SCOPE_REFUSAL_MODEL_LABEL);
+    const textPartId = crypto.randomUUID();
+
+    // Same UI message stream shape the normal path produces via
+    // toUIMessageStream, written directly since there's no model stream to
+    // convert — the frontend needs no special handling.
+    return createUIMessageStreamResponse({
+      stream: createUIMessageStream({
+        execute: ({ writer }) => {
+          writer.write({ type: 'start', messageMetadata: refusalMetadata });
+          writer.write({ type: 'text-start', id: textPartId });
+          writer.write({ type: 'text-delta', id: textPartId, delta: refusalText });
+          writer.write({ type: 'text-end', id: textPartId });
+          writer.write({ type: 'finish', finishReason: 'stop', messageMetadata: refusalMetadata });
+        },
+      }),
+    });
+  }
 
   // Primary corpus-wide search, plus (unless the UI already scoped this chat
   // to one document) a supplementary search guaranteeing every ready
@@ -583,12 +742,8 @@ export async function POST(request: Request) {
   // persisting to the DB below.
   let liveAnswerText = '';
 
-  const fallbackModel = getChatModelFallback();
-  const fallbackModelId = getChatModelFallbackId();
-
-  const { stream: rawStream, usedFallback, modelUsed } = await streamTextWithFallback(
-    { model: getChatModel(), modelId: getChatModelId() },
-    fallbackModel && fallbackModelId ? { model: fallbackModel, modelId: fallbackModelId } : null,
+  const { stream: rawStream, usedFallback, modelUsed } = await streamTextWithRouting(
+    getChatModelChain(),
     {
       system: `${buildSystemPrompt(userName, imagePart !== null)}\n\nKONTEKST:\n${contextBlock || 'Heç bir uyğun məlumat tapılmadı.'}${summaryBlock}`,
       messages: await convertToModelMessages(windowedMessages),
@@ -790,12 +945,7 @@ export async function POST(request: Request) {
         // through onChunk) — filtering naturally yields an empty citation list
         // for the former and the real, referenced-only list for the latter.
         const citations = buildCitations(filterCitedChunks(relevantChunks, liveAnswerText));
-        const conversationIdMeta = conversation?.id;
-        if (isAdmin) return { citations, modelUsed, messageId: assistantMessageId, conversationId: conversationIdMeta };
-        if (coinPrice !== null && coinBalance !== null) {
-          return { citations, coins: { balance: coinBalance, price: coinPrice }, conversationId: conversationIdMeta };
-        }
-        return { citations, conversationId: conversationIdMeta };
+        return buildMessageMetadata(citations, modelUsed);
       },
       onError: (error) => {
         // Fires only once a stream error is terminal and about to reach the client
