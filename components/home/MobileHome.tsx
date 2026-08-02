@@ -2,7 +2,6 @@ import Link from 'next/link';
 import { buttonVariants } from '@heroui/styles';
 import type { ComponentType, SVGProps } from 'react';
 import DailyQuizCard from '@/components/account/DailyQuizCard';
-import MobileBottomTabBar from '@/components/home/MobileBottomTabBar';
 import MobileAccountMenu from '@/components/MobileAccountMenu';
 import ThemeToggle from '@/components/ThemeToggle';
 import { CoinIcon, EnergyIcon, ArrowRightIcon, ArrowUpIcon, FlameIcon } from '@/components/icons';
@@ -252,7 +251,6 @@ export default function MobileHome({
         </div>
       </div>
 
-      <MobileBottomTabBar />
     </div>
   );
 }

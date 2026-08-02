@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { Modal, Button, toast } from '@heroui/react';
-import { SparkleIcon } from '@/components/icons';
+import { CoinIcon, SparkleIcon } from '@/components/icons';
 import { Spinner } from '@/components/Spinner';
 import { claimAdWatchRewardAction, startAdViewAction } from '@/app/coin-qazan/actions';
 import { getDirectLinkUrl, getRewardedAdMode, showRewardedAd } from '@/lib/ads/rewardedAd';
@@ -16,6 +16,14 @@ interface AdWatchCardProps {
   // getAdViewDurationSeconds) - presentation only here; the enforced copy is
   // the server's minimum-elapsed token check.
   durationSeconds: number;
+  /**
+   * 'card' (default): the standalone glass-card section ("Reklam izlə") used
+   * on the desktop grid and the 3D HUD tree.
+   * 'inline': just the trigger button + the countdown modal, no card chrome —
+   * mounted inside the mobile balance slab next to "Reytinq" so the coin
+   * balance and the ad-watch CTA live in the same top section.
+   */
+  variant?: 'card' | 'inline';
 }
 
 // Ad mode is decided once from env (lib/ads/rewardedAd.ts):
@@ -35,9 +43,14 @@ export default function AdWatchCard({
   dailyMax,
   claimsToday,
   durationSeconds,
+  variant = 'card',
 }: AdWatchCardProps) {
   const [claimsUsed, setClaimsUsed] = useState(claimsToday);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  // Stats modal for the inline "Pulsuz coin qazan" trigger — opens first and
+  // shows today's watch stats (used/remaining of the daily cap, reward per
+  // view); the ad only starts from the "Qazan" action inside it.
+  const [isStatsOpen, setIsStatsOpen] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(durationSeconds);
   const [isPending, startTransition] = useTransition();
   // Server-issued single-use token for THIS ad view. The reward is only
@@ -201,6 +214,14 @@ export default function AdWatchCard({
     }
   }
 
+  // "Qazan" inside the stats modal: close the stats, then run the real ad flow.
+  // handleStart is still invoked synchronously within this click-handler chain,
+  // so the direct-link tab open in it keeps its popup-blocker exemption.
+  function handleStatsStart() {
+    setIsStatsOpen(false);
+    handleStart();
+  }
+
   function handleModalOpenChange(open: boolean) {
     setIsModalOpen(open);
     // Drop the token on close so a stale one is never replayed on the next
@@ -229,6 +250,10 @@ export default function AdWatchCard({
   }
 
   if (!adsEnabled) {
+    // Inline (balance-slab) placement hides the CTA entirely when ads are
+    // off — a dead "Coin qazan" button would be worse than no button. The
+    // standalone card keeps its "coming soon" placeholder instead.
+    if (variant === 'inline') return null;
     return (
       <div className="glass-card rounded-2xl p-6 space-y-4">
         <div className="flex items-center gap-3 border-b border-outline-variant/30 pb-4">
@@ -241,6 +266,130 @@ export default function AdWatchCard({
           Reklam izləyərək coin qazanmaq funksiyası tezliklə əlavə olunacaq.
         </p>
       </div>
+    );
+  }
+
+  // The claim gate modal, shared by both variants.
+  const countdownModal = (
+    <Modal.Backdrop isOpen={isModalOpen} onOpenChange={handleModalOpenChange}>
+      <Modal.Container>
+        <Modal.Dialog className="sm:max-w-[380px]">
+          <Modal.CloseTrigger />
+          <Modal.Header>
+            <Modal.Heading>Reklam izlə</Modal.Heading>
+          </Modal.Header>
+          <Modal.Body>
+            <p className="text-body-md text-on-surface-variant">
+              {AD_MODE === 'direct-link'
+                ? secondsLeft > 0
+                  ? `Reklam açıldı — ${secondsLeft} saniyə...`
+                  : 'Coini qazandınız! Reklamı bağlayın — coin avtomatik hesabınıza yazılacaq'
+                : secondsLeft > 0
+                  ? `Reklam simulyasiyası — ${secondsLeft} saniyə`
+                  : 'Reklam tamamlandı — coin qazanmaq üçün klikləyin'}
+            </p>
+          </Modal.Body>
+          <Modal.Footer>
+            <Button
+              className="flex-1 glow-primary"
+              variant="primary"
+              onPress={handleClaim}
+              isDisabled={secondsLeft > 0}
+              isPending={isPending}
+            >
+              {({ isPending: pending }) => (
+                <>
+                  {pending ? <Spinner size="sm" tone="current" /> : null}
+                  Coin al
+                </>
+              )}
+            </Button>
+          </Modal.Footer>
+        </Modal.Dialog>
+      </Modal.Container>
+    </Modal.Backdrop>
+  );
+
+  // Stats modal (inline trigger): the daily watch summary before any ad runs —
+  // how many of the daily cap have been watched, how many remain, and the
+  // reward per view. "Qazan" starts the actual ad flow; when capped it shows
+  // the limit-reached message instead of the action.
+  const statsModal = (
+    <Modal.Backdrop isOpen={isStatsOpen} onOpenChange={setIsStatsOpen}>
+      <Modal.Container>
+        <Modal.Dialog className="sm:max-w-[380px]">
+          <Modal.CloseTrigger />
+          <Modal.Header>
+            <Modal.Heading>Pulsuz coin qazan</Modal.Heading>
+          </Modal.Header>
+          <Modal.Body>
+            <p className="text-body-md text-on-surface-variant">
+              Reklam izləyərək pulsuz coin qazan.
+            </p>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <div className="rounded-xl border border-outline-variant/30 bg-outline-variant/10 p-3 text-center">
+                <p className="text-2xl font-bold tabular-nums text-primary">
+                  {claimsUsed}/{dailyMax}
+                </p>
+                <p className="text-legal-citation mt-1 text-on-surface-variant">Bu gün baxıldı</p>
+              </div>
+              <div className="rounded-xl border border-outline-variant/30 bg-outline-variant/10 p-3 text-center">
+                <p className="text-2xl font-bold tabular-nums text-safety-yellow">
+                  {Math.max(0, dailyMax - claimsUsed)}
+                </p>
+                <p className="text-legal-citation mt-1 text-on-surface-variant">Qalan baxış</p>
+              </div>
+            </div>
+            <p className="mt-4 inline-flex items-center gap-1.5 text-body-md font-semibold text-on-surface">
+              Hər izləmə üçün {reward}
+              <CoinIcon width={15} height={15} className="text-safety-yellow" />
+              coin
+            </p>
+          </Modal.Body>
+          <Modal.Footer>
+            {isCapped ? (
+              <Button variant="outline" isDisabled className="flex-1">
+                Bugünkü limitə çatmısınız, sabah yenidən cəhd edin
+              </Button>
+            ) : (
+              <Button
+                className="flex-1 glow-primary"
+                variant="primary"
+                onPress={handleStatsStart}
+                isPending={isStarting}
+              >
+                {({ isPending: pending }) => (
+                  <>
+                    {pending ? <Spinner size="sm" tone="current" /> : <SparkleIcon width={13} height={13} />}
+                    Qazan
+                  </>
+                )}
+              </Button>
+            )}
+          </Modal.Footer>
+        </Modal.Dialog>
+      </Modal.Container>
+    </Modal.Backdrop>
+  );
+
+  // Inline variant: a balance-slab-styled trigger (no card chrome) + the
+  // shared modal. The trigger is a plain button because the slab's buttons are
+  // plain-styled Links — keeping it a sibling of them, not a full-width CTA.
+  if (variant === 'inline') {
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => setIsStatsOpen(true)}
+          disabled={isStarting}
+          className="inline-flex items-center gap-1.5 rounded-full border border-white/40 bg-white/10 px-6 py-3 text-[11px] font-bold uppercase tracking-[0.1em] text-white transition hover:bg-white/20 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isStarting ? <Spinner size="sm" tone="current" /> : <SparkleIcon width={13} height={13} />}
+          Pulsuz coin qazan
+        </button>
+        {statsModal}
+        {countdownModal}
+      </>
     );
   }
 
@@ -272,46 +421,7 @@ export default function AdWatchCard({
         </Button>
       )}
 
-      {/* Countdown modal — used by the direct-link flow (real ad opened in a
-          new tab, this gates the claim) and by the simulation flow (nothing
-          configured). Never opened in SDK mode. */}
-      <Modal.Backdrop isOpen={isModalOpen} onOpenChange={handleModalOpenChange}>
-        <Modal.Container>
-          <Modal.Dialog className="sm:max-w-[380px]">
-            <Modal.CloseTrigger />
-            <Modal.Header>
-              <Modal.Heading>Reklam izlə</Modal.Heading>
-            </Modal.Header>
-            <Modal.Body>
-              <p className="text-body-md text-on-surface-variant">
-                {AD_MODE === 'direct-link'
-                  ? secondsLeft > 0
-                    ? `Reklam açıldı — ${secondsLeft} saniyə...`
-                    : 'Coini qazandınız! Reklamı bağlayın — coin avtomatik hesabınıza yazılacaq'
-                  : secondsLeft > 0
-                    ? `Reklam simulyasiyası — ${secondsLeft} saniyə`
-                    : 'Reklam tamamlandı — coin qazanmaq üçün klikləyin'}
-              </p>
-            </Modal.Body>
-            <Modal.Footer>
-              <Button
-                className="flex-1 glow-primary"
-                variant="primary"
-                onPress={handleClaim}
-                isDisabled={secondsLeft > 0}
-                isPending={isPending}
-              >
-                {({ isPending: pending }) => (
-                  <>
-                    {pending ? <Spinner size="sm" tone="current" /> : null}
-                    Coin al
-                  </>
-                )}
-              </Button>
-            </Modal.Footer>
-          </Modal.Dialog>
-        </Modal.Container>
-      </Modal.Backdrop>
+      {countdownModal}
     </div>
   );
 }

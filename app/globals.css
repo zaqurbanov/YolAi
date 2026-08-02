@@ -1761,21 +1761,78 @@ html:not(.dark) .tour-spotlight {
    elsewhere in this file. */
 
 /*
- * Çarx (WheelGame, components/games/WheelGame.tsx) — Cyber-Circuit Legal
- * visual only. The component's segment math (buildSegmentAngles — weights
- * proportional, NOT equal slices), the server-authoritative spin
- * (spinWheelAction picks prizeIndex, client only animates to it) and the
- * conic-gradient render logic are all UNCHANGED. These rules override size /
- * border / glow / segment colors on the `wheel-hud-*` classes added
- * ALONGSIDE the component's existing classes (nothing removed there), so
- * they're inert while `data-design` is absent/"simple" — the default wheel
- * (small, two flat brand tones, thin border) renders exactly as before.
- * Loosely modeled on the Stitch "Böyük 3D Şans Çarxı (Premium)" screenshot
- * (large disc, thick gold ring, glow, dark hub) as a CSS *technique*
- * reference, not copied verbatim — that export was a plain evenly-sliced
- * demo wheel with no real weighting, which is exactly what must NOT be
- * reproduced here.
+ * Çarx (WheelGame, components/games/WheelGame.tsx) — enhanced base design
+ * + Cyber-Circuit Legal 3D overrides.
+ *
+ * The component's segment math (buildSegmentAngles — weights proportional,
+ * NOT equal slices), the server-authoritative spin (spinWheelAction picks
+ * prizeIndex, client only animates to it) and the conic-gradient render
+ * logic are all UNCHANGED. These rules style the `wheel-hud-*` classes
+ * added alongside the component's existing classes.
+ *
+ * Base (simple) design: larger wheel (size-64 / 256px), thicker border,
+ * pulsing glow ring, ambient wheel/hub/pointer glows — all using
+ * `var(--color-primary)` theme tokens so it tracks light/dark mode.
+ *
+ *3D overrides: `[data-design='3d']` rules below further enlarge the wheel,
+ * swap segment colors to the HUD palette, and restyle the hub/spin-btn
+ * with `--hud-*` tokens. The `--hud-*` tokens are only resolved inside
+ * `[data-design='3d']` blocks; the base rules never reference them.
  */
+/* ── Base wheel styles (no data-design attribute needed) ─────────── */
+
+.wheel-hud-wrap {
+  /* Label radius for the size-64 (256px) base wheel — labels sit at
+     ~77% of the 128px radius. The3D override below pushes them to
+     118px for the bigger clamp-sized wheel. */
+  --wheel-hud-label-radius: 98px;
+}
+
+/* Pulsing outer glow ring — decorative, matches the Stitch reference's
+   `.glow-ring`. Uses `var(--color-primary)` (the theme accent) so it
+   tracks light/dark. The3D override replaces the color with
+   `var(--hud-primary)`. */
+.wheel-hud-wrap::before {
+  content: '';
+  position: absolute;
+  inset: -14px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in oklab, var(--color-primary) 30%, transparent);
+  animation: wheel-glow-pulse 2.2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes wheel-glow-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(1.12);
+    opacity: 0;
+  }
+}
+
+/* Ambient glow on the wheel disc itself — inner radial wash + outer
+   soft halo, both in the primary accent at low opacity. */
+.wheel-hud-wheel {
+  box-shadow:
+    inset 0 0 30px color-mix(in oklab, var(--color-primary) 12%, transparent),
+    0 0 20px color-mix(in oklab, var(--color-primary) 18%, transparent);
+}
+
+/* Pointer glow — a colored drop-shadow that reads as a neon accent. */
+.wheel-hud-pointer {
+  filter: drop-shadow(0 0 8px color-mix(in oklab, var(--color-primary) 45%, transparent));
+}
+
+/* Hub glow — subtle ambient ring around the centre button. */
+.wheel-hud-hub {
+  box-shadow: 0 0 12px color-mix(in oklab, var(--color-primary) 25%, transparent);
+}
+
+/* ── 3D / Cyber-Circuit Legal overrides ──────────────────────────── */
+
 [data-design='3d'] .wheel-hud-card {
   background: var(--hud-surface);
   backdrop-filter: blur(12px);

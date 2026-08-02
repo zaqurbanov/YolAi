@@ -208,7 +208,7 @@ export default function AccountPage3D({
               </div>
               {!isAdmin && (
                 <div className="mt-3 text-right">
-                  <Link href="/leaderboard" className="text-xs font-bold" style={{ color: 'var(--hud-primary)' }}>
+                  <Link href="/coin-qazan/leaderboard" className="text-xs font-bold" style={{ color: 'var(--hud-primary)' }}>
                     Liderlik lövhəsinə bax →
                   </Link>
                 </div>

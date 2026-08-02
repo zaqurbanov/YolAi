@@ -148,7 +148,7 @@ export default async function CoursePage({ params }: { params: Promise<{ courseI
             Kurslar
           </Link>
 
-          <h1 className="text-display-lg text-[32px] text-balance lg:text-[40px]">
+          <h1 className="font-display text-[26px] font-bold leading-tight text-balance lg:text-[30px]">
             {course?.title ?? 'Kurs'}
           </h1>
           <p className="max-w-xl text-body-md text-on-surface-variant">
@@ -185,22 +185,22 @@ export default async function CoursePage({ params }: { params: Promise<{ courseI
               </p>
             </div>
           ) : (
-            <ol className="flex flex-col gap-3">
+            <ol className="flex flex-col gap-2.5">
               {topics.map((topic, i) => {
                 const rowClass =
-                  'glass-card flex items-center gap-4 rounded-2xl border border-transparent p-5';
+                  'glass-card flex items-center gap-3 rounded-xl border border-transparent px-4 py-3';
 
                 const badge = topic.passed ? (
-                  <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-go-green/15 text-go-green">
-                    <CheckIcon width={18} height={18} />
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-go-green/15 text-go-green">
+                    <CheckIcon width={16} height={16} />
                   </span>
                 ) : topic.isUnlocked ? (
-                  <span className="text-legal-citation flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary">
+                  <span className="text-legal-citation flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
                     {i + 1}
                   </span>
                 ) : (
-                  <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-surface-tertiary text-on-surface-variant">
-                    <LockIcon width={16} height={16} />
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-surface-tertiary text-on-surface-variant">
+                    <LockIcon width={15} height={15} />
                   </span>
                 );
 
@@ -208,9 +208,9 @@ export default async function CoursePage({ params }: { params: Promise<{ courseI
                   <>
                     {badge}
                     <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-1.5">
                         <h3
-                          className={`text-headline-md text-[17px] ${topic.isUnlocked ? '' : 'text-on-surface-variant'}`}
+                          className={`text-[15px] font-semibold leading-snug ${topic.isUnlocked ? 'text-on-surface' : 'text-on-surface-variant'}`}
                         >
                           {topic.title}
                         </h3>
@@ -236,7 +236,7 @@ export default async function CoursePage({ params }: { params: Promise<{ courseI
                         )}
                       </div>
 
-                      <p className="mt-1 text-label-sm text-on-surface-variant">
+                      <p className="mt-0.5 text-[13px] leading-snug text-on-surface-variant">
                         {topic.passed
                           ? `Ən yaxşı nəticə: ${topic.bestScore} • ${topic.attempts} cəhd`
                           : !topic.isUnlocked
@@ -249,9 +249,9 @@ export default async function CoursePage({ params }: { params: Promise<{ courseI
 
                     {topic.isUnlocked && (
                       <ArrowRightIcon
-                        width={18}
-                        height={18}
-                        className="shrink-0 text-on-surface-variant"
+                        width={16}
+                        height={16}
+                        className="shrink-0 text-on-surface-variant transition-transform group-hover:translate-x-0.5"
                       />
                     )}
                   </>
@@ -262,7 +262,7 @@ export default async function CoursePage({ params }: { params: Promise<{ courseI
                     {topic.isUnlocked ? (
                       <Link
                         href={`/oyrenme/${courseId}/${topic.id}`}
-                        className={`${rowClass} transition-[transform,border-color] hover:-translate-y-0.5 hover:border-primary/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary`}
+                        className={`${rowClass} group transition-[transform,border-color] hover:-translate-y-0.5 hover:border-primary/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary`}
                       >
                         {body}
                       </Link>

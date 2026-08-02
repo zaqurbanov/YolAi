@@ -29,11 +29,11 @@ export default async function LeaderboardPage() {
     <div className="mx-auto max-w-2xl space-y-6 px-4 pt-8 pb-16 md:px-8">
       <div>
         <Link
-          href="/account"
+          href="/coin-qazan"
           className="mb-4 inline-flex items-center gap-1.5 text-label-sm text-on-surface-variant hover:text-on-surface"
         >
           <ArrowLeftIcon width={14} height={14} />
-          Hesaba qayıt
+          Coin Qazana qayıt
         </Link>
         <h1 className="text-headline-md text-on-surface">Liderlik lövhəsi</h1>
         {/* Same "motivational, not a real qualification" posture as the

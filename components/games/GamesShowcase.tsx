@@ -39,7 +39,11 @@ export default function GamesShowcase({
   const [energy, setEnergy] = useState(initialEnergy);
 
   return (
-    <div className="flex min-h-[80svh] flex-col">
+    <div className="flex min-h-0 flex-col md:min-h-[80svh]">
+      {/* The tall min-height is a desktop terminal affordance. On mobile the
+          showcase sits at the top of the /coin-qazan page with the wheel right
+          below it — forcing 80svh here left a huge empty gap above the Çarx
+          card, so mobile takes natural height instead. */}
       {/* Shared meters. Energy accumulates across days since 0094, so it can
           exceed maxEnergy (the daily top-up size) — show the true balance and
           drop the "/max" denominator once it no longer bounds it. */}

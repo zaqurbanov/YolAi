@@ -40,7 +40,7 @@ Yalnız giriş etmiş istifadəçilər üçün görünür: **Coin Qazan** və **
 | Səhifə | Ünvan | Nə üçündür |
 |---|---|---|
 | Sual-Cavab | `/sual` | İstifadəçi admin komandasına birbaşa sual göndərə bilər, cavab gələndə bildiriş alır |
-| Liderlik lövhəsi | `/leaderboard` | Ən çox aktiv istifadəçilərin sıralanması (motivasiya məqsədli, rəsmi status deyil) |
+| Liderlik lövhəsi | `/coin-qazan/leaderboard` | Ən çox aktiv istifadəçilərin sıralanması (motivasiya məqsədli, rəsmi status deyil) |
 | Qiymətlər | `/qiymetler` | Hazırda "Tezliklə" vəziyyətində — gələcək ödənişli planlar üçün yer tutucu |
 | FAQ | `/faq/[slug]` | Tez-tez verilən suallar |
 | Bizə yazın | `/sual` (sidebar-ın altındakı düymə) | Sual-Cavab səhifəsinə qısayol |

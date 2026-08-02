@@ -192,6 +192,12 @@ export default function SignSpeedGame({ energy, onSettled }: SignSpeedGameProps)
     correctFlags: boolean[];
     correctIndices: number[];
   } | null>(null);
+  // Which image the question content may render with. The sign image IS the
+  // question here, so the code + options stay hidden until it has loaded — a
+  // fresh fetch from Supabase Storage used to land after the text, which read
+  // as "suallar gəlir, sonra şəkil". Reset + next-image preload live in the
+  // sync effect below.
+  const [loadedImageUrl, setLoadedImageUrl] = useState<string | null>(null);
 
   const deadlineRef = useRef(0);
   const submittedRef = useRef(false);
@@ -255,6 +261,18 @@ export default function SignSpeedGame({ energy, onSettled }: SignSpeedGameProps)
     return () => window.clearInterval(id);
   }, [phase, answers, submit]);
 
+  // Warm the NEXT question's image so advancing is instant instead of a visible
+  // re-fetch. No state reset needed here — imageReady compares loadedImageUrl
+  // to the current question's URL, so it is already false the moment the
+  // question advances.
+  useEffect(() => {
+    const nextUrl = questions[currentIndex + 1]?.imageUrl;
+    if (nextUrl) {
+      const pre = new Image();
+      pre.src = nextUrl;
+    }
+  }, [currentIndex, questions]);
+
   const start = useCallback(async () => {
     setPhase('starting');
     setNote(null);
@@ -300,6 +318,10 @@ export default function SignSpeedGame({ energy, onSettled }: SignSpeedGameProps)
   if (phase === 'playing' && questions.length > 0 && currentIndex >= 0) {
     const question = questions[currentIndex];
     const progressPct = Math.max(0, Math.min(100, (remainingMs / ROUND_DURATION_MS) * 100));
+    // A question without an image renders its text directly; with an image the
+    // content waits for it (loadedImageUrl), so image and text appear together.
+    const imageUrl = question.imageUrl;
+    const imageReady = !imageUrl || loadedImageUrl === imageUrl;
     return (
       <div className="flex flex-col items-center gap-4">
         <div className="flex w-full items-center justify-between text-label-sm text-on-surface-variant">
@@ -319,28 +341,45 @@ export default function SignSpeedGame({ energy, onSettled }: SignSpeedGameProps)
         </div>
 
         <p className="text-legal-citation uppercase text-on-surface-variant">Nişan</p>
-        {question.imageUrl && (
-          // eslint-disable-next-line @next/next/no-img-element -- dynamic Supabase Storage URL, small size, no next/image optimization needed
-          <img
-            src={question.imageUrl}
-            alt={`Nişan ${question.code}`}
-            className="size-24 rounded-xl border border-outline-variant/40 bg-surface-tertiary/40 object-contain"
-          />
-        )}
-        <p className="text-headline-md text-[22px] text-primary">{question.code}</p>
+        {/* The image stays mounted even while loading (invisible + skeleton
+            behind it) so the fetch starts immediately; the code + options only
+            render once it has loaded, so text never leads the image. */}
+        {imageUrl ? (
+          <div className="relative">
+            {/* eslint-disable-next-line @next/next/no-img-element -- dynamic Supabase Storage URL, small size, no next/image optimization needed */}
+            <img
+              src={imageUrl}
+              alt={`Nişan ${question.code}`}
+              onLoad={() => setLoadedImageUrl(imageUrl)}
+              onError={() => setLoadedImageUrl(imageUrl)}
+              className={`size-24 rounded-xl border border-outline-variant/40 bg-surface-tertiary/40 object-contain ${
+                imageReady ? '' : 'invisible'
+              }`}
+            />
+            {!imageReady && (
+              <div className="absolute inset-0 size-24 animate-pulse rounded-xl bg-surface-tertiary/60" />
+            )}
+          </div>
+        ) : null}
 
-        <div className="grid w-full grid-cols-1 gap-2">
-          {question.options.map((option, i) => (
-            <button
-              key={i}
-              type="button"
-              onClick={() => selectOption(i)}
-              className="rounded-xl border border-outline-variant/40 bg-surface-tertiary/40 px-4 py-2.5 text-left text-body-md transition hover:border-primary/50 hover:bg-primary/5"
-            >
-              {option}
-            </button>
-          ))}
-        </div>
+        {imageReady && (
+          <>
+            <p className="text-headline-md text-[22px] text-primary">{question.code}</p>
+
+            <div className="grid w-full grid-cols-1 gap-2">
+              {question.options.map((option, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => selectOption(i)}
+                  className="rounded-xl border border-outline-variant/40 bg-surface-tertiary/40 px-4 py-2.5 text-left text-body-md transition hover:border-primary/50 hover:bg-primary/5"
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </div>
     );
   }

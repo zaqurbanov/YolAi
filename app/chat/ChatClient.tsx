@@ -28,6 +28,7 @@ import { formatCoinBalance } from '@/lib/format/coins';
 import { ADMIN_CONTACT_EMAIL } from '@/lib/contact';
 import { reportClientError } from '@/app/actions/reportClientError';
 import MobileChat from './MobileChat';
+import { useBusyCountdown } from './useBusyCountdown';
 
 interface Citation {
   document_id: string;
@@ -300,29 +301,17 @@ function BusyIndicator({
   status: 'submitted' | 'streaming' | string;
   phrasesByStage: BusyPhrasesByStage;
 }) {
-  const [elapsedMs, setElapsedMs] = useState(0);
-  useEffect(() => {
-    if (!isBusy) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- resets the timer when the busy state ends, same pattern as the other busy/stream resets in this file.
-      setElapsedMs(0);
-      return;
-    }
-    const start = Date.now();
-    const interval = setInterval(() => setElapsedMs(Date.now() - start), 250);
-    return () => clearInterval(interval);
-  }, [isBusy]);
+  const { elapsedMs, remaining } = useBusyCountdown(isBusy);
 
   if (!isBusy) return null;
 
   const phrase = busyPhraseFor(status, elapsedMs, phrasesByStage);
   // Countdown, not count-up: anticipation ("cavab yaxınlaşır") reads better
-  // than a climbing timer. Starts from the measured median full-answer time
-  // (~10s after the 0063 retrieval consolidation). If the answer takes
-  // longer, the number is hidden and only "az qaldı…" remains — a counter
-  // that goes negative or freezes at 0 would signal "stuck", the opposite of
-  // the intent.
-  const remaining = COUNTDOWN_FROM_SECONDS - Math.floor(elapsedMs / 1000);
-
+  // than a climbing timer. The ticker and clamp live in useBusyCountdown —
+  // starts from the measured median full-answer time (~10s after the 0063
+  // retrieval consolidation); if the answer takes longer the number is
+  // hidden and only "az qaldı…" remains — a counter that goes negative or
+  // freezes at 0 would signal "stuck", the opposite of the intent.
   return (
     <div className="mt-6 flex items-center gap-2 text-on-surface-variant">
       <Spinner size="sm" />
@@ -333,11 +322,6 @@ function BusyIndicator({
     </div>
   );
 }
-
-// Median full-answer latency (see chat_request_logs after migration 0063);
-// deliberately a touch above it so the countdown usually finishes just as —
-// or slightly after — the first tokens stream in.
-const COUNTDOWN_FROM_SECONDS = 10;
 
 // Reflects the real backend pipeline (app/api/chat/route.ts) instead of an
 // arbitrary rotation, so the wait reads as "here's what's actually

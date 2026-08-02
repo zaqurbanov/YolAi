@@ -229,7 +229,7 @@ etibar edilmir.
 ## 7. Reytinq və sosial elementlər
 
 - **Həftəlik liderlik lövhəsi** (`lib/leaderboard/getLeaderboard.ts`, miqrasiya `0065`) — coin
-  qazanma fəaliyyətinə görə həftəlik sıralama, `app/leaderboard`.
+  qazanma fəaliyyətinə görə həftəlik sıralama, `app/coin-qazan/leaderboard`.
 - **Bildirişlər** (`lib/notifications/`, `app/notifications`) — daxili bildiriş lenti.
 - **Push bildirişlər** (`lib/push/broadcast.ts`, `webpush.ts`, `endpointValidation.ts`) — brauzer
   push abunəliyi, admin-dən toplu göndəriş, admin panelindən idarə olunur.

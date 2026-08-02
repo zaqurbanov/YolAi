@@ -8,9 +8,7 @@ interface CoinQazanPage3DProps {
   streakDays: number;
   dailyGrantCard: ReactNode;
   energyConverterCard: ReactNode;
-  energyToCoinConverterCard: ReactNode;
   dailyQuestCard: ReactNode;
-  weeklyLeaderboardCard: ReactNode;
   garageCard: ReactNode;
   plateMarketCard: ReactNode;
   dailyQuizCard: ReactNode;
@@ -31,20 +29,18 @@ interface CoinQazanPage3DProps {
 // a card's internal render logic, so every server action / HeroUI
 // integration inside those cards stays exactly as it was.
 const HUD_FRAMES: { key: keyof Omit<CoinQazanPage3DProps, 'coinBalance' | 'streakDays'>; label: string; span?: string }[] = [
+  // Full row width — the games terminal (XO/Nişan Sürəti/Sınaq İmtahanı tabs)
+  // needs more horizontal room than the half-width grid cell gives it.
+  { key: 'gamesSection', label: 'OYUNLAR TERMİNALI', span: 'lg:col-span-2' },
+  { key: 'wheelGame', label: 'ÇARX' },
   { key: 'dailyGrantCard', label: 'GÜNLÜK HƏDİYYƏ' },
   { key: 'energyConverterCard', label: 'ENERJİ KONVERTER' },
-  { key: 'energyToCoinConverterCard', label: 'ENERJİ → COİN' },
   { key: 'dailyQuestCard', label: 'GÜNDƏLİK MİSSİYA' },
-  { key: 'weeklyLeaderboardCard', label: 'HƏFTƏLİK REYTİNQ' },
   { key: 'garageCard', label: 'VİRTUAL QARAJ' },
   { key: 'plateMarketCard', label: 'VIP NÖMRƏ BAZARI' },
   { key: 'dailyQuizCard', label: 'BUGÜNKÜ SUAL' },
   { key: 'referralCard', label: 'DOST DƏVƏTİ' },
   { key: 'adWatchCard', label: 'REKLAM İZLƏ' },
-  // Full row width — the games terminal (XO/Nişan Sürəti/Sınaq İmtahanı tabs)
-  // needs more horizontal room than the half-width grid cell gives it.
-  { key: 'gamesSection', label: 'OYUNLAR TERMİNALI', span: 'lg:col-span-2' },
-  { key: 'wheelGame', label: 'ÇARX' },
 ];
 
 function HudFrame({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
@@ -78,9 +74,7 @@ export default function CoinQazanPage3D({
   streakDays,
   dailyGrantCard,
   energyConverterCard,
-  energyToCoinConverterCard,
   dailyQuestCard,
-  weeklyLeaderboardCard,
   garageCard,
   plateMarketCard,
   dailyQuizCard,
@@ -92,9 +86,7 @@ export default function CoinQazanPage3D({
   const cards: Record<string, ReactNode> = {
     dailyGrantCard,
     energyConverterCard,
-    energyToCoinConverterCard,
     dailyQuestCard,
-    weeklyLeaderboardCard,
     garageCard,
     plateMarketCard,
     dailyQuizCard,

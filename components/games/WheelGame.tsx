@@ -131,19 +131,30 @@ export default function WheelGame({ prizes, initialStatus }: WheelGameProps) {
       <div className="flex flex-col items-center gap-5 pt-2">
         {/*
          * `wheel-hud-wrap` carries the pulsing outer glow ring
-         * (`[data-design='3d'] .wheel-hud-wrap::before`) around the wheel — a
-         * purely decorative, purely visual addition scoped to the 3D design;
-         * it's inert (no rule targets it) under the default/"simple" design.
+         * (`.wheel-hud-wrap::before` in app/globals.css) around the wheel — a
+         * purely decorative, purely visual ring. The base rule uses
+         * `var(--color-primary)`; the 3D override swaps to `var(--hud-primary)`.
          */}
         <div className="relative flex items-center justify-center wheel-hud-wrap">
-          {/* Pointer */}
+          {/* Pointer — solid filled triangle matching the Stitch reference's
+              prominent gold pointer. CSS border trick (transparent sides +
+              colored top) creates a clean triangle without clip-path. Sized
+              at 12/22px for better visual weight on the wheel ring. The base
+              `border-t-primary` tracks the theme accent; the 3D override in
+              globals.css swaps to `var(--hud-primary)`. Drop-shadow is handled
+              by `.wheel-hud-pointer` in globals.css (theme-aware color-mix),
+              not a hardcoded Tailwind utility. */}
           <div
             aria-hidden
-            className="absolute -top-1 z-10 size-0 border-x-8 border-t-[14px] border-x-transparent border-t-primary drop-shadow wheel-hud-pointer"
+            className="absolute -top-1 z-10 size-0 border-x-[12px] border-t-[22px] border-x-transparent border-t-primary wheel-hud-pointer"
           />
-          {/* Wheel */}
+          {/* Wheel disc — conic-gradient segments rendered via the `background`
+              useMemo above. Thicker border (8px) matches the Stitch reference's
+              prominent gold ring; `border-primary/60` gives a solid accent ring
+              in both themes. The 3D override in globals.css increases this further
+              and swaps to `var(--hud-primary)`. */}
           <div
-            className="relative size-56 rounded-full border-4 border-primary/40 shadow-lg wheel-hud-wheel"
+            className="relative size-64 rounded-full border-[8px] border-primary/60 shadow-lg wheel-hud-wheel"
             style={{
               background,
               transform: `rotate(${rotation}deg)`,
@@ -153,21 +164,25 @@ export default function WheelGame({ prizes, initialStatus }: WheelGameProps) {
             {prizes.map((p, i) => (
               <span
                 key={i}
-                className="absolute left-1/2 top-1/2 text-sm font-bold text-white wheel-hud-label"
+                className="absolute left-1/2 top-1/2 text-sm font-bold text-white uppercase tracking-wide wheel-hud-label"
                 style={{
                   // `--wheel-hud-label-radius` lets the bigger 3D wheel push
-                  // labels further from centre (set on `.wheel-hud-wheel` in
-                  // app/globals.css); falls back to the original 88px radius
-                  // used by the default/"sadə dizayn" size-56 wheel.
-                  transform: `rotate(${segments[i].centre}deg) translateY(calc(-1 * var(--wheel-hud-label-radius, 88px)))`,
+                  // labels further from centre (set on `.wheel-hud-wrap` in
+                  // app/globals.css); falls back to 98px for the base
+                  // size-64 wheel (set on `.wheel-hud-wrap` base rule).
+                  transform: `rotate(${segments[i].centre}deg) translateY(calc(-1 * var(--wheel-hud-label-radius, 98px)))`,
                   transformOrigin: '0 0',
                 }}
               >
                 {p.value}
               </span>
             ))}
-            {/* Hub */}
-            <div className="absolute left-1/2 top-1/2 flex size-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-primary/50 bg-background text-primary wheel-hud-hub">
+            {/* Hub — solid primary-colored center matching the Stitch reference's
+                gold hub. `bg-primary` gives a filled accent circle; `text-on-primary`
+                ensures the EnergyIcon is legible on the filled background. `border-2`
+                gives a thin ring for visual definition that the 3D override swaps to
+                `var(--hud-bg-deep)` for the dark-border-on-gold look. */}
+            <div className="absolute left-1/2 top-1/2 flex size-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-primary/30 bg-primary text-on-primary wheel-hud-hub">
               <EnergyIcon width={18} height={18} />
             </div>
           </div>
@@ -189,7 +204,7 @@ export default function WheelGame({ prizes, initialStatus }: WheelGameProps) {
             size="md"
             isPending={spinning}
             onPress={() => void spin()}
-            className="glow-primary wheel-hud-spin-btn w-full max-w-xs justify-center"
+            className="glow-primary wheel-hud-spin-btn w-full max-w-xs justify-center uppercase tracking-wider"
           >
             {spinning ? 'Fırlanır…' : 'Fırlat (pulsuz)'}
           </Button>

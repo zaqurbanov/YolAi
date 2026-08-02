@@ -1,7 +1,6 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import MobileBottomTabBar from '@/components/home/MobileBottomTabBar';
-import { CoinIcon, FlameIcon } from '@/components/icons';
+import { FlameIcon } from '@/components/icons';
 
 export interface MobileCoinQazanProps {
   coinBalance: number;
@@ -9,7 +8,6 @@ export interface MobileCoinQazanProps {
   longestStreak: number;
   dailyGrantCard: ReactNode;
   energyConverterCard: ReactNode;
-  energyToCoinConverterCard: ReactNode;
   dailyQuestCard: ReactNode;
   dailyQuizCard: ReactNode;
   gamesSection: ReactNode;
@@ -17,8 +15,10 @@ export interface MobileCoinQazanProps {
   garageCard: ReactNode;
   plateMarketCard: ReactNode;
   referralCard: ReactNode;
-  adWatchCard: ReactNode;
-  weeklyLeaderboardCard: ReactNode;
+  /** The inline ad-watch trigger (AdWatchCard variant="inline") — mounted in
+   *  the balance slab next to "Reytinq", since the mobile shell no longer
+   *  shows the standalone ad card in the daily-tasks section. */
+  adWatchInlineButton: ReactNode;
 }
 
 /**
@@ -75,7 +75,6 @@ export default function MobileCoinQazan({
   longestStreak,
   dailyGrantCard,
   energyConverterCard,
-  energyToCoinConverterCard,
   dailyQuestCard,
   dailyQuizCard,
   gamesSection,
@@ -83,8 +82,7 @@ export default function MobileCoinQazan({
   garageCard,
   plateMarketCard,
   referralCard,
-  adWatchCard,
-  weeklyLeaderboardCard,
+  adWatchInlineButton,
 }: MobileCoinQazanProps) {
   return (
     <div className="editorial flex flex-col pb-24">
@@ -130,31 +128,15 @@ export default function MobileCoinQazan({
                 Coin al
               </Link>
               <Link
-                href="/leaderboard"
+                href="/coin-qazan/leaderboard"
                 className="rounded-full border border-white/30 px-6 py-3 text-[11px] font-bold uppercase tracking-[0.1em] transition hover:bg-white/10 active:scale-95"
               >
                 Reytinq
               </Link>
+              {/* The ad-watch CTA lives here, in the top balance section —
+                  clicking it opens the watch-ad modal (see AdWatchCard). */}
+              {adWatchInlineButton}
             </div>
-          </div>
-        </section>
-
-        <section>
-          <SectionHeader title="Gündəlik tapşırıqlar" />
-          <div className="space-y-4">
-            {dailyGrantCard}
-            {dailyQuestCard}
-            {dailyQuizCard}
-            {adWatchCard}
-            {referralCard}
-          </div>
-        </section>
-
-        <section>
-          <SectionHeader title="Enerji" />
-          <div className="space-y-4">
-            {energyConverterCard}
-            {energyToCoinConverterCard}
           </div>
         </section>
 
@@ -167,42 +149,35 @@ export default function MobileCoinQazan({
         </section>
 
         <section>
-          <SectionHeader title="Qarajım" action={{ label: 'Nömrə bazarı', href: '#nomre' }} />
+          <SectionHeader title="Gündəlik tapşırıqlar" />
+          <div className="space-y-4">
+            {dailyGrantCard}
+            {dailyQuestCard}
+            {dailyQuizCard}
+            {referralCard}
+          </div>
+        </section>
+
+        <section>
+          <SectionHeader title="Enerji" />
+          {/* One merged converter card — coin → energy and energy → coin are
+              the two directions of the same Konvertor (segmented toggle). */}
+          {energyConverterCard}
+        </section>
+
+        <section>
+          {/* The card here is the compact GaragePreviewCard carousel; the full
+              showroom (GarageCard + PlateMarketCard) lives on the sub-page, so
+              the section action points there instead of the #nomre anchor. */}
+          <SectionHeader title="Qarajım" action={{ label: 'Bütün qaraj', href: '/coin-qazan/qaraj' }} />
           <div className="space-y-4">
             {garageCard}
             <div id="nomre">{plateMarketCard}</div>
           </div>
         </section>
 
-        <section>
-          <SectionHeader title="Həftəlik liderlər" action={{ label: 'Hamısı', href: '/leaderboard' }} />
-          {weeklyLeaderboardCard}
-        </section>
-
-        <section>
-          <Link
-            href="/oyrenme"
-            className="editorial-shadow flex items-center justify-between gap-4 rounded-[2rem] border border-border/40 bg-surface p-6 transition active:scale-[0.99]"
-          >
-            <span>
-              <span className="block text-[11px] font-bold uppercase tracking-[0.1em] text-primary">
-                Ən sabit yol
-              </span>
-              <span className="mt-1 block text-[18px] font-semibold text-navy">
-                Dərsləri keç, coin qazan
-              </span>
-              <span className="mt-1 block text-[13px] text-on-surface-variant">
-                Hər sualı ilk dəfə düzgün cavablandıranda coin gəlir.
-              </span>
-            </span>
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-              <CoinIcon width={18} height={18} />
-            </span>
-          </Link>
-        </section>
       </div>
 
-      <MobileBottomTabBar />
     </div>
   );
 }

@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import MobileBottomTabBar from '@/components/home/MobileBottomTabBar';
 import FeatureRail from '@/components/home/FeatureRail';
+import { useSnapRail } from '@/components/home/SnapRail';
 import UnlockCourseCard from '@/app/oyrenme/UnlockCourseCard';
 import {
   ArrowRightIcon,
@@ -142,7 +142,9 @@ function renderCourseCard(course: CourseSummary, balance: number | null, wide: b
   const isEmpty = course.totalTopics === 0;
   const isLocked = !isEmpty && !course.isUnlocked;
   const isOpen = !isEmpty && course.isUnlocked;
-  const widthClass = wide ? 'w-full' : 'w-72 shrink-0';
+  // snap-start only on the slider branch — the expanded list (wide) is a plain
+  // stacked layout, not a snap rail, and must not register snap points.
+  const widthClass = wide ? 'w-full' : 'w-72 shrink-0 snap-start';
   const content = <CourseCardContent course={course} />;
 
   if (isLocked) {
@@ -207,6 +209,11 @@ export default function MobileOyrenme({
   // client state only, no extra route (a route would cost another Vercel
   // function and the deployment is already past the Hobby cap — CLAUDE.md).
   const [showAllCourses, setShowAllCourses] = useState(false);
+
+  // One-card-per-drag snap for the Kurslar slider below. `active` is unused
+  // here (no dots on this rail) — destructured via `railProps` only, and
+  // useSnapRail returns a stable object so skipping the rest is safe.
+  const { railProps: kurslarRailProps } = useSnapRail<HTMLDivElement>(courses.length);
 
   const stats: LearningStats = {
     overallPct,
@@ -324,7 +331,10 @@ export default function MobileOyrenme({
           {showAllCourses ? (
             <div className="space-y-3">{courses.map((course) => renderCourseCard(course, balance, true))}</div>
           ) : (
-            <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2 scrollbar-none">
+            <div
+              {...kurslarRailProps}
+              className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2 scrollbar-none snap-x snap-mandatory touch-pan-y select-none"
+            >
               {courses.length > 0 ? (
                 courses.map((course) => renderCourseCard(course, balance, false))
               ) : (
@@ -457,8 +467,6 @@ export default function MobileOyrenme({
 
       </main>
 
-      {/* Fixed Bottom Navigation */}
-      <MobileBottomTabBar />
     </div>
   );
 }

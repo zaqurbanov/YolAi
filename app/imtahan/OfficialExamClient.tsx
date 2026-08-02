@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Button, toast } from '@heroui/react';
 import { buttonVariants } from '@heroui/styles';
-import MobileBottomTabBar from '@/components/home/MobileBottomTabBar';
 import Footer from '@/components/Footer';
 import { Spinner } from '@/components/Spinner';
 import {
@@ -491,7 +490,6 @@ export default function OfficialExamClient({
             Düzgün cavablar göstərilmir — hər imtahan yeni suallarla qurulur.
           </p>
         </div>
-        <MobileBottomTabBar />
       </div>
     );
   }
@@ -751,8 +749,6 @@ export default function OfficialExamClient({
       <div className="mt-16">
         <Footer />
       </div>
-
-      <MobileBottomTabBar />
     </div>
   );
 }

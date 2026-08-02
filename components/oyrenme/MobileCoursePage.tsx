@@ -1,7 +1,6 @@
 import Link from 'next/link';
 import { Chip } from '@heroui/react';
 import { buttonVariants } from '@heroui/styles';
-import MobileBottomTabBar from '@/components/home/MobileBottomTabBar';
 import ProgressRing from '@/components/oyrenme/ProgressRing';
 import { ArrowRightIcon, CheckIcon, LockIcon, PlayIcon } from '@/components/icons';
 import type { CourseSummary, TopicSummary } from '@/lib/quiz/lessons';
@@ -55,7 +54,7 @@ export default function MobileCoursePage({
           </div>
         </div>
         <div>
-          <h1 className="text-headline-md text-[20px]">{title}</h1>
+          <h1 className="font-display text-[18px] font-bold text-on-surface">{title}</h1>
           <p className="mt-1 max-w-sm text-body-md text-on-surface-variant">{description}</p>
         </div>
 
@@ -74,7 +73,7 @@ export default function MobileCoursePage({
       </section>
 
       <section className="px-4 pt-6">
-        <h2 className="mb-3 text-headline-md text-[18px]">Dərs Proqramı</h2>
+        <h2 className="font-display mb-3 text-[17px] font-bold text-on-surface">Dərs Proqramı</h2>
 
         {topics.length === 0 ? (
           <div className="glass-card rounded-2xl px-6 py-10 text-center">
@@ -84,26 +83,26 @@ export default function MobileCoursePage({
             </p>
           </div>
         ) : (
-          <ol className="flex flex-col gap-3">
+          <ol className="flex flex-col gap-2.5">
             {topics.map((topic, i) => {
               const isActive = topic.isUnlocked && !topic.passed;
               const href = `/oyrenme/${courseId}/${topic.id}`;
 
               const badge = topic.passed ? (
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-go-green/15 text-go-green">
-                  <CheckIcon width={18} height={18} />
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-go-green/15 text-go-green">
+                  <CheckIcon width={16} height={16} />
                 </span>
               ) : isActive ? (
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary">
-                  <PlayIcon width={16} height={16} />
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+                  <PlayIcon width={15} height={15} />
                 </span>
               ) : topic.isUnlocked ? (
-                <span className="text-legal-citation flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary">
+                <span className="text-legal-citation flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
                   {i + 1}
                 </span>
               ) : (
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-surface-tertiary text-on-surface-variant">
-                  <LockIcon width={16} height={16} />
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-surface-tertiary text-on-surface-variant">
+                  <LockIcon width={15} height={15} />
                 </span>
               );
 
@@ -111,9 +110,9 @@ export default function MobileCoursePage({
                 <>
                   {badge}
                   <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-1.5">
                       <h3
-                        className={`text-headline-md text-[16px] ${topic.isUnlocked ? '' : 'text-on-surface-variant'}`}
+                        className={`text-[15px] font-semibold leading-snug ${topic.isUnlocked ? 'text-on-surface' : 'text-on-surface-variant'}`}
                       >
                         {topic.title}
                       </h3>
@@ -128,7 +127,7 @@ export default function MobileCoursePage({
                         </Chip>
                       )}
                     </div>
-                    <p className="mt-0.5 text-label-sm text-on-surface-variant">
+                    <p className="mt-0.5 text-[13px] leading-snug text-on-surface-variant">
                       {topic.passed
                         ? `Ən yaxşı nəticə: ${topic.bestScore} • ${topic.attempts} cəhd`
                         : !topic.isUnlocked
@@ -146,12 +145,12 @@ export default function MobileCoursePage({
                       Davam et
                     </Link>
                   ) : topic.isUnlocked ? (
-                    <ArrowRightIcon width={18} height={18} className="shrink-0 text-on-surface-variant" />
+                    <ArrowRightIcon width={16} height={16} className="shrink-0 text-on-surface-variant" />
                   ) : null}
                 </>
               );
 
-              const rowClass = `glass-card flex items-center gap-3 rounded-2xl border p-4 ${
+              const rowClass = `glass-card flex items-center gap-3 rounded-xl border px-4 py-3 ${
                 isActive ? 'border-primary/40' : 'border-transparent'
               }`;
 
@@ -180,7 +179,7 @@ export default function MobileCoursePage({
 
       {otherCourses.length > 0 && (
         <section className="pt-6 pb-2">
-          <h2 className="mb-3 px-4 text-headline-md text-[18px]">Sizin Üçün Seçilənlər</h2>
+          <h2 className="font-display mb-3 px-4 text-[17px] font-bold text-on-surface">Sizin Üçün Seçilənlər</h2>
           <div className="flex gap-3 overflow-x-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {otherCourses.map((course) => {
               const isEmpty = course.totalTopics === 0;
@@ -219,7 +218,6 @@ export default function MobileCoursePage({
         </section>
       )}
 
-      <MobileBottomTabBar />
     </div>
   );
 }

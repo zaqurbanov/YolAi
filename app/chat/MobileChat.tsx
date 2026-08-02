@@ -16,10 +16,10 @@ import {
   ImageIcon,
   ShareIcon,
 } from '@/components/icons';
-import MobileBottomTabBar from '@/components/home/MobileBottomTabBar';
 import { ChatConversationList } from '@/components/ChatConversationList';
 import { Spinner } from '@/components/Spinner';
 import { renderCitationText } from '@/lib/chat/renderCitationText';
+import { useBusyCountdown } from './useBusyCountdown';
 
 export interface MobileCitation {
   document_id: string;
@@ -305,6 +305,28 @@ const MobileMessageBubble = memo(function MobileMessageBubble({
   );
 });
 
+// Busy-row countdown while the answer is generated. Its own memoized
+// component so the 250ms tick in useBusyCountdown re-renders only this tiny
+// subtree, not all of MobileChat — which already re-renders per streamed
+// token — same isolation rationale as the desktop BusyIndicator.
+const MobileBusyIndicator = memo(function MobileBusyIndicator({
+  isBusy,
+}: {
+  isBusy: boolean;
+}) {
+  const { remaining } = useBusyCountdown(isBusy);
+  if (!isBusy) return null;
+  return (
+    <div className="mt-5 flex items-center gap-2 text-on-surface-variant">
+      <Spinner size="sm" />
+      <span className="mono-label uppercase">Cavab hazırlanır...</span>
+      <span className="mono-label text-on-surface-variant/60">
+        {remaining > 0 ? `${remaining}s` : 'az qaldı…'}
+      </span>
+    </div>
+  );
+});
+
 // Its OWN drawer, deliberately not the global sidebar one. Opening the sidebar
 // here showed the whole app shell — logo, the six nav links, the admin link,
 // logout, the install button, "Bizə yazın" — when the only thing asked for was
@@ -475,12 +497,7 @@ export default function MobileChat({
           ))}
         </div>
 
-        {isBusy && (
-          <div className="mt-5 flex items-center gap-2 text-on-surface-variant">
-            <Spinner size="sm" />
-            <span className="mono-label uppercase">Cavab hazırlanır...</span>
-          </div>
-        )}
+        <MobileBusyIndicator isBusy={isBusy} />
 
         <div ref={bottomSentinelRef} />
       </div>
@@ -572,7 +589,6 @@ export default function MobileChat({
         </form>
       </div>
 
-      <MobileBottomTabBar />
     </div>
   );
 }

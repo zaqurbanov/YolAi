@@ -6,6 +6,7 @@ import { Spinner } from '@/components/Spinner';
 import { purchaseCarTierAction } from '@/app/coin-qazan/actions';
 import { CoinIcon, CheckIcon, LockIcon, FineIcon } from '@/components/icons';
 import RedemptionExamModal from '@/components/coins/RedemptionExamModal';
+import { STAGE_TONES, perkLine } from '@/components/coins/garageStage';
 import type { CarTier } from '@/lib/garage/carTiers';
 import type { UserGarageEntry } from '@/lib/garage/garage';
 import type { ActiveGaragePerk } from '@/lib/garage/perks';
@@ -17,35 +18,11 @@ interface GarageCardProps {
   perk: ActiveGaragePerk;
 }
 
-function perkLine(perk: ActiveGaragePerk): string | null {
-  // The XO win reward became ENERGY in 0094, so this percentage bonus applies
-  // to energy now — not coins.
-  if (perk.xoBonusPct > 0) return `🎁 Aktiv perk: XO-da +${perk.xoBonusPct}% enerji`;
-  if (perk.energyBonus > 0) return `🎁 Aktiv perk: +${perk.energyBonus} gündəlik enerji`;
-  if (perk.chatDailyBonus > 0) return `🎁 Aktiv perk: +${perk.chatDailyBonus} gündəlik pulsuz sual`;
-  return null;
-}
-
 // Virtual Qaraj, Phase 1 — pure display + purchase, no perks/plates/fines.
 // Any affordable tier is directly purchasable (no forced tier order): the
 // list below never disables a tier because a lower one isn't owned, only
 // because the user can't afford it yet. Mirrors DailyQuestCard's
 // useTransition + coin-balance-update event pattern for the live balance.
-// Spine colour per tier position. Uses the traffic-accent tokens the app
-// already defines, so the ladder reads as a progression and each card is
-// distinguishable at a glance. Cycles if more tiers are ever added.
-// One light per tier position, used both as the stage wash (--stage-tone) and
-// as the card's accent. Progresses cool -> warm so the ladder is legible at a
-// glance rather than every tier looking alike.
-const STAGE_TONES = [
-  'color-mix(in oklab, var(--outline) 22%, transparent)',
-  'color-mix(in oklab, var(--regulatory-blue) 22%, transparent)',
-  'color-mix(in oklab, var(--go-green) 22%, transparent)',
-  'color-mix(in oklab, var(--safety-yellow) 26%, transparent)',
-  'color-mix(in oklab, var(--caution-orange) 26%, transparent)',
-  'color-mix(in oklab, var(--accent) 24%, transparent)',
-];
-
 export default function GarageCard({ tiers, garage, coinBalance, perk }: GarageCardProps) {
   const [currentGarage, setCurrentGarage] = useState(garage);
   const [balance, setBalance] = useState(coinBalance);

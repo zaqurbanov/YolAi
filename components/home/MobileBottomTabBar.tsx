@@ -48,6 +48,21 @@ const TABS: TabItem[] = [
 export default function MobileBottomTabBar() {
   const pathname = usePathname();
 
+  // Mounted ONCE in the root layout so it survives route-transition loading
+  // (previously it lived inside each page and the root loading.tsx swapped it
+  // out for the loading fallback). It self-gates to the routes that always had
+  // the bar, so auth/admin/static pages are unchanged. Keep this list in sync
+  // with where the bar used to be mounted — the five tabs plus /account.
+  const TAB_BAR_ROUTES = ['/chat', '/oyrenme', '/coin-qazan', '/imtahan', '/account'];
+
+  function shouldShowTabBar(pathname: string | null): boolean {
+    if (!pathname) return false;
+    if (pathname === '/') return true;
+    return TAB_BAR_ROUTES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  }
+
+  if (!shouldShowTabBar(pathname)) return null;
+
   return (
     // rounded-t-3xl detaches the bar from the screen edge so it reads as its
     // own panel rather than a band welded to the bottom.

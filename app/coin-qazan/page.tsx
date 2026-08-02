@@ -11,7 +11,6 @@ import {
   getAdViewDurationSeconds,
 } from '@/lib/coins/adWatch';
 import { getDailyQuestionForUser } from '@/lib/quiz/questions';
-import { getWeeklyLeaderboard } from '@/lib/coins/leaderboard';
 import { getCoinBalanceStatus } from '@/lib/chat/coins';
 import { getEnergyStatus, getEnergyPurchaseConfig } from '@/lib/coins/games';
 import { getEnergyToCoinStatus } from '@/lib/coins/energyToCoin';
@@ -28,13 +27,11 @@ import DailyQuizCard from '@/components/account/DailyQuizCard';
 import DailyQuestCard from '@/components/coins/DailyQuestCard';
 import DailyGrantCard from '@/components/coins/DailyGrantCard';
 import EnergyConverterCard from '@/components/coins/EnergyConverterCard';
-import EnergyToCoinConverterCard from '@/components/coins/EnergyToCoinConverterCard';
-import GarageCard from '@/components/coins/GarageCard';
+import GaragePreviewCard from '@/components/coins/GaragePreviewCard';
 import MobileCoinQazan from '@/components/coins/MobileCoinQazan';
 import PlateMarketCard from '@/components/coins/PlateMarketCard';
 import ReferralCard from '@/components/account/ReferralCard';
 import AdWatchCard from '@/components/account/AdWatchCard';
-import WeeklyLeaderboardCard from '@/components/account/WeeklyLeaderboardCard';
 import Footer from '@/components/Footer';
 import { ArrowLeftIcon } from '@/components/icons';
 import DesignSwitch from '@/components/design3d/DesignSwitch';
@@ -76,7 +73,6 @@ export default async function CoinQazanPage() {
     adWatchDailyMax,
     adWatchClaimsToday,
     adViewDurationSeconds,
-    weeklyLeaderboard,
     coinStatus,
     energyStatus,
     wheelStatus,
@@ -99,7 +95,6 @@ export default async function CoinQazanPage() {
     getAdWatchDailyMax(),
     getAdWatchClaimsToday(user.id),
     getAdViewDurationSeconds(),
-    getWeeklyLeaderboard(user.id),
     getCoinBalanceStatus(user.id),
     getEnergyStatus(user.id),
     getWheelStatus(user.id),
@@ -149,14 +144,18 @@ export default async function CoinQazanPage() {
       coinCost={energyPurchaseConfig.coinCost}
       energyAmount={energyPurchaseConfig.energyAmount}
       maxMultiplier={energyPurchaseConfig.maxMultiplier}
+      // One merged Konvertor card covers both directions (coin → energy as a
+      // coin SINK, energy → coin as the single sanctioned reverse path) — the
+      // energy→coin status feeds the sell half's rate/daily-cap display.
+      energyToCoinStatus={energyToCoinStatus}
     />
   );
-  const energyToCoinConverterCard = (
-    <EnergyToCoinConverterCard status={energyToCoinStatus} initialCoinBalance={coinStatus.balance} />
-  );
-  const weeklyLeaderboardCard = <WeeklyLeaderboardCard leaderboard={weeklyLeaderboard} />;
+  // Compact carousel preview, not the full showroom — the full GarageCard +
+  // PlateMarketCard now live on the /coin-qazan/qaraj sub-page, which this
+  // card links to. Same element flows to the mobile shell, the desktop grid
+  // and the 3D tree below.
   const garageCard = (
-    <GarageCard tiers={carTiers} garage={userGarage} coinBalance={coinStatus.balance} perk={garagePerk} />
+    <GaragePreviewCard tiers={carTiers} garage={userGarage} coinBalance={coinStatus.balance} perk={garagePerk} />
   );
   const plateMarketCard = (
     <PlateMarketCard
@@ -183,6 +182,18 @@ export default async function CoinQazanPage() {
       dailyMax={adWatchDailyMax}
       claimsToday={adWatchClaimsToday}
       durationSeconds={adViewDurationSeconds}
+    />
+  );
+  // Inline trigger for the mobile balance slab — same props, but renders just
+  // the "Coin qazan" button + the watch-ad modal, no card chrome.
+  const adWatchInlineButton = (
+    <AdWatchCard
+      adsEnabled={adsEnabled}
+      reward={adWatchReward}
+      dailyMax={adWatchDailyMax}
+      claimsToday={adWatchClaimsToday}
+      durationSeconds={adViewDurationSeconds}
+      variant="inline"
     />
   );
   // The three games no longer render inline behind a tab strip — each opens
@@ -213,7 +224,6 @@ export default async function CoinQazanPage() {
             longestStreak={streakStatus.longest}
             dailyGrantCard={dailyGrantCard}
             energyConverterCard={energyConverterCard}
-            energyToCoinConverterCard={energyToCoinConverterCard}
             dailyQuestCard={dailyQuestCard}
             dailyQuizCard={dailyQuizCard}
             gamesSection={gamesSection}
@@ -221,8 +231,7 @@ export default async function CoinQazanPage() {
             garageCard={garageCard}
             plateMarketCard={plateMarketCard}
             referralCard={referralCard}
-            adWatchCard={adWatchCard}
-            weeklyLeaderboardCard={weeklyLeaderboardCard}
+            adWatchInlineButton={adWatchInlineButton}
           />
         </div>
 
@@ -243,18 +252,16 @@ export default async function CoinQazanPage() {
           </div>
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            {gamesSection}
+            {wheelGame}
             {dailyGrantCard}
             {energyConverterCard}
-            {energyToCoinConverterCard}
             {dailyQuestCard}
-            {weeklyLeaderboardCard}
             {garageCard}
             {plateMarketCard}
             {dailyQuizCard}
             {referralCard}
             {adWatchCard}
-            {gamesSection}
-            {wheelGame}
           </div>
 
           <Footer />
@@ -267,9 +274,7 @@ export default async function CoinQazanPage() {
           streakDays={streakStatus.current}
           dailyGrantCard={dailyGrantCard}
           energyConverterCard={energyConverterCard}
-          energyToCoinConverterCard={energyToCoinConverterCard}
           dailyQuestCard={dailyQuestCard}
-          weeklyLeaderboardCard={weeklyLeaderboardCard}
           garageCard={garageCard}
           plateMarketCard={plateMarketCard}
           dailyQuizCard={dailyQuizCard}

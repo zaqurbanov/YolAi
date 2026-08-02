@@ -224,6 +224,11 @@ export default function NisanTapmacasiGame({ energy, onSettled }: NisanTapmacasi
     correctFlags: boolean[];
     correctIndices: number[];
   } | null>(null);
+  // Which image the question content may render with. The blurred photo IS the
+  // question, so the hint + options stay hidden until it has loaded — a fresh
+  // fetch from Supabase Storage used to land after the text. Reset + next-image
+  // preload live in the sync effect below.
+  const [loadedImageUrl, setLoadedImageUrl] = useState<string | null>(null);
 
   const submittedRef = useRef(false);
 
@@ -301,6 +306,9 @@ export default function NisanTapmacasiGame({ energy, onSettled }: NisanTapmacasi
   const selectOption = useCallback(
     (optionIndex: number) => {
       if (phase !== 'playing' || currentIndex < 0) return;
+      // A hint used for one question must never leak onto the next — reset the
+      // blur here, at the advance point, rather than from an effect.
+      setBlur(8);
       const next = answers.slice();
       next[currentIndex] = optionIndex;
       setAnswers(next);
@@ -309,11 +317,17 @@ export default function NisanTapmacasiGame({ energy, onSettled }: NisanTapmacasi
     [phase, currentIndex, answers, submit]
   );
 
-  // A hint used for one question must never leak onto the next — reset to the
-  // full 8px blur whenever the current question advances.
+  // Warm the NEXT question's photo so advancing is instant instead of a visible
+  // re-fetch. No state reset here — imageReady compares loadedImageUrl to the
+  // current question's URL (already false on advance), and the blur reset for a
+  // new question lives in selectOption, where the advance actually happens.
   useEffect(() => {
-    setBlur(8);
-  }, [currentIndex]);
+    const nextUrl = questions[currentIndex + 1]?.imageUrl;
+    if (nextUrl) {
+      const pre = new Image();
+      pre.src = nextUrl;
+    }
+  }, [currentIndex, questions]);
 
   if (unavailable) {
     return <p className="text-body-md text-on-surface-variant">Oyun hazırda əlçatan deyil.</p>;
@@ -323,6 +337,9 @@ export default function NisanTapmacasiGame({ energy, onSettled }: NisanTapmacasi
     const question = questions[currentIndex];
     const answeredCount = answers.filter((a) => a !== UNANSWERED).length;
     const progressPct = (answeredCount / questions.length) * 100;
+    // The blurred photo IS the question — keep the hint + options hidden until
+    // it has actually loaded so the question never appears ahead of its image.
+    const imageReady = loadedImageUrl === question.imageUrl;
     return (
       <div className="flex flex-col items-center gap-4">
         <div className="flex w-full items-center justify-between text-label-sm text-on-surface-variant">
@@ -339,48 +356,66 @@ export default function NisanTapmacasiGame({ energy, onSettled }: NisanTapmacasi
         </div>
 
         <div className="w-full">
-          {/* eslint-disable-next-line @next/next/no-img-element -- dynamic Supabase Storage URL, blurred by design, no next/image optimization needed */}
-          <img
-            src={question.imageUrl}
-            alt=""
-            style={{ filter: `blur(${blur}px)` }}
-            onPointerEnter={(e) => {
-              if (e.pointerType === 'mouse') setBlur(4);
-            }}
-            onPointerLeave={(e) => {
-              if (e.pointerType === 'mouse') setBlur(8);
-            }}
-            onClick={() => setBlur((b) => (b === 8 ? 4 : 8))}
-            className="h-44 w-full rounded-2xl border border-outline-variant/40 bg-surface-tertiary/40 object-contain transition"
-          />
-          <p className="mt-1.5 text-center text-legal-citation text-on-surface-variant">
-            Toxun kiçik ipucu üçün
-          </p>
-        </div>
-
-        <div className="w-full rounded-2xl border border-outline-variant/40 bg-surface-secondary/60 p-4">
-          <div className="flex items-center gap-2 text-label-sm font-semibold text-on-surface-variant">
-            <span aria-hidden>💡</span>
-            <span>İpucu</span>
+          {/* The photo stays mounted even while loading (invisible + skeleton
+              behind it) so the fetch starts immediately; hint + options only
+              render once it has loaded, so text never leads the image. */}
+          <div className="relative">
+            {/* eslint-disable-next-line @next/next/no-img-element -- dynamic Supabase Storage URL, blurred by design, no next/image optimization needed */}
+            <img
+              src={question.imageUrl}
+              alt=""
+              style={{ filter: `blur(${blur}px)` }}
+              onPointerEnter={(e) => {
+                if (e.pointerType === 'mouse') setBlur(4);
+              }}
+              onPointerLeave={(e) => {
+                if (e.pointerType === 'mouse') setBlur(8);
+              }}
+              onClick={() => setBlur((b) => (b === 8 ? 4 : 8))}
+              onLoad={() => setLoadedImageUrl(question.imageUrl)}
+              onError={() => setLoadedImageUrl(question.imageUrl)}
+              className={`h-44 w-full rounded-2xl border border-outline-variant/40 bg-surface-tertiary/40 object-contain transition ${
+                imageReady ? '' : 'invisible'
+              }`}
+            />
+            {!imageReady && (
+              <div className="absolute inset-0 h-44 animate-pulse rounded-2xl bg-surface-tertiary/60" />
+            )}
           </div>
-          <p className="mt-2 text-body-md text-on-surface">{question.hint}</p>
+          {imageReady && (
+            <p className="mt-1.5 text-center text-legal-citation text-on-surface-variant">
+              Toxun kiçik ipucu üçün
+            </p>
+          )}
         </div>
 
-        <div className="grid w-full grid-cols-2 gap-3">
-          {question.options.map((option, i) => (
-            <button
-              key={i}
-              type="button"
-              onClick={() => selectOption(i)}
-              className="flex items-center gap-2.5 rounded-2xl border border-outline-variant/40 bg-surface-tertiary/40 p-3 text-left transition hover:border-primary/60 hover:bg-primary/5 active:border-primary active:bg-primary/10"
-            >
-              <span className="shrink-0 text-on-surface-variant">
-                <SignGlyph />
-              </span>
-              <span className="min-w-0 text-body-md text-on-surface">{option}</span>
-            </button>
-          ))}
-        </div>
+        {imageReady && (
+          <>
+            <div className="w-full rounded-2xl border border-outline-variant/40 bg-surface-secondary/60 p-4">
+              <div className="flex items-center gap-2 text-label-sm font-semibold text-on-surface-variant">
+                <span aria-hidden>💡</span>
+                <span>İpucu</span>
+              </div>
+              <p className="mt-2 text-body-md text-on-surface">{question.hint}</p>
+            </div>
+
+            <div className="grid w-full grid-cols-2 gap-3">
+              {question.options.map((option, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => selectOption(i)}
+                  className="flex items-center gap-2.5 rounded-2xl border border-outline-variant/40 bg-surface-tertiary/40 p-3 text-left transition hover:border-primary/60 hover:bg-primary/5 active:border-primary active:bg-primary/10"
+                >
+                  <span className="shrink-0 text-on-surface-variant">
+                    <SignGlyph />
+                  </span>
+                  <span className="min-w-0 text-body-md text-on-surface">{option}</span>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </div>
     );
   }

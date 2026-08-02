@@ -8,6 +8,7 @@ import { SidebarProvider } from "@/components/SidebarContext";
 import { PullToRefresh } from "@/components/PullToRefresh";
 import ServiceWorkerRegistrar from "@/components/ServiceWorkerRegistrar";
 import { TourProvider } from "@/components/onboarding/TourProvider";
+import MobileBottomTabBar from "@/components/home/MobileBottomTabBar";
 
 const montserrat = Montserrat({
   variable: "--font-montserrat",
@@ -142,6 +143,14 @@ export default function RootLayout({
             </div>
           </SidebarProvider>
         </TourProvider>
+        {/* Mounted once here, outside <main>: (a) it survives route-transition
+            loading exactly like NavBar — previously it lived inside each page,
+            so the root loading.tsx swapped it out for the loading fallback —
+            and (b) PullToRefresh's findScrollParent (components/PullToRefresh.tsx)
+            never walks into it; the bar is `fixed`, but keeping it out of the
+            scroll container is deliberate regardless. It is md:hidden, so
+            desktop is untouched. */}
+        <MobileBottomTabBar />
         <Toast.Provider placement="top end" />
         <ServiceWorkerRegistrar />
       </body>

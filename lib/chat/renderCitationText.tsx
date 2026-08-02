@@ -3,11 +3,18 @@ import type { ReactNode } from 'react';
 // Matches inline bracket citations the LLM embeds in raw message text per the
 // instruction in lib/rag/buildPrompt.ts, e.g.
 // "[Sənəd: Yol hərəkəti qaydaları, Maddə 37, səhifə 2]" — page/"səhifə" part is
-// optional, article label may be alphanumeric/hyphenated ("Maddə 37-1").
+// optional, and the reference after the title is not only an article ("Maddə N")
+// but any legal-unit label the model legitimately emits, chiefly "Bənd N" (a
+// clause of an article, e.g. "Bənd 6.4") — before this was matched, a "Bənd"
+// citation rendered as plain text while a "Maddə" one in the same answer was
+// colored, which read as a bug. Keep this label set in sync with what
+// buildPrompt.ts instructs. Numbers may be dotted/hyphenated ("Maddə 18.65.5.1",
+// "Maddə 37-1"). Case-insensitive so "sənəd:"/"maddə" still match.
 // Non-greedy up to the first "]" so an unclosed bracket mid-stream (partial
 // text while the model is still streaming) simply doesn't match and renders
 // as plain text until the closing bracket arrives.
-const CITATION_RE = /\[(Sənəd:\s*)([^,\]]+)(,\s*)(Maddə\s+[^,\]]+?)((?:,[^\]]*)?)\]/g;
+const CITATION_RE =
+  /\[(Sənəd:\s*)([^,\]]+)(,\s*)((?:Maddə|Bənd|Fəsil|Bölmə|Hissə|Qayda)\s+[^,\]]+?)((?:,[^\]]*)?)\]/gi;
 
 // Matches verbatim excerpts the LLM wraps in Azerbaijani guillemets per the
 // instruction in lib/rag/buildPrompt.ts — "«...»" marks text copied
@@ -19,12 +26,15 @@ const EXCERPT_RE = /«([^»]*)»/g;
 /**
  * Splits raw assistant message text on inline "[Sənəd: ..., Maddə N, səhifə P]"
  * citations and "«...»" verbatim excerpts, returning text/span nodes:
- * - citation brackets render fully bold, with the document title in
- *   danger/red and the "Maddə N" article reference in success/green
- *   (everything else in the bracket — literal brackets, "Sənəd:", commas,
- *   "səhifə N" — stays default color but inherits the bold from the wrapper)
- * - "«...»" excerpts (guillemets included) render in italic accent color,
- *   distinct from both citation colors and body text
+ * - citation brackets render fully bold on a soft danger-tinted chip, with the
+ *   document title in danger/red and the "Maddə N" article reference in
+ *   success/green (everything else in the bracket — literal brackets,
+ *   "Sənəd:", commas, "səhifə N" — stays default color but inherits the bold
+ *   from the wrapper). The tinted background is what makes the reference pop
+ *   against body text on any theme, where a bare colored word can read washed
+ *   out — this is deliberately a chip, not just colored text.
+ * - "«...»" excerpts (guillemets included) render italic accent on a soft
+ *   accent-tinted chip, distinct from both citation colors and body text
  * Citations are matched first over the whole string; the excerpt pass then
  * runs only over the plain-text segments left between/around citations, so
  * a single answer containing both interleaved renders correctly.
@@ -44,7 +54,10 @@ export function renderCitationText(text: string): ReactNode[] {
     }
 
     nodes.push(
-      <span key={`citation-${key++}`} className="font-bold">
+      <span
+        key={`citation-${key++}`}
+        className="rounded-md bg-[var(--danger)]/10 px-1 py-px font-bold"
+      >
         {'['}
         {prefix}
         <span className="text-[var(--danger)]">{title}</span>
@@ -78,7 +91,10 @@ function renderExcerpts(segment: string, nextKey: () => number): ReactNode[] {
     }
 
     nodes.push(
-      <span key={`excerpt-${nextKey()}`} className="italic text-[var(--accent)]">
+      <span
+        key={`excerpt-${nextKey()}`}
+        className="rounded-md bg-[var(--accent)]/10 px-1 py-px italic text-[var(--accent)]"
+      >
         {match[0]}
       </span>,
     );

@@ -2,7 +2,6 @@
 
 import { useCallback, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
-import MobileBottomTabBar from '@/components/home/MobileBottomTabBar';
 import AnimatedNumber from '@/components/AnimatedNumber';
 import { ArrowLeftIcon, CoinIcon, EnergyIcon } from '@/components/icons';
 import { purchaseEnergyAction } from '@/app/coin-qazan/actions';
@@ -259,7 +258,6 @@ export default function GamePageShell({
         </div>
       </div>
 
-      <MobileBottomTabBar />
     </div>
   );
 }

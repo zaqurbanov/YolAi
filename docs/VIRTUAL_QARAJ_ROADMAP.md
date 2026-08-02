@@ -99,7 +99,7 @@ Easter Egg, tətbiqin bütün etibarlılıq vədini öz daxilində poza bilər.
 **Nə qurulur:** Məhdud sayda maşın pilləsi (məs. Piyada/Velosiped → Lada 2107 → Toyota Prius →
 BMW → Mercedes G-Class/Range Rover), hər biri artan coin qiymətilə. Yeni `user_garage` cədvəli
 (`user_coins`/`user_energy` ilə eyni RLS/service-role fəlsəfəsində). Leaderboard-da (mövcud
-`lib/leaderboard/getLeaderboard.ts`, `app/leaderboard`) istifadəçinin cari maşını görünür —
+`lib/leaderboard/getLeaderboard.ts`, `app/coin-qazan/leaderboard`) istifadəçinin cari maşını görünür —
 yeni istifadəçi başqalarının yanında "G-Class" görüb rəqabət hissi keçirir.
 
 **Asılılıq:** Heç birinə — bu, TƏMƏL mərhələdir, digər 5 mərhələ buna bağlıdır.

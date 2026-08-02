@@ -23,7 +23,6 @@ import PreferencesCard from '@/components/account/PreferencesCard';
 import PushNotificationOptIn from '@/components/account/PushNotificationOptIn';
 import SecurityQuickView from '@/components/account/SecurityQuickView';
 import DesignSwitch from '@/components/design3d/DesignSwitch';
-import MobileBottomTabBar from '@/components/home/MobileBottomTabBar';
 import AccountPage3D from '@/components/design3d/AccountPage3D';
 import { getServerDesign } from '@/lib/design/getServerDesign';
 
@@ -186,7 +185,7 @@ export default async function AccountPage() {
                 </div>
                 {!isAdmin && (
                   <div className="mt-3 text-right">
-                    <Link href="/leaderboard" className="text-label-sm text-primary hover:underline">
+                    <Link href="/coin-qazan/leaderboard" className="text-label-sm text-primary hover:underline">
                       Liderlik lövhəsinə bax →
                     </Link>
                   </div>
@@ -267,11 +266,6 @@ export default async function AccountPage() {
           <AdSlot />
 
           <Footer />
-
-          {/* Every other mobile screen carries the tab bar; without it /account
-              was the one page you could land on and lose the app's navigation.
-              pb-24 on the root above reserves its height. */}
-          <MobileBottomTabBar />
         </div>
       }
       threeD={

@@ -1,6 +1,7 @@
 'use client';
 
-import { Children, useRef, useState, type ReactNode } from 'react';
+import { Children, type ReactNode } from 'react';
+import { useSnapRail } from './SnapRail';
 
 interface FeatureRailProps {
   /**
@@ -46,28 +47,10 @@ export default function FeatureRail({
   desktopClassName = 'md:grid-cols-2',
 }: FeatureRailProps) {
   const slides = Children.toArray(children);
-  const railRef = useRef<HTMLDivElement>(null);
-  const [active, setActive] = useState(0);
-
-  function handleScroll() {
-    const rail = railRef.current;
-    if (!rail) return;
-    const first = rail.firstElementChild as HTMLElement | null;
-    if (!first) return;
-    // Step = card width + gap, derived from the real DOM rather than hardcoded,
-    // so the vw-based card width and the gap can change in markup without this
-    // silently drifting.
-    const step = first.offsetWidth + 16;
-    const index = Math.round(rail.scrollLeft / step);
-    setActive(Math.max(0, Math.min(slides.length - 1, index)));
-  }
-
-  function goTo(index: number) {
-    const rail = railRef.current;
-    const first = rail?.firstElementChild as HTMLElement | null;
-    if (!rail || !first) return;
-    rail.scrollTo({ left: index * (first.offsetWidth + 16), behavior: 'smooth' });
-  }
+  // One-card-per-drag touch behavior lives in useSnapRail (SnapRail.tsx) —
+  // same rail this component owns, same step math, plus drag re-landing and
+  // click suppression. `active`/`goTo` feed the dots and counter below.
+  const { active, railProps, goTo } = useSnapRail<HTMLDivElement>(slides.length);
 
   return (
     <>
@@ -93,11 +76,13 @@ export default function FeatureRail({
         </div>
 
         <div
-          ref={railRef}
-          onScroll={handleScroll}
+          {...railProps}
           // -mx-6/px-6 lets the rail bleed to the screen edges while the first
-          // card still lines up with the page's text column.
-          className="no-scrollbar -mx-6 flex snap-x snap-mandatory gap-4 overflow-x-auto overflow-y-hidden px-6 pb-2"
+          // card still lines up with the page's text column. touch-pan-y hands
+          // horizontal drags to useSnapRail (SnapRail.tsx) instead of native
+          // fling scroll; select-none stops text from being selected while
+          // dragging with a mouse on desktop.
+          className="no-scrollbar -mx-6 flex snap-x snap-mandatory gap-4 overflow-x-auto overflow-y-hidden px-6 pb-2 touch-pan-y select-none"
         >
           {slides.map((slide, i) => (
             <div key={i} className="w-[78vw] max-w-[320px] shrink-0 snap-start">

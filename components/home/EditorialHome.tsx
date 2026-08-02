@@ -3,7 +3,6 @@ import Image from 'next/image';
 import type { ComponentType, SVGProps } from 'react';
 import { buttonVariants } from '@heroui/styles';
 import DailyQuizCard from '@/components/account/DailyQuizCard';
-import MobileBottomTabBar from '@/components/home/MobileBottomTabBar';
 import FeatureRail from '@/components/home/FeatureRail';
 import { CategoryCard } from '@/components/CategoryCard';
 import ScrollReveal from '@/components/ScrollReveal';
@@ -434,7 +433,6 @@ export default function EditorialHome({
         <Footer />
       </div>
 
-      <MobileBottomTabBar />
     </div>
   );
 }
