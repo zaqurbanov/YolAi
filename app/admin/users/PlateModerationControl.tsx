@@ -75,10 +75,10 @@ export default function PlateModerationControl() {
   }
 
   return (
-    <div className="glass-card rounded-2xl p-4 space-y-3 lg:col-span-2">
+    <div className="rounded-3xl border border-border/40 bg-surface p-6 shadow-sm space-y-3 lg:col-span-2">
       <div>
-        <div className="mono-label text-on-surface-variant uppercase">VIP nömrələrin moderasiyası</div>
-        <p className="mt-1 text-body-md text-on-surface-variant">
+        <div className="text-[12px] font-bold uppercase tracking-[0.1em] text-navy">VIP nömrələrin moderasiyası</div>
+        <p className="mt-1 text-[13px] text-on-surface-variant">
           Sərbəst buraxmaq coin geri qaytarmır — bu yalnız moderasiya alətidir.
         </p>
       </div>
@@ -89,19 +89,19 @@ export default function PlateModerationControl() {
           <Skeleton className="h-10 w-full rounded-xl" />
         </div>
       ) : plates && plates.length === 0 ? (
-        <p className="text-body-md text-on-surface-variant">Hələ VIP nömrə alınmayıb</p>
+        <p className="text-[14px] text-on-surface-variant">Hələ VIP nömrə alınmayıb</p>
       ) : (
-        <ul className="space-y-2">
+        <ul className="space-y-2 [&>li]:min-w-0">
           {plates?.map((plate) => {
             const row = rows[plate.plateNumber];
             return (
               <li
                 key={plate.plateNumber}
-                className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 sm:justify-between rounded-xl border border-outline-variant/20 px-3 py-2"
+                className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 sm:justify-between rounded-2xl border border-border/40 bg-surface-tertiary/40 px-3 py-2"
               >
                 <div className="min-w-0">
-                  <span className="mono-label text-on-surface">{plate.plateNumber}</span>
-                  <p className="truncate text-body-md text-on-surface-variant">
+                  <span className="text-[12px] font-bold text-navy">{plate.plateNumber}</span>
+                  <p className="truncate text-[13px] text-on-surface-variant">
                     {plate.ownerEmail ?? '—'} · {plate.pricePaid} coin · {formatAzDate(plate.claimedAt)}
                   </p>
                 </div>
@@ -112,6 +112,7 @@ export default function PlateModerationControl() {
                     size="sm"
                     isPending={row?.pending}
                     onPress={() => handleRelease(plate.plateNumber)}
+                    className="rounded-full"
                   >
                     {({ isPending }) => (
                       <>
@@ -120,7 +121,7 @@ export default function PlateModerationControl() {
                       </>
                     )}
                   </Button>
-                  {row?.error && <span className="mono-label text-danger">{row.error}</span>}
+                  {row?.error && <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-danger">{row.error}</span>}
                 </div>
               </li>
             );

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Chip, Button, Skeleton, TextField, Input, ToggleButton, ToggleButtonGroup } from '@heroui/react';
+import { Button, Skeleton, TextField, Input, ToggleButton, ToggleButtonGroup } from '@heroui/react';
 import { Spinner } from '@/components/Spinner';
 import type { MarathonRewardType, WeeklyMarathonSlot } from '@/lib/coins/weeklyMarathon';
 
@@ -102,21 +102,20 @@ export default function WeeklyMarathonControl() {
   }
 
   return (
-    <div className="glass-card rounded-2xl p-4 lg:col-span-2">
+    <div className="rounded-3xl border border-border/40 bg-surface p-6 shadow-sm lg:col-span-2">
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="mono-label text-on-surface-variant uppercase">Həftəlik marafon — sandıq hədiyyələri</div>
+        <div className="text-[12px] font-bold uppercase tracking-[0.1em] text-navy">Həftəlik marafon — sandıq hədiyyələri</div>
         {!loading && (
-          <Chip
-            size="sm"
-            variant="soft"
-            color={source === 'table' ? 'accent' : 'default'}
-            className="mono-label"
+          <span
+            className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.08em] ${
+              source === 'table' ? 'bg-primary/10 text-primary' : 'bg-surface-tertiary text-navy'
+            }`}
           >
             {source === 'table' ? 'admin təyin edib' : 'standart'}
-          </Chip>
+          </span>
         )}
       </div>
-      <p className="mt-1 text-label-sm text-on-surface-variant">
+      <p className="mt-1 text-[13px] text-on-surface-variant">
         Gün 1 = istifadəçinin sandığı açdığı İLK gündür (hər istifadəçi üçün fərdi), gün 7 COIN verir. Gün 1-6 ENERJİ
         verir. Bir gün buraxılarsa, marafon gün 1-ə qayıdır. Hər mükafat 1-1000 arasında tam ədəd olmalıdır.
       </p>
@@ -131,7 +130,7 @@ export default function WeeklyMarathonControl() {
         <div className="mt-3 space-y-2">
           {rows.map((row, i) => (
             <div key={i} className="flex flex-wrap items-center gap-2">
-              <span className="text-label-sm w-36 shrink-0 text-on-surface">{DAY_LABELS[i]}</span>
+              <span className="text-[12px] font-medium w-36 shrink-0 text-navy">{DAY_LABELS[i]}</span>
               <ToggleButtonGroup
                 size="sm"
                 disallowEmptySelection
@@ -160,14 +159,14 @@ export default function WeeklyMarathonControl() {
             </div>
           ))}
 
-          {error && <p className="mono-label text-danger">{error}</p>}
+          {error && <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-danger">{error}</p>}
 
           <Button
             variant="outline"
             size="sm"
             isPending={pending}
             onPress={() => void handleSave()}
-            className="mt-2"
+            className="mt-2 rounded-full"
           >
             {({ isPending: p }) => (
               <>

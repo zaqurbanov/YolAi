@@ -2,7 +2,6 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { requireAdmin } from '@/lib/auth/requireAdmin';
 import { getAdminUsers } from '@/lib/admin/getUsers';
-import { Chip } from '@heroui/react';
 import { formatAzDate } from '@/lib/format/date';
 import { formatCoinBalance } from '@/lib/format/coins';
 import GlobalRateLimitControl from './GlobalRateLimitControl';
@@ -35,12 +34,14 @@ export default async function UsersSection() {
 
   return (
     <div className="pt-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">İstifadəçilər</h1>
-        <span className="mono-label text-on-surface-variant">Cəmi {users.length}</span>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-[28px] font-semibold leading-tight text-navy">İstifadəçilər</h1>
+        <span className="inline-flex items-center rounded-full bg-surface-tertiary px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-navy">
+          Cəmi {users.length}
+        </span>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 [&>*]:min-w-0">
         <GlobalRateLimitControl />
         <LlmCircuitBreakerControl />
         <GlobalDailyCoinGrantControl />
@@ -64,42 +65,59 @@ export default async function UsersSection() {
         <PlateModerationControl />
       </div>
 
-      <div className="glass-panel rounded-2xl overflow-hidden overflow-x-auto">
+      <div className="rounded-3xl border border-border/40 bg-surface shadow-sm overflow-hidden overflow-x-auto">
         {users.length === 0 ? (
-          <div className="py-16 text-center text-sm text-on-surface-variant">Hələ istifadəçi yoxdur</div>
+          <div className="py-16 text-center text-[14px] text-on-surface-variant">Hələ istifadəçi yoxdur</div>
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-outline-variant/40 text-left">
-                <th className="px-4 py-3 font-medium text-on-surface-variant">E-poçt</th>
-                <th className="px-4 py-3 font-medium text-on-surface-variant">Rol</th>
-                <th className="px-4 py-3 font-medium text-on-surface-variant text-right">Coin balansı</th>
-                <th className="px-4 py-3 font-medium text-on-surface-variant text-right">Ümumi xərclənib</th>
-                <th className="px-4 py-3 font-medium text-on-surface-variant text-right">Qeydiyyat tarixi</th>
+              <tr className="border-b border-border/40 text-left">
+                <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant">
+                  E-poçt
+                </th>
+                <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant">
+                  Rol
+                </th>
+                <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant text-right">
+                  Coin balansı
+                </th>
+                <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant text-right">
+                  Ümumi xərclənib
+                </th>
+                <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant text-right">
+                  Qeydiyyat tarixi
+                </th>
               </tr>
             </thead>
             <tbody>
               {users.map((u) => (
                 <tr
                   key={u.id}
-                  className="border-b border-outline-variant/20 last:border-b-0 hover:bg-surface-container-high/40"
+                  className="border-b border-border/20 last:border-b-0 hover:bg-primary/5"
                 >
                   <td className="p-0">
-                    <Link href={`/admin/users/${u.id}`} className="block px-4 py-3 cursor-pointer">
+                    <Link
+                      href={`/admin/users/${u.id}`}
+                      className="block px-4 py-3 font-medium text-navy cursor-pointer"
+                    >
                       {u.email ?? '—'}
                     </Link>
                   </td>
                   <td className="p-0">
                     <Link href={`/admin/users/${u.id}`} className="flex px-4 py-3 cursor-pointer">
-                      <Chip size="sm" color={u.role === 'admin' ? 'success' : 'default'}>
+                      <span
+                        className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.08em] ${
+                          u.role === 'admin' ? 'bg-primary text-on-primary' : 'bg-surface-tertiary text-navy'
+                        }`}
+                      >
                         {u.role}
-                      </Chip>
+                      </span>
                     </Link>
                   </td>
                   <td className="p-0">
                     <Link
                       href={`/admin/users/${u.id}`}
-                      className="block px-4 py-3 mono-label text-right text-on-surface-variant cursor-pointer"
+                      className="block px-4 py-3 text-[12px] tabular-nums text-right text-on-surface-variant cursor-pointer"
                     >
                       {u.coinBalance != null ? formatCoinBalance(u.coinBalance) : '—'}
                     </Link>
@@ -107,7 +125,7 @@ export default async function UsersSection() {
                   <td className="p-0">
                     <Link
                       href={`/admin/users/${u.id}`}
-                      className="block px-4 py-3 mono-label text-right text-on-surface-variant cursor-pointer"
+                      className="block px-4 py-3 text-[12px] tabular-nums text-right text-on-surface-variant cursor-pointer"
                     >
                       {u.totalSpent != null ? formatCoinBalance(u.totalSpent) : '—'}
                     </Link>
@@ -115,7 +133,7 @@ export default async function UsersSection() {
                   <td className="p-0">
                     <Link
                       href={`/admin/users/${u.id}`}
-                      className="block px-4 py-3 mono-label text-right text-on-surface-variant cursor-pointer"
+                      className="block px-4 py-3 text-[12px] tabular-nums text-right text-on-surface-variant cursor-pointer"
                     >
                       {formatAzDate(u.created_at)}
                     </Link>

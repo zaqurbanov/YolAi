@@ -31,8 +31,11 @@ export default async function QuestionsSection() {
 
   return (
     <div className="pt-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Suallar</h1>
+      <div className="flex items-end justify-between gap-3">
+        <div className="space-y-1">
+          <span className="text-[12px] font-bold uppercase tracking-[0.1em] text-primary">İstifadəçi sualları</span>
+          <h1 className="text-[28px] font-semibold leading-tight text-navy">Suallar</h1>
+        </div>
         <span className="mono-label text-on-surface-variant">
           Cəmi {questions.length} · Cavabsız {unansweredCount}
         </span>

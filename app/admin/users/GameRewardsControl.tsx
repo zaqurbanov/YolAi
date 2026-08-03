@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Chip, Button, TextField, Input, Skeleton } from '@heroui/react';
+import { Button, TextField, Input, Skeleton } from '@heroui/react';
 import { Spinner } from '@/components/Spinner';
 
 type Source = 'table' | 'default';
@@ -118,8 +118,8 @@ export default function GameRewardsControl() {
   }
 
   return (
-    <div className="glass-card rounded-2xl p-4 lg:col-span-2">
-      <div className="mono-label text-on-surface-variant uppercase">Oyun mükafatları</div>
+    <div className="rounded-3xl border border-border/40 bg-surface p-6 shadow-sm lg:col-span-2">
+      <div className="text-[12px] font-bold uppercase tracking-[0.1em] text-navy">Oyun mükafatları</div>
 
       {loading ? (
         <div className="mt-4 space-y-3">
@@ -128,7 +128,7 @@ export default function GameRewardsControl() {
           ))}
         </div>
       ) : (
-        <div className="mt-3 divide-y divide-outline-variant/30">
+        <div className="mt-3 divide-y divide-border/30">
           {FIELDS.map((field) => {
             const setting = settings?.[field.param];
             const isPending = pendingParam === field.param;
@@ -140,19 +140,18 @@ export default function GameRewardsControl() {
                 className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-on-surface">{field.label}</span>
-                    <Chip
-                      size="sm"
-                      variant="soft"
-                      color={setting?.source === 'table' ? 'accent' : 'default'}
-                      className="mono-label"
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-semibold text-navy">{field.label}</span>
+                    <span
+                      className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.08em] ${
+                        setting?.source === 'table' ? 'bg-primary/10 text-primary' : 'bg-surface-tertiary text-navy'
+                      }`}
                     >
                       {setting?.source === 'table' ? 'admin təyin edib' : 'standart'}
-                    </Chip>
+                    </span>
                   </div>
-                  <p className="mt-0.5 text-label-sm text-on-surface-variant">{field.hint}</p>
-                  {error && <span className="mono-label text-danger">{error}</span>}
+                  <p className="mt-0.5 text-[13px] text-on-surface-variant">{field.hint}</p>
+                  {error && <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-danger">{error}</span>}
                 </div>
 
                 <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -175,6 +174,7 @@ export default function GameRewardsControl() {
                     isPending={isPending}
                     isDisabled={pendingParam !== null && !isPending}
                     onPress={() => handleSave(field)}
+                    className="rounded-full"
                   >
                     {({ isPending: p }) => (
                       <>
@@ -189,6 +189,7 @@ export default function GameRewardsControl() {
                       size="sm"
                       isDisabled={pendingParam !== null}
                       onPress={() => void save(field.param, null)}
+                      className="rounded-full"
                     >
                       Standarta qaytar
                     </Button>

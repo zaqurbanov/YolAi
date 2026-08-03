@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Chip, Button, EmptyState, TextField, Input } from '@heroui/react';
+import { Button, EmptyState, TextField, Input } from '@heroui/react';
 import { Spinner } from '@/components/Spinner';
 import { formatAzDate, formatAzDateTime } from '@/lib/format/date';
 import { formatCoinBalance } from '@/lib/format/coins';
@@ -39,7 +39,7 @@ function ConversationMessages({ messages }: { messages: AdminUserMessage[] }) {
               className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap ${
                 isUser
                   ? 'bg-primary text-on-primary rounded-tr-none'
-                  : 'glass-panel rounded-tl-none text-on-surface'
+                  : 'rounded-tl-none border border-border/40 bg-surface text-navy'
               }`}
             >
               {m.content}
@@ -47,13 +47,16 @@ function ConversationMessages({ messages }: { messages: AdminUserMessage[] }) {
             {!isUser && citations.length > 0 && (
               <div className="flex max-w-[85%] flex-wrap gap-1.5">
                 {citations.map((c, i) => (
-                  <Chip key={i} size="sm" variant="soft" color="accent" className="mono-label">
+                  <span
+                    key={i}
+                    className="inline-flex items-center rounded-full bg-surface-tertiary px-3 py-1 text-[11px] font-bold tracking-[0.08em] text-navy"
+                  >
                     {formatCitation(c)}
-                  </Chip>
+                  </span>
                 ))}
               </div>
             )}
-            <span className="mono-label px-1 text-on-surface-variant" suppressHydrationWarning>
+            <span className="text-[11px] font-bold uppercase tracking-[0.08em] px-1 text-on-surface-variant" suppressHydrationWarning>
               {formatAzDateTime(m.created_at)}
             </span>
           </div>
@@ -68,23 +71,23 @@ function ConversationItem({ conversation, index }: { conversation: AdminUserConv
   const title = conversation.title ?? `Söhbət #${index + 1}`;
 
   return (
-    <div className="glass-panel rounded-2xl overflow-hidden">
+    <div className="rounded-3xl border border-border/40 bg-surface shadow-sm overflow-hidden">
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
-        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-surface-container-high/40"
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-primary/5"
       >
         <div className="flex items-center gap-3 min-w-0">
-          <span className="truncate text-sm font-medium text-on-surface">{title}</span>
-          <span className="mono-label shrink-0 text-on-surface-variant">
+          <span className="truncate text-[14px] font-medium text-navy">{title}</span>
+          <span className="text-[11px] font-bold uppercase tracking-[0.08em] shrink-0 text-on-surface-variant">
             {conversation.messages.length} mesaj
           </span>
         </div>
         <div className="flex items-center gap-3 shrink-0">
-          <span className="mono-label text-on-surface-variant" suppressHydrationWarning>
+          <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant" suppressHydrationWarning>
             {formatAzDate(conversation.created_at)}
           </span>
-          <span className="mono-label text-on-surface-variant">{expanded ? '▲' : '▼'}</span>
+          <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant">{expanded ? '▲' : '▼'}</span>
         </div>
       </button>
       {expanded && <ConversationMessages messages={conversation.messages} />}
@@ -128,7 +131,7 @@ function RoleControl({
 
   return (
     <div className="flex items-center gap-2">
-      <Button variant="outline" size="sm" isPending={pending} onPress={changeRole}>
+      <Button variant="outline" size="sm" isPending={pending} onPress={changeRole} className="rounded-full">
         {({ isPending }) => (
           <>
             {isPending ? <Spinner size="sm" tone="current" /> : null}
@@ -136,7 +139,7 @@ function RoleControl({
           </>
         )}
       </Button>
-      {error && <span className="mono-label text-danger">{error}</span>}
+      {error && <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-danger">{error}</span>}
     </div>
   );
 }
@@ -197,7 +200,7 @@ function DailyCoinLimitControl({
       >
         <Input placeholder="Standart" min={0.01} max={100000} step={0.01} />
       </TextField>
-      <Button variant="outline" size="sm" isPending={pending} isDisabled={!dirty} onPress={save}>
+      <Button variant="outline" size="sm" isPending={pending} isDisabled={!dirty} onPress={save} className="rounded-full">
         {({ isPending }) => (
           <>
             {isPending ? <Spinner size="sm" tone="current" /> : null}
@@ -205,7 +208,7 @@ function DailyCoinLimitControl({
           </>
         )}
       </Button>
-      {error && <span className="mono-label text-danger">{error}</span>}
+      {error && <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-danger">{error}</span>}
     </div>
   );
 }
@@ -267,7 +270,7 @@ function GrantCoinsControl({
       >
         <Input placeholder="Miqdar" min={0.01} max={100000} step={0.01} />
       </TextField>
-      <Button variant="outline" size="sm" isPending={pending} onPress={() => handleSubmit(1)}>
+      <Button variant="outline" size="sm" isPending={pending} onPress={() => handleSubmit(1)} className="rounded-full">
         {({ isPending }) => (
           <>
             {isPending ? <Spinner size="sm" tone="current" /> : null}
@@ -275,10 +278,10 @@ function GrantCoinsControl({
           </>
         )}
       </Button>
-      <Button variant="outline" size="sm" isPending={pending} onPress={() => handleSubmit(-1)}>
+      <Button variant="outline" size="sm" isPending={pending} onPress={() => handleSubmit(-1)} className="rounded-full">
         Çıxart
       </Button>
-      {error && <span className="mono-label text-danger">{error}</span>}
+      {error && <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-danger">{error}</span>}
     </div>
   );
 }
@@ -344,7 +347,7 @@ function GrantEnergyControl({
       >
         <Input placeholder="Miqdar" min={1} max={100000} step={1} />
       </TextField>
-      <Button variant="outline" size="sm" isPending={pending} onPress={() => handleSubmit(1)}>
+      <Button variant="outline" size="sm" isPending={pending} onPress={() => handleSubmit(1)} className="rounded-full">
         {({ isPending }) => (
           <>
             {isPending ? <Spinner size="sm" tone="current" /> : null}
@@ -352,10 +355,10 @@ function GrantEnergyControl({
           </>
         )}
       </Button>
-      <Button variant="outline" size="sm" isPending={pending} onPress={() => handleSubmit(-1)}>
+      <Button variant="outline" size="sm" isPending={pending} onPress={() => handleSubmit(-1)} className="rounded-full">
         Çıxart
       </Button>
-      {error && <span className="mono-label text-danger">{error}</span>}
+      {error && <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-danger">{error}</span>}
     </div>
   );
 }
@@ -413,22 +416,29 @@ export default function UserDetail({
   return (
     <div className="pt-6 space-y-8">
       <div>
-        <Link href="/admin/users" className="mono-label text-on-surface-variant hover:text-primary">
+        <Link
+          href="/admin/users"
+          className="text-[12px] font-bold uppercase tracking-[0.1em] text-on-surface-variant transition hover:text-primary"
+        >
           ← Geri
         </Link>
       </div>
 
-      <div className="glass-card rounded-2xl p-6 space-y-3">
+      <div className="rounded-3xl border border-border/40 bg-surface p-6 shadow-sm space-y-3">
         <div className="flex items-center gap-3 flex-wrap">
-          <h1 className="text-2xl font-semibold text-on-surface">
+          <h1 className="text-[28px] font-semibold leading-tight text-navy">
             {profile.full_name ?? profile.email ?? 'Naməlum istifadəçi'}
           </h1>
-          <Chip size="sm" color={role === 'admin' ? 'success' : 'default'}>
+          <span
+            className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.08em] ${
+              role === 'admin' ? 'bg-primary text-on-primary' : 'bg-surface-tertiary text-navy'
+            }`}
+          >
             {role}
-          </Chip>
+          </span>
           <RoleControl userId={userId} role={role} onChanged={setRole} />
         </div>
-        <div className="flex flex-wrap gap-6 mono-label text-on-surface-variant">
+        <div className="flex flex-wrap gap-6 text-[12px] text-on-surface-variant">
           <span>E-poçt: {profile.email ?? '—'}</span>
           <span suppressHydrationWarning>
             Üzv olub: {formatAzDate(profile.created_at)}
@@ -438,41 +448,41 @@ export default function UserDetail({
           </span>
         </div>
         <div className="flex items-center gap-3 flex-wrap pt-1">
-          <span className="mono-label text-on-surface-variant">
+          <span className="text-[12px] text-on-surface-variant">
             Coin balansı:{' '}
-            <span className="text-on-surface font-medium">
+            <span className="font-semibold text-navy">
               {coinBalance != null ? formatCoinBalance(coinBalance) : '—'}
             </span>
           </span>
           <GrantCoinsControl userId={userId} onGranted={setCoinBalance} />
         </div>
         <div className="flex items-center gap-3 flex-wrap pt-1">
-          <span className="mono-label text-on-surface-variant">
+          <span className="text-[12px] text-on-surface-variant">
             Enerji balansı:{' '}
-            <span className="text-on-surface font-medium">
+            <span className="font-semibold text-navy">
               {energyBalance != null ? energyBalance : '—'}
             </span>
           </span>
           <GrantEnergyControl userId={userId} onGranted={setEnergyBalance} />
         </div>
         <div className="flex items-center gap-3 flex-wrap pt-1">
-          <span className="mono-label text-on-surface-variant">
+          <span className="text-[12px] text-on-surface-variant">
             Gündəlik coin limiti:{' '}
             {dailyCoinLimit != null ? (
-              <span className="text-on-surface font-medium">{formatCoinBalance(dailyCoinLimit)}</span>
+              <span className="font-semibold text-navy">{formatCoinBalance(dailyCoinLimit)}</span>
             ) : (
-              <span className="text-on-surface font-medium">standart</span>
+              <span className="font-semibold text-navy">standart</span>
             )}
           </span>
           <DailyCoinLimitControl userId={userId} dailyCoinLimit={dailyCoinLimit} onChanged={setDailyCoinLimit} />
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 [&>*]:min-w-0">
         {statCards.map((c) => (
-          <div key={c.label} className="glass-card rounded-2xl p-4">
-            <div className="mono-label text-on-surface-variant uppercase">{c.label}</div>
-            <div className="mt-2 text-2xl font-semibold text-on-surface" suppressHydrationWarning>
+          <div key={c.label} className="rounded-2xl border border-border/40 bg-surface p-4 shadow-sm">
+            <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant">{c.label}</div>
+            <div className="mt-2 editorial-display text-2xl font-bold tabular-nums text-primary" suppressHydrationWarning>
               {c.value}
             </div>
           </div>
@@ -480,13 +490,16 @@ export default function UserDetail({
       </div>
 
       {stats.topCitedDocuments.length > 0 && (
-        <div className="glass-card rounded-2xl p-6">
-          <h2 className="text-lg font-semibold mb-4">Ən çox istinad edilən sənədlər</h2>
+        <div className="rounded-3xl border border-border/40 bg-surface p-6 shadow-sm">
+          <h2 className="text-[18px] font-semibold text-navy mb-4">Ən çox istinad edilən sənədlər</h2>
           <div className="flex flex-wrap gap-2">
             {stats.topCitedDocuments.map((doc) => (
-              <Chip key={doc.document_id} size="sm" variant="soft" color="accent" className="mono-label">
+              <span
+                key={doc.document_id}
+                className="inline-flex items-center rounded-full bg-surface-tertiary px-3 py-1 text-[11px] font-bold tracking-[0.08em] text-navy"
+              >
                 {doc.title} · {doc.count}
-              </Chip>
+              </span>
             ))}
           </div>
         </div>
@@ -494,13 +507,13 @@ export default function UserDetail({
 
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-semibold">Söhbət tarixçəsi</h2>
-          <span className="mono-label text-on-surface-variant">Cəmi {total}</span>
+          <h2 className="text-[18px] font-semibold text-navy">Söhbət tarixçəsi</h2>
+          <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant">Cəmi {total}</span>
         </div>
 
         {conversations.length === 0 ? (
-          <div className="glass-panel rounded-2xl">
-            <EmptyState className="flex flex-col items-center justify-center gap-2 py-16 text-sm text-on-surface-variant">
+          <div className="rounded-3xl border border-border/40 bg-surface shadow-sm">
+            <EmptyState className="flex flex-col items-center justify-center gap-2 py-16 text-[14px] text-on-surface-variant">
               Bu istifadəçinin hələ söhbəti yoxdur
             </EmptyState>
           </div>
@@ -514,7 +527,7 @@ export default function UserDetail({
 
         {hasMore && (
           <div className="flex justify-center mt-4">
-            <Button variant="outline" size="sm" isPending={loadingMore} onPress={loadMore}>
+            <Button variant="outline" size="sm" isPending={loadingMore} onPress={loadMore} className="rounded-full">
               {({ isPending }) => (
                 <>
                   {isPending ? <Spinner size="sm" tone="current" /> : null}

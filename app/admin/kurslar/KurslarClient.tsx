@@ -75,10 +75,13 @@ export default function KurslarClient({ initialCourses }: KurslarClientProps) {
   return (
     <div className="pt-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Kurslar</h1>
+        <div className="space-y-1">
+          <span className="text-[12px] font-bold uppercase tracking-[0.1em] text-primary">Təhsil</span>
+          <h1 className="text-[28px] font-semibold leading-tight text-navy">Kurslar</h1>
+        </div>
         <div className="flex items-center gap-2">
           {isRefreshing && <Spinner size="sm" tone="current" />}
-          <Button variant="outline" size="sm" onPress={() => setShowCreate((v) => !v)}>
+          <Button variant="outline" size="sm" className="rounded-full" onPress={() => setShowCreate((v) => !v)}>
             {showCreate ? 'Bağla' : 'Yeni kurs'}
           </Button>
         </div>

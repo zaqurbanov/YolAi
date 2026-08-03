@@ -103,7 +103,7 @@ export default function TopicProposalEditor({
     <div className="glass-card rounded-2xl p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="mono-label flex flex-wrap items-center gap-2 text-on-surface-variant uppercase">
+          <div className="text-[12px] font-bold uppercase tracking-[0.1em] text-navy flex flex-wrap items-center gap-2">
             Təklif edilən mövzular
             <Chip
               size="sm"
@@ -126,6 +126,7 @@ export default function TopicProposalEditor({
           <Button
             variant="primary"
             size="sm"
+            className="rounded-full"
             isPending={pending}
             isDisabled={pending}
             onPress={() => void handleCreate()}

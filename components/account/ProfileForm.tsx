@@ -35,7 +35,7 @@ export default function ProfileForm({ fullName, avatarUrl, email }: ProfileFormP
         <div className="flex size-10 items-center justify-center rounded-xl bg-primary/15 text-primary">
           <UserIcon />
         </div>
-        <h2 className="text-headline-md text-[18px]">Hesab Məlumatları</h2>
+        <h2 className="text-[18px] font-semibold leading-tight text-on-surface">Hesab Məlumatları</h2>
       </div>
 
       <form action={formAction} className="space-y-4">
@@ -44,7 +44,7 @@ export default function ProfileForm({ fullName, avatarUrl, email }: ProfileFormP
             {previewAvatarUrl ? <Avatar.Image src={previewAvatarUrl} alt="Profil şəkli" /> : null}
             <Avatar.Fallback>{initialsFrom(previewName || fullName)}</Avatar.Fallback>
           </Avatar>
-          <p className="text-body-md text-on-surface-variant">Şəkil önizləməsi</p>
+          <p className="text-[14px] text-on-surface-variant">Şəkil önizləməsi</p>
         </div>
 
         <TextField name="full_name" defaultValue={fullName} onChange={setPreviewName}>

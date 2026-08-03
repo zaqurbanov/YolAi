@@ -66,7 +66,7 @@ export default function NewQuestionForm() {
 
   if (!isOpen) {
     return (
-      <Button variant="primary" onPress={() => setIsOpen(true)} className="gap-2">
+      <Button variant="primary" onPress={() => setIsOpen(true)} className="gap-2 rounded-full glow-primary">
         + Yeni sual əlavə et
       </Button>
     );
@@ -75,7 +75,7 @@ export default function NewQuestionForm() {
   return (
     <div className="glass-card space-y-4 rounded-2xl border-l-4 border-l-primary p-6">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-headline-md text-[18px]">Yeni sual</h3>
+        <h3 className="text-[18px] font-semibold text-navy">Yeni sual</h3>
         <Button variant="ghost" size="sm" onPress={() => setIsOpen(false)}>
           Bağla
         </Button>
@@ -157,7 +157,7 @@ export default function NewQuestionForm() {
       </TextField>
 
       <div className="flex items-center gap-2 border-t border-outline-variant/30 pt-4">
-        <Button variant="primary" onPress={handleCreate} isPending={isSaving}>
+        <Button variant="primary" onPress={handleCreate} className="rounded-full glow-primary" isPending={isSaving}>
           {({ isPending }) => (
             <>
               {isPending ? <Spinner size="sm" tone="current" /> : null}

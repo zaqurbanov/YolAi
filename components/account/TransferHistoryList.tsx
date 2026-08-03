@@ -22,10 +22,10 @@ export default function TransferHistoryList({ sent, received }: TransferHistoryL
 
   return (
     <div className="glass-card rounded-2xl p-6 space-y-4">
-      <h2 className="text-headline-md text-[18px]">Köçürmə tarixçəsi</h2>
+      <h2 className="text-[18px] font-semibold leading-tight text-on-surface">Köçürmə tarixçəsi</h2>
 
       {combined.length === 0 ? (
-        <p className="text-body-md text-on-surface-variant">Hələ heç bir coin köçürməsi yoxdur.</p>
+        <p className="text-[14px] text-on-surface-variant">Hələ heç bir coin köçürməsi yoxdur.</p>
       ) : (
         <ul className="space-y-2">
           {combined.map((row) => (
@@ -44,12 +44,12 @@ export default function TransferHistoryList({ sent, received }: TransferHistoryL
                   >
                     {row.direction === 'sent' ? 'Göndərilib' : 'Alınıb'}
                   </span>
-                  <span className="truncate text-body-md text-on-surface">{row.counterpartyLabel}</span>
+                  <span className="truncate text-[15px] text-on-surface">{row.counterpartyLabel}</span>
                 </div>
-                <p className="mt-1 text-label-sm text-on-surface-variant">{formatAzDateTime(row.createdAt)}</p>
+                <p className="mt-1 text-[13px] text-on-surface-variant">{formatAzDateTime(row.createdAt)}</p>
               </div>
               <div
-                className={`shrink-0 text-body-md font-semibold ${
+                className={`shrink-0 text-[15px] font-semibold ${
                   row.direction === 'sent' ? 'text-error' : 'text-go-green'
                 }`}
               >

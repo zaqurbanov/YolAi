@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Chip, Button, TextField, Input, Skeleton } from '@heroui/react';
+import { Button, TextField, Input, Skeleton } from '@heroui/react';
 import { Spinner } from '@/components/Spinner';
 
 interface DailyCoinGrantSettings {
@@ -73,17 +73,21 @@ export default function GlobalDailyCoinGrantControl() {
   }
 
   return (
-    <div className="glass-card rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center gap-4 sm:justify-between">
+    <div className="rounded-3xl border border-border/40 bg-surface p-6 shadow-sm flex flex-col sm:flex-row sm:items-center gap-4 sm:justify-between">
       <div>
-        <div className="mono-label text-on-surface-variant uppercase">Gündəlik veriləcək coin (qlobal)</div>
+        <div className="text-[12px] font-bold uppercase tracking-[0.1em] text-navy">Gündəlik veriləcək coin (qlobal)</div>
         {loading ? (
           <Skeleton className="h-6 w-32 mt-2 rounded-full" />
         ) : (
           <div className="mt-1 flex items-center gap-2">
-            <span className="text-xl font-semibold text-on-surface">{settings?.dailyCoinGrant}</span>
-            <Chip size="sm" variant="soft" color={settings?.source === 'table' ? 'accent' : 'default'} className="mono-label">
+            <span className="editorial-display text-xl font-bold leading-none tabular-nums text-primary">{settings?.dailyCoinGrant}</span>
+            <span
+              className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.08em] ${
+                settings?.source === 'table' ? 'bg-primary/10 text-primary' : 'bg-surface-tertiary text-navy'
+              }`}
+            >
               {settings?.source === 'table' ? 'admin təyin edib' : 'standart'}
-            </Chip>
+            </span>
           </div>
         )}
       </div>
@@ -99,7 +103,7 @@ export default function GlobalDailyCoinGrantControl() {
           >
             <Input min={1} max={100000} />
           </TextField>
-          <Button variant="outline" size="sm" isPending={pending} onPress={handleSave}>
+          <Button variant="outline" size="sm" isPending={pending} onPress={handleSave} className="rounded-full">
             {({ isPending }) => (
               <>
                 {isPending ? <Spinner size="sm" tone="current" /> : null}
@@ -108,11 +112,11 @@ export default function GlobalDailyCoinGrantControl() {
             )}
           </Button>
           {settings?.source === 'table' && (
-            <Button variant="outline" size="sm" isPending={pending} onPress={handleReset}>
+            <Button variant="outline" size="sm" isPending={pending} onPress={handleReset} className="rounded-full">
               Standarta qaytar
             </Button>
           )}
-          {error && <span className="mono-label text-danger">{error}</span>}
+          {error && <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-danger">{error}</span>}
         </div>
       )}
     </div>

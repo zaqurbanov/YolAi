@@ -116,7 +116,7 @@ export default function CourseCreateForm({ nextOrderIndex, onCreated }: CourseCr
 
   return (
     <div className="glass-card rounded-2xl p-5">
-      <div className="mono-label text-on-surface-variant uppercase">Yeni kurs</div>
+      <div className="text-[18px] font-semibold text-navy">Yeni kurs</div>
 
       {documents === null ? (
         <div className="mt-4 space-y-2">
@@ -207,6 +207,7 @@ export default function CourseCreateForm({ nextOrderIndex, onCreated }: CourseCr
             <Button
               variant="primary"
               size="sm"
+              className="rounded-full"
               isPending={pending}
               isDisabled={pending}
               onPress={() => void handleSubmit()}

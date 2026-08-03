@@ -44,6 +44,9 @@ interface OfficialExamClientProps {
   coinPrice: number;
   passThreshold: number;
   history: ExamHistorySummary;
+  // Admins sit the exam for free (startExamSessionAction charges p_coin_price:
+  // 0 server-side for them), so the coin gate/price line are bypassed.
+  isAdmin: boolean;
 }
 
 // The two modes on the roadmap but not built. Shown as real cards rather than
@@ -77,6 +80,7 @@ export default function OfficialExamClient({
   coinPrice,
   passThreshold,
   history,
+  isAdmin,
 }: OfficialExamClientProps) {
   const [phase, setPhase] = useState<Phase>('idle');
   const [coins, setCoins] = useState(coinBalance);
@@ -529,7 +533,7 @@ export default function OfficialExamClient({
               <Button
                 variant="primary"
                 onPress={() => void start()}
-                isDisabled={isStarting || !canAffordCoins}
+                isDisabled={isStarting || (!isAdmin && !canAffordCoins)}
                 className="glow-primary gap-2 rounded-full px-8 py-4 text-[12px] font-bold uppercase tracking-[0.1em]"
               >
                 {isStarting ? <Spinner size="sm" tone="current" /> : null}
@@ -539,17 +543,25 @@ export default function OfficialExamClient({
             </div>
 
             {/* Coin entry is a pure SINK — nothing is earned back on a pass,
-                so only the current coin balance is shown next to the price. */}
+                so only the current coin balance is shown next to the price.
+                Admins sit it for free, so their row reads "Pulsuz" instead of
+                a price and shows no balance or afford link. */}
             <p className="mt-4 flex flex-wrap items-center gap-1.5 text-[13px] text-on-surface-variant">
-              <CoinIcon width={14} height={14} className="text-caution-orange" />
-              {coinPrice} coin ·{' '}
-              <span className="tabular-nums">{coins} qalıb</span>
-              {!canAffordCoins && (
+              {isAdmin ? (
+                <span className="font-semibold text-primary">Pulsuz</span>
+              ) : (
                 <>
-                  ·{' '}
-                  <Link href="/coin-qazan" className="font-semibold text-primary hover:underline">
-                    Coin qazan
-                  </Link>
+                  <CoinIcon width={14} height={14} className="text-caution-orange" />
+                  {coinPrice} coin ·{' '}
+                  <span className="tabular-nums">{coins} qalıb</span>
+                  {!canAffordCoins && (
+                    <>
+                      ·{' '}
+                      <Link href="/coin-qazan" className="font-semibold text-primary hover:underline">
+                        Coin qazan
+                      </Link>
+                    </>
+                  )}
                 </>
               )}
             </p>

@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Avatar, Chip, Button } from '@heroui/react';
+import { Avatar, Button } from '@heroui/react';
 import { buttonVariants } from '@heroui/styles';
 import { SparkleIcon, CoinIcon, TrashIcon, LogoutIcon, CheckIcon, FlameIcon } from '@/components/icons';
 import Footer from '@/components/Footer';
@@ -129,70 +129,95 @@ export default async function AccountPage() {
     <DesignSwitch
       design={design}
       simple={
-        <div className="editorial flex flex-col space-y-10 px-5 pt-8 pb-24 md:space-y-14 md:px-12 md:pb-16">
-          <section className="editorial-shadow relative grid grid-cols-1 gap-6 overflow-hidden rounded-[2rem] border border-border/40 bg-surface p-6 md:grid-cols-12 md:items-center md:gap-8 md:p-8">
-            <div aria-hidden className="pointer-events-none absolute -top-20 -right-20 size-64 rounded-full bg-primary/10 blur-[100px]" />
+        <div className="editorial flex flex-1 flex-col pb-24 md:pb-0">
+          <div className="mx-auto w-full max-w-[1280px] space-y-16 px-6 pt-10 md:space-y-28 md:px-16 md:pt-16">
+            <section className="grid grid-cols-1 items-center gap-8 md:grid-cols-12">
+              <div className="space-y-6 md:col-span-7">
+                <span className="text-[12px] font-bold uppercase tracking-[0.1em] text-primary">Hesab</span>
+                <h1 className="text-[32px] font-semibold leading-[1.15] text-navy md:text-[40px]">
+                  {fullName ? (
+                    <>
+                      Xoş gəldin, <span className="text-primary">{fullName}</span>.
+                    </>
+                  ) : (
+                    'Xoş gəldin.'
+                  )}
+                </h1>
 
-            <div className="relative z-10 flex flex-col items-center gap-4 text-center md:col-span-4 md:items-start md:text-left">
-              <div className="relative">
-                <Avatar size="lg" className="ring-2 ring-primary/30">
-                  {avatarUrl ? <Avatar.Image src={avatarUrl} alt="Profil şəkli" /> : null}
-                  <Avatar.Fallback>{initialsFrom(fullName, user.email ?? '')}</Avatar.Fallback>
-                </Avatar>
-                {/* Decorative only: every account reaching this page is already an
-                    authenticated Supabase user — there is no separate "verified"
-                    status tracked in the schema. Kept purely to match the Stitch
-                    mockup's green check badge on the avatar. */}
-                <div className="absolute -right-1 -bottom-1 flex size-6 items-center justify-center rounded-full border-2 border-surface bg-go-green text-white">
-                  <CheckIcon width={12} height={12} strokeWidth={3} />
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="relative shrink-0">
+                    <Avatar size="lg" className="ring-2 ring-primary/30">
+                      {avatarUrl ? <Avatar.Image src={avatarUrl} alt="Profil şəkli" /> : null}
+                      <Avatar.Fallback>{initialsFrom(fullName, user.email ?? '')}</Avatar.Fallback>
+                    </Avatar>
+                    {/* Decorative only: every account reaching this page is already an
+                        authenticated Supabase user — there is no separate "verified"
+                        status tracked in the schema. Kept purely to match the Stitch
+                        mockup's green check badge on the avatar. */}
+                    <div className="absolute -right-1 -bottom-1 flex size-6 items-center justify-center rounded-full border-2 border-surface bg-go-green text-white">
+                      <CheckIcon width={12} height={12} strokeWidth={3} />
+                    </div>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-[18px] font-semibold text-navy">{fullName || user.email}</p>
+                    <p className="truncate text-[14px] text-on-surface-variant">{user.email}</p>
+                    <div className="mt-2">
+                      {isAdmin ? (
+                        <span className="inline-flex items-center rounded-full bg-primary px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-on-primary">
+                          Admin
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-full bg-surface-tertiary px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-navy">
+                          İstifadəçi
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div className="min-w-0">
-                <h1 className="truncate text-headline-md text-on-surface">{fullName || user.email}</h1>
-                <p className="truncate text-body-md text-on-surface-variant">{user.email}</p>
-                <div className="mt-2 flex justify-center md:justify-start">
-                  {isAdmin ? (
-                    <Chip color="accent" variant="soft">
-                      Admin
-                    </Chip>
-                  ) : (
-                    <Chip variant="soft">İstifadəçi</Chip>
+
+              <div className="space-y-4 md:col-span-5">
+                {statTiles.map((tile) => (
+                  <div key={tile.label} className="rounded-2xl border border-border/40 bg-surface p-4">
+                    <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant">
+                      {tile.label}
+                    </div>
+                    <div
+                      className={`mt-1 editorial-display text-[28px] font-bold leading-none tabular-nums md:text-[32px] ${tile.accent}`}
+                    >
+                      {tile.value}
+                    </div>
+                  </div>
+                ))}
+
+                <div className="space-y-4 rounded-3xl border border-border/40 bg-surface p-6 shadow-sm">
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-[12px] font-bold uppercase tracking-[0.1em] text-navy">
+                      Hüquqi Bilik Səviyyəsi
+                    </span>
+                    <span className="inline-flex items-center rounded-full bg-surface-tertiary px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-navy">
+                      {knowledgeLevelLabel}
+                    </span>
+                  </div>
+                  <div className="h-3 w-full overflow-hidden rounded-full bg-surface-tertiary">
+                    <div
+                      className="h-full rounded-full bg-primary"
+                      style={{ width: `${Math.max(knowledgeLevelPercent, 2)}%` }}
+                    />
+                  </div>
+                  {!isAdmin && (
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <Link
+                        href="/coin-qazan/leaderboard"
+                        className="inline-flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-[0.1em] text-primary transition-[gap] hover:gap-2.5"
+                      >
+                        Liderlik lövhəsinə bax →
+                      </Link>
+                    </div>
                   )}
                 </div>
               </div>
-            </div>
-
-            <div className="relative z-10 md:col-span-8">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                {statTiles.map((tile) => (
-                  <div key={tile.label} className="rounded-2xl border border-border/40 bg-background p-4">
-                    <div className="text-label-sm uppercase text-on-surface-variant">{tile.label}</div>
-                    <div className={`mt-2 text-headline-md ${tile.accent}`}>{tile.value}</div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="col-span-full mt-4">
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-label-sm text-on-surface-variant">Hüquqi Bilik Səviyyəsi</span>
-                  <span className="text-label-sm text-go-green">{knowledgeLevelLabel}</span>
-                </div>
-                <div className="h-2 w-full overflow-hidden rounded-full bg-surface-tertiary">
-                  <div
-                    className="h-full rounded-full bg-go-green shadow-[0_0_10px_rgba(34,197,94,0.4)]"
-                    style={{ width: `${knowledgeLevelPercent}%` }}
-                  />
-                </div>
-                {!isAdmin && (
-                  <div className="mt-3 text-right">
-                    <Link href="/coin-qazan/leaderboard" className="text-label-sm text-primary hover:underline">
-                      Liderlik lövhəsinə bax →
-                    </Link>
-                  </div>
-                )}
-              </div>
-            </div>
-          </section>
+            </section>
 
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             {profileForm}
@@ -204,34 +229,37 @@ export default async function AccountPage() {
           </div>
 
           {coins ? (
-            <div className="editorial-shadow rounded-[1.5rem] border border-border/40 bg-surface p-6">
+            <div className="rounded-3xl border border-border/40 bg-surface p-6 shadow-sm md:p-10">
               <div className="flex items-center gap-3">
                 <div className="flex size-10 items-center justify-center rounded-xl bg-safety-yellow/15 text-safety-yellow">
                   <CoinIcon />
                 </div>
-                <h2 className="text-headline-md text-[18px]">Gündəlik limit</h2>
+                <h2 className="text-[18px] font-semibold leading-tight text-navy">Gündəlik limit</h2>
               </div>
-              <div className="mt-4 text-body-lg text-on-surface">
+              <div className="mt-4 text-[18px] font-semibold text-navy">
                 Qalan coin: <span className="font-semibold text-safety-yellow">{coins.balance}</span>
               </div>
-              <div className="mt-1 text-body-md text-on-surface-variant">
+              <div className="mt-1 text-[14px] text-on-surface-variant">
                 Sıfırlanmaya qalan vaxt: {formatMsUntilReset(coins.msUntilReset)}
               </div>
               {streakStatus && streakStatus.current > 0 && (
-                <div className="mt-2 flex items-center gap-1.5 text-body-md text-caution-orange">
+                <div className="mt-2 flex items-center gap-1.5 text-[14px] text-caution-orange">
                   <FlameIcon width={16} height={16} />
                   <span>{streakStatus.current} gün ardıcıl seriya</span>
                 </div>
               )}
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="mt-6 flex flex-wrap gap-3">
                 <Link
                   href="/qiymetler"
-                  className={buttonVariants({ variant: 'primary', size: 'sm' }) + ' glow-primary gap-1.5'}
+                  className={buttonVariants({ variant: 'primary', size: 'lg' }) + ' glow-primary rounded-full'}
                 >
                   <SparkleIcon />
                   Yeni coin paketi al
                 </Link>
-                <Link href="/coin-qazan" className={buttonVariants({ variant: 'outline', size: 'sm' }) + ' gap-1.5'}>
+                <Link
+                  href="/coin-qazan"
+                  className={buttonVariants({ variant: 'outline', size: 'lg' }) + ' rounded-full border-navy/25 text-navy hover:bg-navy/5'}
+                >
                   <CoinIcon />
                   Coin qazan
                 </Link>
@@ -247,25 +275,28 @@ export default async function AccountPage() {
             {securityForms}
           </div>
 
-          <div className="space-y-4 rounded-[1.5rem] border border-error/30 bg-error/5 p-6">
+          <div className="space-y-4 rounded-3xl border border-error/30 bg-error/5 p-6 md:p-10">
             <div className="flex items-center gap-3 border-b border-error/20 pb-4">
               <div className="flex size-10 items-center justify-center rounded-xl bg-error/15 text-error">
                 <TrashIcon width={18} height={18} />
               </div>
-              <h2 className="text-headline-md text-[18px] text-error">Təhlükəli zona</h2>
+              <h2 className="text-[20px] font-semibold text-navy">Təhlükəli zona</h2>
             </div>
 
             {logoutForm}
 
-            <p className="text-body-md text-on-surface-variant">
+            <p className="text-[14px] leading-relaxed text-on-surface-variant">
               Hesabınızı silmək geri qaytarıla bilməz — bütün söhbətləriniz və mesajlarınız itiriləcək.
             </p>
             {deleteAccountDialog}
           </div>
 
           <AdSlot />
+          </div>
 
-          <Footer />
+          <div className="mt-16">
+            <Footer />
+          </div>
         </div>
       }
       threeD={

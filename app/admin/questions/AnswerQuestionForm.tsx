@@ -36,7 +36,7 @@ export default function AnswerQuestionForm({ questionId }: AnswerQuestionFormPro
         </Alert>
       )}
 
-      <Button type="submit" variant="primary" size="sm" isPending={pending}>
+      <Button type="submit" variant="primary" size="sm" className="rounded-full" isPending={pending}>
         {({ isPending }) => (
           <>
             {isPending ? <Spinner size="sm" tone="current" /> : null}

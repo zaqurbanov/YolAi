@@ -105,8 +105,25 @@ export async function startExamSession(userId: string): Promise<ExamStartResult>
   }
 
   // Price is resolved SERVER-SIDE and never accepted from the caller — this
-  // function is reachable from a server action, which is a plain POST.
+  // function is reachable from a server action, which is a plain POST. Admins
+  // are exempt: start_exam_session treats p_coin_price = 0 as a valid free
+  // price (only null/negative is a misconfiguration), so admins pay nothing
+  // while everyone else pays the app_settings price.
   const coinPrice = await readNumericSetting(EXAM_COIN_PRICE_KEY, DEFAULT_EXAM_COIN_PRICE, true);
+
+  // Best-effort admin check: on a query error fall back to the normal price
+  // rather than failing the start — free admission is a privilege, not a gate.
+  let isAdmin = false;
+  const { data: profile, error: profileError } = await createAdminClient()
+    .from('profiles')
+    .select('role')
+    .eq('id', userId)
+    .maybeSingle();
+  if (profileError) {
+    void logError('exam.examSession.adminCheck', profileError, { userId });
+  } else {
+    isAdmin = profile?.role === 'admin';
+  }
 
   // No daily-grant argument any more: the top-up is automatic on read paths
   // (apply_daily_grant), so a spend path must not re-trigger it.
@@ -114,7 +131,7 @@ export async function startExamSession(userId: string): Promise<ExamStartResult>
     p_user_id: userId,
     p_question_ids: questionIds,
     p_correct_indices: correctIndices,
-    p_coin_price: Math.round(coinPrice),
+    p_coin_price: isAdmin ? 0 : Math.round(coinPrice),
   });
 
   if (error) {

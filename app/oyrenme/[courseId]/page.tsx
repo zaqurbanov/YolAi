@@ -1,11 +1,17 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import type { Metadata } from 'next';
-import { Chip } from '@heroui/react';
 import { buttonVariants } from '@heroui/styles';
 import { createClient } from '@/lib/supabase/server';
 import Footer from '@/components/Footer';
-import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, LockIcon } from '@/components/icons';
+import {
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  AwardIcon,
+  CheckIcon,
+  LockIcon,
+  PlayIcon,
+} from '@/components/icons';
 import { canAccessCourse } from '@/lib/coins/lessonUnlock';
 import { getCourses, getCourseTopics } from '@/lib/quiz/lessons';
 import DesignSwitch from '@/components/design3d/DesignSwitch';
@@ -16,6 +22,12 @@ import MobileCoursePage from '@/components/oyrenme/MobileCoursePage';
 export const metadata: Metadata = {
   title: 'Kurs',
 };
+
+function Eyebrow({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="text-[12px] font-bold uppercase tracking-[0.1em] text-primary">{children}</span>
+  );
+}
 
 // Course page: the ordered topic list of ONE course.
 //
@@ -47,25 +59,29 @@ export default async function CoursePage({ params }: { params: Promise<{ courseI
       <DesignSwitch
         design={design}
         simple={
-          <div className="flex flex-1 flex-col">
-            <section className="px-6 py-16 lg:py-20">
-              <div className="glass-panel mx-auto max-w-lg rounded-2xl px-6 py-12 text-center">
-                <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-2xl bg-safety-yellow/15 text-safety-yellow">
-                  <LockIcon width={20} height={20} />
+          <div className="editorial flex flex-1 flex-col pb-24 md:pb-0">
+            <div className="mx-auto w-full max-w-[1280px] px-6 pt-10 md:px-16 md:pt-16">
+              <div className="mx-auto max-w-lg rounded-3xl border border-border/40 bg-surface p-6 text-center shadow-sm md:p-10">
+                <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-surface-tertiary text-on-surface-variant">
+                  <LockIcon width={20} height={20} aria-hidden />
                 </div>
-                <h1 className="text-headline-md">Bu kurs sizə açıq deyil</h1>
-                <p className="mx-auto mt-2 max-w-sm text-body-md text-on-surface-variant">
+                <h1 className="text-[28px] font-semibold leading-tight text-navy md:text-[40px]">
+                  Bu kurs sizə açıq deyil
+                </h1>
+                <p className="mx-auto mt-2 max-w-sm text-[16px] leading-relaxed text-on-surface-variant">
                   Kursu açmaq üçün kurslar səhifəsinə qayıdın.
                 </p>
                 <Link
                   href="/oyrenme"
-                  className={buttonVariants({ variant: 'primary', size: 'sm' }) + ' mt-5'}
+                  className={buttonVariants({ variant: 'primary', size: 'lg' }) + ' glow-primary mt-6 rounded-full'}
                 >
                   Kurslara qayıt
                 </Link>
               </div>
-            </section>
-            <Footer />
+            </div>
+            <div className="mt-16">
+              <Footer />
+            </div>
           </div>
         }
         threeD={<CoursePage3D locked />}
@@ -119,7 +135,7 @@ export default async function CoursePage({ params }: { params: Promise<{ courseI
         <>
           {/* Mobile course-detail shell (see legaldrive-design skill,
               "Academy (Öyrənmə) page — mobile") — CSS-only split via
-              md:hidden. Desktop tree below is untouched, just wrapped. */}
+              md:hidden. Desktop tree below is the editorial restyle. */}
           <div className="md:hidden">
             <MobileCoursePage
               courseId={courseId}
@@ -136,151 +152,188 @@ export default async function CoursePage({ params }: { params: Promise<{ courseI
           </div>
 
           <div className="hidden md:contents">
-        <div id="top" className="flex flex-1 flex-col">
-      <section className="relative overflow-hidden px-6 pt-10 pb-6">
-        <div className="absolute inset-0 z-0 bg-gradient-to-b from-primary/10 via-transparent to-transparent" />
-        <div className="relative z-10 mx-auto flex max-w-5xl flex-col gap-4">
-          <Link
-            href="/oyrenme"
-            className="inline-flex w-fit items-center gap-1.5 text-label-sm text-on-surface-variant transition-colors hover:text-primary"
-          >
-            <ArrowLeftIcon width={16} height={16} />
-            Kurslar
-          </Link>
+        <div id="top" className="editorial flex flex-1 flex-col pb-24 md:pb-0">
+          <div className="mx-auto w-full max-w-[1280px] space-y-16 px-6 pt-10 md:space-y-28 md:px-16 md:pt-16">
+            <section className="grid grid-cols-1 items-center gap-8 md:grid-cols-12">
+              <div className="space-y-6 md:col-span-7">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <Eyebrow>Kurs</Eyebrow>
+                  <Link
+                    href="/oyrenme"
+                    className="inline-flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-[0.1em] text-primary transition-[gap] hover:gap-2.5"
+                  >
+                    <ArrowLeftIcon width={13} height={13} aria-hidden />
+                    Kurslar
+                  </Link>
+                </div>
 
-          <h1 className="font-display text-[26px] font-bold leading-tight text-balance lg:text-[30px]">
-            {course?.title ?? 'Kurs'}
-          </h1>
-          <p className="max-w-xl text-body-md text-on-surface-variant">
-            {course?.description ??
-              'Mövzuları ardıcıllıqla oxuyun və hər mövzunun sonundakı testi keçin. Növbəti mövzu ancaq əvvəlkini keçdikdən sonra açılır.'}
-          </p>
+                <h1 className="text-[32px] font-semibold leading-[1.15] text-navy md:text-[40px]">
+                  {course?.title ?? 'Kurs'}
+                </h1>
+                <p className="max-w-xl text-[18px] leading-relaxed text-on-surface-variant">
+                  {course?.description ??
+                    'Mövzuları ardıcıllıqla oxuyun və hər mövzunun sonundakı testi keçin. Növbəti mövzu ancaq əvvəlkini keçdikdən sonra açılır.'}
+                </p>
 
-          {topics.length > 0 && (
-            <div className="glass-panel w-full max-w-md rounded-2xl p-5">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-label-sm text-on-surface-variant">Kurs irəliləyişi</span>
-                <span className="text-label-sm text-go-green">
-                  {passedCount}/{topics.length} mövzu
-                </span>
-              </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-surface-tertiary">
-                <div
-                  className="h-full rounded-full bg-go-green shadow-[0_0_10px_rgba(34,197,94,0.4)] transition-all"
-                  style={{ width: `${progressPct}%` }}
-                />
-              </div>
-            </div>
-          )}
-        </div>
-      </section>
-
-      <section className="px-6 pb-12">
-        <div className="mx-auto max-w-5xl">
-          {topics.length === 0 ? (
-            <div className="glass-panel rounded-2xl px-6 py-12 text-center">
-              <h2 className="text-headline-md">Mövzular hazırlanır</h2>
-              <p className="mx-auto mt-2 max-w-md text-body-md text-on-surface-variant">
-                Bu kursda hələ dərc edilmiş mövzu yoxdur. Tezliklə burada görünəcək.
-              </p>
-            </div>
-          ) : (
-            <ol className="flex flex-col gap-2.5">
-              {topics.map((topic, i) => {
-                const rowClass =
-                  'glass-card flex items-center gap-3 rounded-xl border border-transparent px-4 py-3';
-
-                const badge = topic.passed ? (
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-go-green/15 text-go-green">
-                    <CheckIcon width={16} height={16} />
-                  </span>
-                ) : topic.isUnlocked ? (
-                  <span className="text-legal-citation flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
-                    {i + 1}
-                  </span>
-                ) : (
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-surface-tertiary text-on-surface-variant">
-                    <LockIcon width={15} height={15} />
-                  </span>
-                );
-
-                const body = (
-                  <>
-                    {badge}
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <h3
-                          className={`text-[15px] font-semibold leading-snug ${topic.isUnlocked ? 'text-on-surface' : 'text-on-surface-variant'}`}
-                        >
-                          {topic.title}
-                        </h3>
-                        {topic.passed && (
-                          <Chip
-                            size="sm"
-                            variant="soft"
-                            color="success"
-                            className="mono-label shrink-0"
-                          >
-                            Keçilib
-                          </Chip>
-                        )}
-                        {!topic.isUnlocked && (
-                          <Chip
-                            size="sm"
-                            variant="soft"
-                            color="default"
-                            className="mono-label shrink-0"
-                          >
-                            Kilidli
-                          </Chip>
-                        )}
-                      </div>
-
-                      <p className="mt-0.5 text-[13px] leading-snug text-on-surface-variant">
-                        {topic.passed
-                          ? `Ən yaxşı nəticə: ${topic.bestScore} • ${topic.attempts} cəhd`
-                          : !topic.isUnlocked
-                            ? 'Açmaq üçün əvvəlki mövzunun testini keçin'
-                            : topic.attempts > 0
-                              ? `${topic.attempts} cəhd • ən yaxşı nəticə: ${topic.bestScore}`
-                              : 'Oxu və testi keç'}
-                      </p>
+                {topics.length > 0 && (
+                  <div className="space-y-4 rounded-3xl border border-border/40 bg-surface p-6 shadow-sm">
+                    <div className="flex items-end justify-between gap-4">
+                      <span className="text-[12px] font-bold uppercase tracking-[0.1em] text-navy">
+                        Kurs irəliləyişi
+                      </span>
+                      <span className="editorial-display text-[56px] font-bold leading-none text-primary tabular-nums md:text-[64px]">
+                        {progressPct}%
+                      </span>
                     </div>
-
-                    {topic.isUnlocked && (
-                      <ArrowRightIcon
-                        width={16}
-                        height={16}
-                        className="shrink-0 text-on-surface-variant transition-transform group-hover:translate-x-0.5"
+                    <div
+                      role="progressbar"
+                      aria-valuenow={progressPct}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-label="Kurs irəliləyişi"
+                      className="h-3 w-full overflow-hidden rounded-full bg-surface-tertiary"
+                    >
+                      <div
+                        className="h-full rounded-full bg-primary"
+                        style={{ width: `${Math.max(progressPct, 2)}%` }}
                       />
-                    )}
-                  </>
-                );
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.08em] bg-surface-tertiary text-navy tabular-nums">
+                        {passedCount}/{topics.length} mövzu
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
 
-                return (
-                  <li key={topic.id}>
-                    {topic.isUnlocked ? (
-                      <Link
-                        href={`/oyrenme/${courseId}/${topic.id}`}
-                        className={`${rowClass} group transition-[transform,border-color] hover:-translate-y-0.5 hover:border-primary/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary`}
-                      >
-                        {body}
-                      </Link>
-                    ) : (
-                      // Locked topics are NOT links: the topic page would refuse
-                      // them anyway (resolveAccessibleTopic), so a link here
-                      // would only navigate to a not-found state.
-                      <div className={`${rowClass} opacity-60`}>{body}</div>
-                    )}
-                  </li>
-                );
-              })}
-            </ol>
-          )}
-        </div>
-      </section>
+              {/* Same static seal as the home hero. Desktop only — on a phone
+                  the hero needs the full width for type, not decoration. */}
+              <div className="hidden justify-center md:col-span-5 md:flex">
+                <div className="editorial-seal flex size-40 items-center justify-center rounded-full shadow-lg">
+                  <AwardIcon width={64} height={64} aria-hidden />
+                </div>
+              </div>
+            </section>
 
-      <Footer />
+            <section>
+              <Eyebrow>Dərs proqramı</Eyebrow>
+              {topics.length === 0 ? (
+                <div className="mt-8 rounded-3xl border border-border/40 bg-surface p-6 shadow-sm md:p-12">
+                  <div className="mx-auto max-w-md text-center">
+                    <h2 className="text-[20px] font-semibold text-navy md:text-[22px]">
+                      Mövzular hazırlanır
+                    </h2>
+                    <p className="mt-2 text-[14px] leading-relaxed text-on-surface-variant">
+                      Bu kursda hələ dərc edilmiş mövzu yoxdur. Tezliklə burada görünəcək.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <h2 className="mt-2 text-[28px] font-semibold leading-tight text-navy md:text-[40px]">
+                    Mövzuları ardıcıllıqla keç.
+                  </h2>
+                  {/* [&>li]:min-w-0 — same grid-item min-width:auto trap as the
+                      mobile list: without it a row wider than its 1fr track
+                      (icon + CTA + text) overflows at tablet widths. */}
+                  <ul className="mt-8 grid gap-3 md:grid-cols-2 [&>li]:min-w-0">
+                    {topics.map((topic, i) => {
+                      const num = String(i + 1).padStart(2, '0');
+                      const href = `/oyrenme/${courseId}/${topic.id}`;
+
+                      if (topic.passed) {
+                        return (
+                          <li key={topic.id}>
+                            <Link
+                              href={href}
+                              className="group flex items-center gap-4 rounded-2xl border border-border/40 bg-surface p-4 transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+                            >
+                              <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-sage/40 text-teal-deep">
+                                <CheckIcon width={18} height={18} aria-hidden />
+                              </span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate text-[15px] font-medium text-navy">
+                                  {topic.title}
+                                </span>
+                                <span className="mt-0.5 block text-[11px] font-bold uppercase tracking-[0.08em] text-teal-deep">
+                                  {num} · Tamamlanıb
+                                  {topic.bestScore != null ? ` · ${topic.bestScore}%` : ''}
+                                </span>
+                              </span>
+                              <ArrowRightIcon
+                                width={16}
+                                height={16}
+                                aria-hidden
+                                className="shrink-0 text-on-surface-variant transition-transform duration-200 group-hover:translate-x-0.5 motion-reduce:transform-none"
+                              />
+                            </Link>
+                          </li>
+                        );
+                      }
+
+                      if (!topic.passed && topic.isUnlocked) {
+                        return (
+                          <li key={topic.id}>
+                            <Link
+                              href={href}
+                              className="group flex items-center gap-4 rounded-2xl border border-primary/40 bg-surface p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+                            >
+                              <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary text-on-primary">
+                                <PlayIcon width={18} height={18} aria-hidden />
+                              </span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate text-[15px] font-semibold text-navy">
+                                  {topic.title}
+                                </span>
+                                <span className="mt-0.5 block text-[11px] font-bold uppercase tracking-[0.08em] text-primary">
+                                  {num} · Davam edir
+                                  {topic.attempts > 0 ? ` · ${topic.attempts} cəhd` : ''}
+                                </span>
+                              </span>
+                              {/* Visual CTA only — the whole row is the link, so
+                                  this must not be a second focusable element. */}
+                              <span
+                                aria-hidden
+                                className="shrink-0 rounded-full bg-primary px-4 py-1.5 text-[12px] font-bold text-on-primary"
+                              >
+                                Davam et
+                              </span>
+                            </Link>
+                          </li>
+                        );
+                      }
+
+                      return (
+                        <li key={topic.id}>
+                          <div
+                            aria-disabled="true"
+                            className="flex items-center gap-4 rounded-2xl border border-dashed border-border/60 bg-surface/50 p-4"
+                          >
+                            <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-surface-tertiary text-on-surface-variant">
+                              <LockIcon width={16} height={16} aria-hidden />
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-[15px] font-medium text-on-surface-variant">
+                                {topic.title}
+                              </p>
+                              <p className="mt-0.5 text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant">
+                                {num} · Bağlı
+                              </p>
+                            </div>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </>
+              )}
+            </section>
+          </div>
+
+          <div className="mt-16">
+            <Footer />
+          </div>
         </div>
           </div>
         </>

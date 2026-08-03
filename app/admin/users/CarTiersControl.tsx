@@ -92,8 +92,8 @@ export default function CarTiersControl() {
   }
 
   return (
-    <div className="glass-card rounded-2xl p-4 space-y-3 lg:col-span-2">
-      <div className="mono-label text-on-surface-variant uppercase">Virtual Qaraj — avtomobil qiymətləri</div>
+    <div className="rounded-3xl border border-border/40 bg-surface p-6 shadow-sm space-y-3 lg:col-span-2">
+      <div className="text-[12px] font-bold uppercase tracking-[0.1em] text-navy">Virtual Qaraj — avtomobil qiymətləri</div>
 
       {loading ? (
         <div className="space-y-2">
@@ -102,19 +102,19 @@ export default function CarTiersControl() {
           <Skeleton className="h-10 w-full rounded-xl" />
         </div>
       ) : (
-        <ul className="space-y-2">
+        <ul className="space-y-2 [&>li]:min-w-0">
           {tiers?.map((tier) => {
             const row = rows[tier.id];
             return (
               <li
                 key={tier.id}
-                className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 sm:justify-between rounded-xl border border-outline-variant/20 px-3 py-2"
+                className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 sm:justify-between rounded-2xl border border-border/40 bg-surface-tertiary/40 px-3 py-2"
               >
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 min-w-0">
                   <span aria-hidden className="text-xl leading-none">
                     {tier.emoji}
                   </span>
-                  <span className="text-body-md text-on-surface">{tier.name}</span>
+                  <span className="truncate text-[14px] font-medium text-navy">{tier.name}</span>
                 </div>
 
                 <div className="flex items-center gap-2 flex-wrap">
@@ -132,6 +132,7 @@ export default function CarTiersControl() {
                     size="sm"
                     isPending={row?.pending}
                     onPress={() => handleSave(tier.id)}
+                    className="rounded-full"
                   >
                     {({ isPending }) => (
                       <>
@@ -140,7 +141,7 @@ export default function CarTiersControl() {
                       </>
                     )}
                   </Button>
-                  {row?.error && <span className="mono-label text-danger">{row.error}</span>}
+                  {row?.error && <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-danger">{row.error}</span>}
                 </div>
               </li>
             );

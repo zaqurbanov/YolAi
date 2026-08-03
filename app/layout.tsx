@@ -137,7 +137,7 @@ export default function RootLayout({
             <NavBar />
             <div className="flex flex-1 min-h-0">
               <Sidebar />
-              <main className="flex flex-1 flex-col min-h-0 overflow-y-auto">
+              <main className="flex min-w-0 flex-1 flex-col min-h-0 overflow-y-auto">
                 <PullToRefresh>{children}</PullToRefresh>
               </main>
             </div>

@@ -36,12 +36,12 @@ export default function Sidebar() {
   // otherwise) — hide it for logged-out visitors instead of sending them into
   // a redirect. While auth state is still unknown, show the public set: it's
   // the subset every visitor can use, so nothing appears and then vanishes.
-  // Admins are exempt from the coin/energy economy; both /coin-qazan and
-  // /imtahan (whose entry costs energy) bounce them to /account, so drop both
-  // from their menu rather than show a redirecting link.
+  // Admins are exempt from the coin/energy economy and /coin-qazan redirects
+  // them to /account, so it stays hidden — but /imtahan is now open to admins
+  // (free entry, no redirect), so it stays visible.
   const navItems = nav?.user
     ? nav.isAdmin
-      ? NAV_ITEMS.filter((item) => item.href !== '/coin-qazan' && item.href !== '/imtahan')
+      ? NAV_ITEMS.filter((item) => item.href !== '/coin-qazan')
       : NAV_ITEMS
     : PUBLIC_NAV_ITEMS;
 

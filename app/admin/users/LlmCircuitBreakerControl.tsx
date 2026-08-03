@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Chip, Button, TextField, Input, Skeleton } from '@heroui/react';
+import { Button, TextField, Input, Skeleton } from '@heroui/react';
 import { Spinner } from '@/components/Spinner';
 
 interface CircuitBreakerSettings {
@@ -86,25 +86,24 @@ export default function LlmCircuitBreakerControl() {
   const barColor = usagePct >= 100 ? 'bg-error' : usagePct >= 80 ? 'bg-caution-orange' : 'bg-primary';
 
   return (
-    <div className="glass-card rounded-2xl p-4 flex flex-col gap-4">
+    <div className="rounded-3xl border border-border/40 bg-surface p-6 shadow-sm flex flex-col gap-4">
       <div>
-        <div className="mono-label text-on-surface-variant uppercase">Gündəlik LLM sorğu limiti (qlobal)</div>
+        <div className="text-[12px] font-bold uppercase tracking-[0.1em] text-navy">Gündəlik LLM sorğu limiti (qlobal)</div>
         {loading ? (
           <Skeleton className="h-6 w-32 mt-2 rounded-full" />
         ) : (
           <div className="mt-1 flex items-center gap-2 flex-wrap">
-            <span className="text-xl font-semibold text-on-surface">{cap}</span>
-            <Chip
-              size="sm"
-              variant="soft"
-              color={settings?.source === 'table' ? 'accent' : 'default'}
-              className="mono-label"
+            <span className="editorial-display text-xl font-bold leading-none tabular-nums text-primary">{cap}</span>
+            <span
+              className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.08em] ${
+                settings?.source === 'table' ? 'bg-primary/10 text-primary' : 'bg-surface-tertiary text-navy'
+              }`}
             >
               {settings?.source === 'table' ? 'admin təyin edib' : 'standart'}
-            </Chip>
+            </span>
           </div>
         )}
-        <p className="mt-2 text-sm text-on-surface-variant">
+        <p className="mt-2 text-[13px] text-on-surface-variant">
           Bütün istifadəçilər (adminlər daxil) üzrə ÜMUMİ gündəlik hədd — istifadəçi başına deyil. Bakı vaxtı ilə gecə
           yarısı sıfırlanır. Hədd dolanda söhbət bütün istifadəçilər üçün dayanır.
         </p>
@@ -113,12 +112,16 @@ export default function LlmCircuitBreakerControl() {
       {!loading && (
         <div>
           <div className="flex items-baseline justify-between gap-2 flex-wrap">
-            <span className="mono-label text-on-surface">
+            <span className="text-[12px] font-bold text-navy">
               Bu gün: {usageKnown ? `${used} / ${cap}` : `naməlum / ${cap}`}
             </span>
-            {settings?.date && <span className="mono-label text-on-surface-variant">{settings.date} (Bakı)</span>}
+            {settings?.date && (
+              <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant">
+                {settings.date} (Bakı)
+              </span>
+            )}
           </div>
-          <div className="mt-2 h-3 rounded-full bg-surface-container-high overflow-hidden">
+          <div className="mt-2 h-3 rounded-full bg-surface-tertiary overflow-hidden">
             {usageKnown ? (
               <div
                 className={`h-full rounded-full ${barColor} transition-all`}
@@ -127,12 +130,14 @@ export default function LlmCircuitBreakerControl() {
             ) : null}
           </div>
           {!usageKnown && (
-            <p className="mt-2 mono-label text-on-surface-variant">
+            <p className="mt-2 text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant">
               Sayğac oxunmadı — çox güman ki 0093 migrasiyası hələ tətbiq edilməyib.
             </p>
           )}
           {usagePct >= 100 && (
-            <p className="mt-2 mono-label text-error">Hədd dolub — söhbət bu gün üçün dayandırılıb.</p>
+            <p className="mt-2 text-[11px] font-bold uppercase tracking-[0.08em] text-error">
+              Hədd dolub — söhbət bu gün üçün dayandırılıb.
+            </p>
           )}
         </div>
       )}
@@ -148,7 +153,7 @@ export default function LlmCircuitBreakerControl() {
           >
             <Input min={1} max={100000} />
           </TextField>
-          <Button variant="outline" size="sm" isPending={pending} onPress={handleSave}>
+          <Button variant="outline" size="sm" isPending={pending} onPress={handleSave} className="rounded-full">
             {({ isPending }) => (
               <>
                 {isPending ? <Spinner size="sm" tone="current" /> : null}
@@ -157,11 +162,11 @@ export default function LlmCircuitBreakerControl() {
             )}
           </Button>
           {settings?.source === 'table' && (
-            <Button variant="outline" size="sm" isPending={pending} onPress={handleReset}>
+            <Button variant="outline" size="sm" isPending={pending} onPress={handleReset} className="rounded-full">
               Standarta qaytar
             </Button>
           )}
-          {error && <span className="mono-label text-error">{error}</span>}
+          {error && <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-error">{error}</span>}
         </div>
       )}
     </div>

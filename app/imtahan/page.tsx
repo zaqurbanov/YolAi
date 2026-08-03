@@ -36,11 +36,6 @@ export default async function ImtahanPage() {
     .eq('id', user.id)
     .maybeSingle();
 
-  // Admins are exempt from the coin/energy economy everywhere else in the app
-  // (app/coin-qazan/page.tsx redirects them), and the exam costs coins — so
-  // there is nothing here they can meaningfully do.
-  if (profile?.role === 'admin') redirect('/account');
-
   // getCoinBalanceStatus applies the lazy daily coin top-up as a side effect,
   // so the entry gate reads a topped-up balance.
   const [coinStatus, pricing, history] = await Promise.all([
@@ -55,6 +50,7 @@ export default async function ImtahanPage() {
       coinPrice={pricing.coinPrice}
       passThreshold={pricing.passThreshold}
       history={history}
+      isAdmin={profile?.role === 'admin'}
     />
   );
 }

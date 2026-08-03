@@ -21,18 +21,19 @@ export default function AdminTabs() {
 
   return (
     <Tabs variant="secondary" selectedKey={selected} aria-label="Admin bölmələri">
-      <Tabs.ListContainer>
-        <Tabs.List aria-label="Admin bölmələri">
+      <Tabs.ListContainer className="border-0">
+        <Tabs.List aria-label="Admin bölmələri" className="gap-1.5">
           {TABS.map((tab) => (
             <Tabs.Tab
               key={tab.id}
               id={tab.id}
               href={tab.href}
+              className="whitespace-nowrap text-on-surface-variant transition data-[selected=true]:font-bold data-[selected=true]:text-primary"
               // eslint-disable-next-line @typescript-eslint/no-explicit-any -- matches HeroUI's documented Link-tab pattern
               render={(domProps: any) => <Link {...domProps} href={tab.href} />}
             >
               {tab.label}
-              <Tabs.Indicator />
+              <Tabs.Indicator className="top-0 bottom-auto h-full rounded-full border border-border/40 bg-surface shadow-sm" />
             </Tabs.Tab>
           ))}
         </Tabs.List>

@@ -134,15 +134,15 @@ export default function PushNotificationOptIn() {
         <div className="flex size-10 items-center justify-center rounded-xl bg-safety-yellow/15 text-safety-yellow">
           <BellIcon />
         </div>
-        <h2 className="text-headline-md text-[18px]">Push Bildirişlər</h2>
+        <h2 className="text-[18px] font-semibold leading-tight text-on-surface">Push Bildirişlər</h2>
       </div>
 
       <div className="flex flex-col gap-3 py-1 sm:flex-row sm:items-center sm:justify-between">
         <span className="flex flex-col text-left">
-          <span className="text-body-md font-semibold text-on-surface">
+          <span className="text-[16px] font-semibold text-on-surface">
             {status === 'subscribed' ? 'Bildirişlər aktivdir' : 'Bildirişlər deaktivdir'}
           </span>
-          <span className="text-label-sm text-on-surface-variant">
+          <span className="text-[13px] text-on-surface-variant">
             Yeni qaydalar və xatırlatmalar barədə push bildiriş alın
           </span>
         </span>

@@ -59,7 +59,7 @@ export default function QuizPdfUploadForm() {
     <div className="glass-card rounded-2xl p-6">
       <form onSubmit={handleUpload} className="flex flex-col gap-4">
         <div>
-          <h2 className="text-headline-md text-[18px]">PDF-dən sual yarat</h2>
+          <h2 className="text-[18px] font-semibold text-navy">PDF-dən sual yarat</h2>
           <p className="mt-1 text-body-md text-on-surface-variant">
             Sənəd yükləyin — AI mətndən test sualları çıxaracaq. Bütün suallar dərc olunmadan əvvəl
             layihə statusunda saxlanılır və baxış tələb edir.
@@ -72,7 +72,7 @@ export default function QuizPdfUploadForm() {
             type="file"
             accept="application/pdf"
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            className="w-full border rounded-md px-3 py-2 text-sm"
+            className="w-full rounded-xl border border-border/40 bg-surface px-3 py-2 text-sm text-navy"
             required
           />
         </TextField>
@@ -109,7 +109,7 @@ export default function QuizPdfUploadForm() {
           <Button
             type="submit"
             variant="primary"
-            className="glow-primary"
+            className="glow-primary rounded-full"
             isPending={uploading || isRefreshing}
             isDisabled={!file}
           >

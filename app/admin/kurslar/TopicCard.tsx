@@ -312,7 +312,7 @@ function TopicEditor({
 
           {topic.sourceCitations.length > 0 && (
             <div>
-              <div className="mono-label mb-1.5 text-on-surface-variant uppercase">İstinadlar</div>
+              <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant mb-1.5">İstinadlar</div>
               <div className="flex flex-wrap gap-1.5">
                 {topic.sourceCitations.map((c, i) => (
                   <Chip
@@ -351,6 +351,7 @@ function TopicEditor({
                 <Button
                   variant="primary"
                   size="sm"
+                  className="rounded-full"
                   isPending={publishing}
                   isDisabled={publishing || isRunLocked}
                   onPress={onPublish}

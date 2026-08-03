@@ -126,7 +126,7 @@ export default function TopicSplitPanel({ topic, onCancel, onSplit }: TopicSplit
   return (
     <div className="mt-3 rounded-xl border border-primary/40 bg-primary/5 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="mono-label text-on-surface-variant uppercase">Mövzunu hissələrə böl</div>
+        <div className="text-[12px] font-bold uppercase tracking-[0.1em] text-navy">Mövzunu hissələrə böl</div>
         <Button variant="ghost" size="sm" isDisabled={splitting} onPress={onCancel}>
           Bağla
         </Button>
@@ -218,6 +218,7 @@ export default function TopicSplitPanel({ topic, onCancel, onSplit }: TopicSplit
                 <Button
                   variant="primary"
                   size="sm"
+                  className="rounded-full"
                   isPending={splitting}
                   isDisabled={splitting}
                   onPress={() => void handleSplit()}
@@ -244,6 +245,7 @@ export default function TopicSplitPanel({ topic, onCancel, onSplit }: TopicSplit
               <Button
                 variant="primary"
                 size="sm"
+                className="rounded-full"
                 isDisabled={previewing || parts.length < 2}
                 onPress={() => setConfirming(true)}
               >

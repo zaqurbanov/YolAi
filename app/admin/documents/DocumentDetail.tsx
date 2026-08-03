@@ -243,7 +243,7 @@ export default function DocumentDetail({ id }: { id: string }) {
                 <button
                   type="button"
                   onClick={startEditingTitle}
-                  className="rounded-md text-left text-2xl font-semibold hover:underline decoration-dashed underline-offset-4"
+                  className="rounded-md text-left text-[24px] font-semibold leading-tight text-navy hover:underline decoration-dashed underline-offset-4"
                   title="Başlığı redaktə et"
                 >
                   {document.title}
@@ -258,7 +258,7 @@ export default function DocumentDetail({ id }: { id: string }) {
                 </Chip>
               )}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button variant="outline" size="sm" isPending={reextractingImages} onPress={handleReextractImages}>
                 {({ isPending }) => (
                   <>
@@ -292,27 +292,27 @@ export default function DocumentDetail({ id }: { id: string }) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card className="glass-card">
           <Card.Content className="space-y-4">
-            <h2 className="text-lg font-semibold">Bölünmə strategiyası</h2>
+            <h2 className="text-[18px] font-semibold text-navy">Bölünmə strategiyası</h2>
             {!chunkStats ? (
               <Skeleton className="h-24 w-full rounded-xl" />
             ) : (
               <>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div className="glass-panel rounded-xl px-3 py-2">
-                    <div className="mono-label text-on-surface-variant uppercase">Cəmi</div>
-                    <div className="mt-1 text-xl font-semibold text-on-surface">{chunkStats.total}</div>
+                    <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant">Cəmi</div>
+                    <div className="editorial-display mt-1 text-[20px] font-bold tabular-nums text-navy">{chunkStats.total}</div>
                   </div>
                   <div className="glass-panel rounded-xl px-3 py-2">
-                    <div className="mono-label text-on-surface-variant uppercase">Min uzunluq</div>
-                    <div className="mt-1 text-xl font-semibold text-on-surface">{chunkStats.minLength}</div>
+                    <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant">Min uzunluq</div>
+                    <div className="editorial-display mt-1 text-[20px] font-bold tabular-nums text-navy">{chunkStats.minLength}</div>
                   </div>
                   <div className="glass-panel rounded-xl px-3 py-2">
-                    <div className="mono-label text-on-surface-variant uppercase">Maks uzunluq</div>
-                    <div className="mt-1 text-xl font-semibold text-on-surface">{chunkStats.maxLength}</div>
+                    <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant">Maks uzunluq</div>
+                    <div className="editorial-display mt-1 text-[20px] font-bold tabular-nums text-navy">{chunkStats.maxLength}</div>
                   </div>
                   <div className="glass-panel rounded-xl px-3 py-2">
-                    <div className="mono-label text-on-surface-variant uppercase">Orta uzunluq</div>
-                    <div className="mt-1 text-xl font-semibold text-on-surface">{chunkStats.avgLength}</div>
+                    <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant">Orta uzunluq</div>
+                    <div className="editorial-display mt-1 text-[20px] font-bold tabular-nums text-navy">{chunkStats.avgLength}</div>
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -350,7 +350,7 @@ export default function DocumentDetail({ id }: { id: string }) {
 
         <Card className="glass-card">
           <Card.Content className="space-y-2">
-            <h2 className="text-lg font-semibold">Embedding modeli</h2>
+            <h2 className="text-[18px] font-semibold text-navy">Embedding modeli</h2>
             <p className="text-sm text-on-surface-variant">
               Embedding modeli: <span className="text-on-surface">{EMBEDDING_MODEL}</span> (384 ölçülü,
               lokal)
@@ -364,7 +364,7 @@ export default function DocumentDetail({ id }: { id: string }) {
       </div>
 
       <div>
-        <h2 className="text-lg font-semibold mb-3">Chunk-lar</h2>
+        <h2 className="text-[18px] font-semibold text-navy mb-3">Chunk-lar</h2>
 
         {loadingChunks && chunks.length === 0 ? (
           <div className="glass-panel rounded-2xl p-4 space-y-3">
@@ -395,7 +395,7 @@ export default function DocumentDetail({ id }: { id: string }) {
           </div>
         )}
 
-        <div className="flex items-center justify-between mt-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 mt-4">
           <span className="mono-label text-on-surface-variant">
             {chunksTotal} chunk-dan {(page - 1) * PAGE_SIZE + 1}–
             {Math.min(page * PAGE_SIZE, chunksTotal)}

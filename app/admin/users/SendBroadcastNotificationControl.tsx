@@ -30,15 +30,15 @@ export default function SendBroadcastNotificationControl() {
   }
 
   return (
-    <div className="glass-card rounded-2xl p-4 flex flex-col gap-3">
+    <div className="rounded-3xl border border-border/40 bg-surface p-6 shadow-sm flex flex-col gap-3">
       <div>
-        <div className="mono-label text-on-surface-variant uppercase">Tətbiqdaxili bildiriş</div>
+        <div className="text-[12px] font-bold uppercase tracking-[0.1em] text-navy">Tətbiqdaxili bildiriş</div>
         {lastResult ? (
-          <div className="mt-1 text-label-sm text-on-surface-variant">
+          <div className="mt-1 text-[13px] text-on-surface-variant">
             Göndərildi: {lastResult.sent} · Uğursuz: {lastResult.failed}
           </div>
         ) : (
-          <div className="mt-1 text-label-sm text-on-surface-variant">Bütün istifadəçilərə bildiriş göndər</div>
+          <div className="mt-1 text-[13px] text-on-surface-variant">Bütün istifadəçilərə bildiriş göndər</div>
         )}
       </div>
 
@@ -53,10 +53,10 @@ export default function SendBroadcastNotificationControl() {
         disabled={pending}
       />
       <div className="flex items-center justify-between gap-4">
-        <span className="text-label-sm text-on-surface-variant">
+        <span className="text-[12px] text-on-surface-variant">
           {trimmed.length} / {MAX_MESSAGE_LENGTH}
         </span>
-        <Button variant="outline" size="sm" isDisabled={disabled} isPending={pending} onPress={handleSend}>
+        <Button variant="outline" size="sm" isDisabled={disabled} isPending={pending} onPress={handleSend} className="rounded-full">
           {({ isPending }) => (
             <>
               {isPending ? <Spinner size="sm" tone="current" /> : null}

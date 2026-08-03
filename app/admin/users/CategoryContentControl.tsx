@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Accordion, Chip, Button, TextField, Input, Skeleton } from '@heroui/react';
+import { Accordion, Button, TextField, Input, Skeleton } from '@heroui/react';
 import { Spinner } from '@/components/Spinner';
 
 type Source = 'table' | 'default';
@@ -144,9 +144,9 @@ export default function CategoryContentControl() {
   const anyOverride = categories?.some((c) => FIELDS.some((f) => c[f.field].source === 'table'));
 
   return (
-    <div className="glass-card rounded-2xl p-4 lg:col-span-2">
+    <div className="rounded-3xl border border-border/40 bg-surface p-6 shadow-sm lg:col-span-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="mono-label text-on-surface-variant uppercase">
+        <div className="text-[12px] font-bold uppercase tracking-[0.1em] text-navy">
           Ana səhifə kateqoriya mətnləri
         </div>
         {anyOverride && (
@@ -156,6 +156,7 @@ export default function CategoryContentControl() {
             isPending={resetPending}
             isDisabled={pendingTitle !== null}
             onPress={() => void handleResetAll()}
+            className="rounded-full"
           >
             {({ isPending }) => (
               <>
@@ -166,11 +167,11 @@ export default function CategoryContentControl() {
           </Button>
         )}
       </div>
-      <p className="mt-0.5 text-label-sm text-on-surface-variant">
+      <p className="mt-0.5 text-[13px] text-on-surface-variant">
         Kateqoriya kartlarının təsviri, istinadı və karta kliklədikdə chat-ə yazılan sual. Sahəni
         boşaldıb yadda saxlamaq onu standarta qaytarır.
       </p>
-      {errors._global && <span className="mono-label text-danger">{errors._global}</span>}
+      {errors._global && <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-danger">{errors._global}</span>}
 
       {loading ? (
         <div className="mt-4 space-y-3">
@@ -190,15 +191,14 @@ export default function CategoryContentControl() {
                 <Accordion.Heading>
                   <Accordion.Trigger>
                     <span className="flex min-w-0 flex-1 items-center gap-2 text-left">
-                      <span className="truncate font-medium text-on-surface">{category.title}</span>
-                      <Chip
-                        size="sm"
-                        variant="soft"
-                        color={overriddenCount > 0 ? 'accent' : 'default'}
-                        className="mono-label shrink-0"
+                      <span className="min-w-0 truncate font-semibold text-navy">{category.title}</span>
+                      <span
+                        className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.08em] ${
+                          overriddenCount > 0 ? 'bg-primary/10 text-primary' : 'bg-surface-tertiary text-navy'
+                        }`}
                       >
                         {overriddenCount > 0 ? `${overriddenCount} sahə admin təyin edib` : 'standart'}
-                      </Chip>
+                      </span>
                     </span>
                     <Accordion.Indicator />
                   </Accordion.Trigger>
@@ -210,16 +210,17 @@ export default function CategoryContentControl() {
                         const setting = category[field];
                         return (
                           <div key={field} className="flex flex-col gap-1">
-                            <div className="flex items-center gap-2">
-                              <span className="text-label-sm text-on-surface-variant">{label}</span>
-                              <Chip
-                                size="sm"
-                                variant="soft"
-                                color={setting.source === 'table' ? 'accent' : 'default'}
-                                className="mono-label"
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant">
+                                {label}
+                              </span>
+                              <span
+                                className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.08em] ${
+                                  setting.source === 'table' ? 'bg-primary/10 text-primary' : 'bg-surface-tertiary text-navy'
+                                }`}
                               >
                                 {setting.source === 'table' ? 'admin təyin edib' : 'standart'}
-                              </Chip>
+                              </span>
                             </div>
                             <TextField
                               value={inputs[category.title]?.[field] ?? ''}
@@ -245,6 +246,7 @@ export default function CategoryContentControl() {
                           isPending={isPending}
                           isDisabled={(pendingTitle !== null && !isPending) || resetPending}
                           onPress={() => handleSave(category)}
+                          className="rounded-full"
                         >
                           {({ isPending: p }) => (
                             <>
@@ -268,11 +270,12 @@ export default function CategoryContentControl() {
                                 )
                               )
                             }
+                            className="rounded-full"
                           >
                             Standarta qaytar
                           </Button>
                         )}
-                        {error && <span className="mono-label text-danger">{error}</span>}
+                        {error && <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-danger">{error}</span>}
                       </div>
                     </div>
                   </Accordion.Body>

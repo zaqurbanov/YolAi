@@ -359,7 +359,7 @@ export default function CourseTopicsPanel({
       <div className="glass-card rounded-2xl p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="text-lg font-semibold">{course.title}</h2>
+            <h2 className="text-[20px] font-semibold leading-tight text-navy">{course.title}</h2>
             <p className="mt-1 text-label-sm text-on-surface-variant">
               Mənbə: {course.documentTitle ?? 'tapılmadı'} · {course.publishedTopicCount}/
               {course.topicCount} mövzu dərc edilib
@@ -368,7 +368,7 @@ export default function CourseTopicsPanel({
 
           <div className="flex flex-wrap items-center gap-2">
             {canPublishCourse && (
-              <Button variant="primary" size="sm" isDisabled={running} onPress={onPublishCourse}>
+              <Button variant="primary" size="sm" className="rounded-full" isDisabled={running} onPress={onPublishCourse}>
                 Kursu dərc et
               </Button>
             )}
@@ -394,7 +394,7 @@ export default function CourseTopicsPanel({
       <div className="glass-card rounded-2xl p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="mono-label text-on-surface-variant uppercase">Enerji qiyməti</div>
+            <div className="text-[12px] font-bold uppercase tracking-[0.1em] text-navy">Enerji qiyməti</div>
             <div className="mt-2 flex items-center gap-2">
               {course.isFree ? (
                 <Chip size="sm" variant="soft" color="success" className="mono-label">
@@ -416,6 +416,7 @@ export default function CourseTopicsPanel({
             <Button
               variant="outline"
               size="sm"
+              className="rounded-full"
               isDisabled={running}
               onPress={() => {
                 setPriceIsFree(course.isFree);
@@ -494,7 +495,7 @@ export default function CourseTopicsPanel({
         <div className="glass-card rounded-2xl p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div className="mono-label text-on-surface-variant uppercase">
+              <div className="text-[12px] font-bold uppercase tracking-[0.1em] text-navy">
                 Mövzular ({topics.length})
               </div>
               {running && (
@@ -508,7 +509,7 @@ export default function CourseTopicsPanel({
             <div className="flex flex-wrap items-center gap-2">
               {topics.length === 0 && !proposing && (
                 <>
-                  <Button variant="primary" size="sm" onPress={() => void handlePropose('ai')}>
+                  <Button variant="primary" size="sm" className="rounded-full" onPress={() => void handlePropose('ai')}>
                     Mövzuları təklif et (AI)
                   </Button>
                   {/* Escape hatch: the mechanical split is instant and is also
@@ -517,6 +518,7 @@ export default function CourseTopicsPanel({
                   <Button
                     variant="outline"
                     size="sm"
+                    className="rounded-full"
                     onPress={() => void handlePropose('deterministic')}
                   >
                     Mexaniki bölgü
@@ -528,6 +530,7 @@ export default function CourseTopicsPanel({
                 <Button
                   variant="primary"
                   size="sm"
+                  className="rounded-full"
                   onPress={() => void runGeneration(pendingTargets)}
                 >
                   {pendingTargets.length} mövzu üçün material + suallar yarat
@@ -535,7 +538,7 @@ export default function CourseTopicsPanel({
               )}
 
               {failedTargets.length > 0 && !running && (
-                <Button variant="outline" size="sm" onPress={() => void runGeneration(failedTargets)}>
+                <Button variant="outline" size="sm" className="rounded-full" onPress={() => void runGeneration(failedTargets)}>
                   {failedTargets.length} uğursuzu təkrarla
                 </Button>
               )}
@@ -544,6 +547,7 @@ export default function CourseTopicsPanel({
                 <Button
                   variant="outline"
                   size="sm"
+                  className="rounded-full"
                   onPress={() => {
                     abortRef.current = true;
                   }}

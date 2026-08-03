@@ -218,7 +218,7 @@ export default function BusyPhrasesManager() {
         return (
           <Card key={stage} className="glass-card">
             <Card.Header>
-              <Card.Title>{label}</Card.Title>
+              <Card.Title className="text-[18px] font-semibold text-navy">{label}</Card.Title>
             </Card.Header>
             <Card.Content className="flex flex-col gap-3">
               {items.length === 0 ? (
@@ -227,7 +227,7 @@ export default function BusyPhrasesManager() {
                 items.map((p, index) => {
                   const dirty = editValues[p.id] !== undefined && editValues[p.id] !== p.phrase;
                   return (
-                    <div key={p.id} className="flex items-center gap-2">
+                    <div key={p.id} className="flex flex-wrap items-center gap-2">
                       <div className="flex flex-col gap-0.5">
                         <button
                           type="button"
@@ -291,6 +291,7 @@ export default function BusyPhrasesManager() {
                 <Button
                   variant="primary"
                   size="sm"
+                  className="rounded-full"
                   isDisabled={!newPhraseByStage[stage].trim()}
                   isPending={addingStage === stage}
                   onPress={() => void handleAddPhrase(stage)}

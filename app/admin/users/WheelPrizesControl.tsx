@@ -89,14 +89,14 @@ export default function WheelPrizesControl() {
   }
 
   return (
-    <div className="glass-card rounded-2xl p-4 lg:col-span-2">
+    <div className="rounded-3xl border border-border/40 bg-surface p-6 shadow-sm lg:col-span-2">
       <div className="flex items-center justify-between">
-        <div className="mono-label text-on-surface-variant uppercase">Çarx — slotlar</div>
-        <span className={`mono-label ${sumOk ? 'text-go-green' : 'text-danger'}`}>
+        <div className="text-[12px] font-bold uppercase tracking-[0.1em] text-navy">Çarx — slotlar</div>
+        <span className={`text-[11px] font-bold uppercase tracking-[0.08em] ${sumOk ? 'text-go-green' : 'text-danger'}`}>
           Cəmi: {loading ? '—' : `${Math.round(weightSum * 100) / 100}%`}
         </span>
       </div>
-      <p className="mt-1 text-label-sm text-on-surface-variant">
+      <p className="mt-1 text-[13px] text-on-surface-variant">
         10 slot — hər birinin öz ENERJİ dəyəri və qazanma faizi (çarx 0094-dən sonra coin yox, enerji verir). Faizlərin cəmi dəqiq 100% olmalıdır.
       </p>
 
@@ -109,8 +109,8 @@ export default function WheelPrizesControl() {
       ) : (
         <div className="mt-3 space-y-2">
           {rows.map((row, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <span className="mono-label w-6 shrink-0 text-on-surface-variant">#{i + 1}</span>
+            <div key={i} className="flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-bold uppercase tracking-[0.08em] w-6 shrink-0 text-on-surface-variant">#{i + 1}</span>
               <TextField
                 type="number"
                 value={row.value}
@@ -120,7 +120,7 @@ export default function WheelPrizesControl() {
               >
                 <Input min={0.01} step={0.01} />
               </TextField>
-              <span className="text-label-sm text-on-surface-variant">enerji</span>
+              <span className="text-[12px] text-on-surface-variant">enerji</span>
               <TextField
                 type="number"
                 value={row.weight}
@@ -130,11 +130,11 @@ export default function WheelPrizesControl() {
               >
                 <Input min={0.01} max={100} step={0.01} />
               </TextField>
-              <span className="text-label-sm text-on-surface-variant">%</span>
+              <span className="text-[12px] text-on-surface-variant">%</span>
             </div>
           ))}
 
-          {error && <p className="mono-label text-danger">{error}</p>}
+          {error && <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-danger">{error}</p>}
 
           <Button
             variant="outline"
@@ -142,7 +142,7 @@ export default function WheelPrizesControl() {
             isPending={pending}
             isDisabled={!sumOk}
             onPress={() => void handleSave()}
-            className="mt-2"
+            className="mt-2 rounded-full"
           >
             {({ isPending: p }) => (
               <>

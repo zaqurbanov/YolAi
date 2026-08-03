@@ -13,7 +13,10 @@ export default async function QuizSection() {
 
   return (
     <div className="pt-6 space-y-8">
-      <h1 className="text-2xl font-semibold">Test sualları</h1>
+      <div className="space-y-1">
+        <span className="text-[12px] font-bold uppercase tracking-[0.1em] text-primary">Test bankı</span>
+        <h1 className="text-[28px] font-semibold leading-tight text-navy">Test sualları</h1>
+      </div>
 
       {/* Manual authoring first: since 0092 this is the only path into the
           Rəsmi İmtahan pool, while the PDF extractor below feeds lesson
@@ -24,7 +27,7 @@ export default async function QuizSection() {
 
       <div>
         <div className="mb-3 flex items-center gap-2">
-          <h2 className="text-lg font-semibold">Baxılmamış layihələr</h2>
+          <h2 className="text-[18px] font-semibold text-navy">Baxılmamış layihələr</h2>
           {drafts.length > 0 && (
             <span className="text-legal-citation rounded-full bg-caution-orange/15 px-2.5 py-1 text-caution-orange">
               {drafts.length} nəzərdən keçirilməlidir
@@ -45,7 +48,7 @@ export default async function QuizSection() {
       </div>
 
       <details className="group">
-        <summary className="cursor-pointer text-lg font-semibold text-on-surface-variant marker:content-none">
+        <summary className="cursor-pointer text-[18px] font-semibold text-navy marker:content-none">
           <span className="inline-flex items-center gap-2">
             Dərc edilmiş suallar
             <span className="text-legal-citation rounded-full bg-go-green/15 px-2.5 py-1 text-go-green">

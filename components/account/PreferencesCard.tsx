@@ -21,8 +21,8 @@ function DarkModeRow() {
     >
       <Switch.Content className="flex w-full items-center justify-between py-3">
         <span className="flex flex-col text-left">
-          <span className="text-body-md font-semibold text-on-surface">Tünd Rejim</span>
-          <span className="text-label-sm text-on-surface-variant">
+          <span className="text-[16px] font-semibold text-on-surface">Tünd Rejim</span>
+          <span className="text-[13px] text-on-surface-variant">
             Göz yorğunluğunu azaldın
           </span>
         </span>
@@ -45,8 +45,8 @@ function NotificationsRow() {
     <Switch isSelected={enabled} onChange={setEnabled} aria-label="Bildirişlər">
       <Switch.Content className="flex w-full items-center justify-between py-3">
         <span className="flex flex-col text-left">
-          <span className="text-body-md font-semibold text-on-surface">Bildirişlər</span>
-          <span className="text-label-sm text-on-surface-variant">Yeni qaydalar haqqında xəbərlər</span>
+          <span className="text-[16px] font-semibold text-on-surface">Bildirişlər</span>
+          <span className="text-[13px] text-on-surface-variant">Yeni qaydalar haqqında xəbərlər</span>
         </span>
         <Switch.Control>
           <Switch.Thumb />
@@ -64,12 +64,12 @@ function LanguageRow() {
   return (
     <div className="flex items-center justify-between py-3">
       <div className="flex flex-col">
-        <span className="text-body-md font-semibold text-on-surface">Dil (Language)</span>
-        <span className="text-label-sm text-on-surface-variant">Interfeys dili seçimi</span>
+        <span className="text-[16px] font-semibold text-on-surface">Dil (Language)</span>
+        <span className="text-[13px] text-on-surface-variant">Interfeys dili seçimi</span>
       </div>
       <select
         disabled
-        className="rounded-lg border border-outline-variant/40 bg-surface-secondary px-3 py-1.5 text-label-sm text-on-surface-variant outline-none disabled:cursor-not-allowed"
+        className="rounded-lg border border-outline-variant/40 bg-surface-secondary px-3 py-1.5 text-[13px] text-on-surface-variant outline-none disabled:cursor-not-allowed"
         defaultValue="az"
       >
         <option value="az">Azərbaycan dili</option>
@@ -85,7 +85,7 @@ export default function PreferencesCard() {
         <div className="flex size-10 items-center justify-center rounded-xl bg-safety-yellow/15 text-safety-yellow">
           <SettingsIcon />
         </div>
-        <h2 className="text-headline-md text-[18px]">Tərcihlər</h2>
+        <h2 className="text-[18px] font-semibold leading-tight text-on-surface">Tərcihlər</h2>
       </div>
       <div className="divide-y divide-outline-variant/20">
         <DarkModeRow />

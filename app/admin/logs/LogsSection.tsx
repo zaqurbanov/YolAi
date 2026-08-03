@@ -128,7 +128,10 @@ export default async function LogsSection({ contextFilter }: LogsSectionProps) {
     <div className="mx-auto p-6 space-y-8">
       <div>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h1 className="text-2xl font-semibold">Xətalar</h1>
+          <div className="space-y-1">
+            <span className="text-[12px] font-bold uppercase tracking-[0.1em] text-primary">Texniki loqlar</span>
+            <h1 className="text-[28px] font-semibold leading-tight text-navy">Xətalar</h1>
+          </div>
           <div className="flex items-center gap-3">
             {!errorLogsError && distinctContexts.length > 0 && (
               <ContextFilter contexts={distinctContexts} current={contextFilter} />
@@ -198,7 +201,7 @@ export default async function LogsSection({ contextFilter }: LogsSectionProps) {
       </div>
 
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Sorğu latensiyası</h1>
+        <h1 className="text-[22px] font-semibold leading-tight text-navy">Sorğu latensiyası</h1>
         <span className="mono-label text-on-surface-variant">Son {rows.length} sorğu</span>
       </div>
 
@@ -211,9 +214,9 @@ export default async function LogsSection({ contextFilter }: LogsSectionProps) {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((s) => (
           <div key={s.key} className="glass-card rounded-2xl p-4">
-            <div className="mono-label text-on-surface-variant uppercase">{s.label}</div>
+            <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant">{s.label}</div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-semibold text-on-surface">{formatMs(s.avg)}</span>
+              <span className="editorial-display text-[24px] font-bold leading-none tabular-nums text-navy">{formatMs(s.avg)}</span>
               <span className="mono-label text-on-surface-variant">orta</span>
             </div>
             <div className="mt-1 mono-label text-on-surface-variant">p95: {formatMs(s.p95)}</div>
@@ -222,7 +225,7 @@ export default async function LogsSection({ contextFilter }: LogsSectionProps) {
       </div>
 
       <div className="glass-card rounded-2xl p-6">
-        <h2 className="text-lg font-semibold mb-4">Orta mərhələ vaxtları</h2>
+        <h2 className="text-[18px] font-semibold text-navy mb-4">Orta mərhələ vaxtları</h2>
         <div className="space-y-3">
           {stats.map((s) => {
             const widthPct = s.avg ? Math.max(2, (s.avg / maxAvg) * 100) : 0;
@@ -245,7 +248,7 @@ export default async function LogsSection({ contextFilter }: LogsSectionProps) {
       </div>
 
       <div>
-        <h2 className="text-lg font-semibold mb-3">Son sorğular</h2>
+        <h2 className="text-[18px] font-semibold text-navy mb-3">Son sorğular</h2>
         <div className="glass-panel rounded-2xl overflow-hidden overflow-x-auto">
           {rows.length === 0 ? (
             <div className="py-16 text-center text-sm text-on-surface-variant">Hələ qeyd yoxdur</div>

@@ -322,7 +322,7 @@ export default function QuestionEditor({ question, accent }: QuestionEditorProps
           )}
         </Button>
         {accent === 'draft' && (
-          <Button variant="primary" onPress={handlePublish} isPending={isPublishing}>
+          <Button variant="primary" onPress={handlePublish} className="rounded-full glow-primary" isPending={isPublishing}>
             {({ isPending }) => (
               <>
                 {isPending ? <Spinner size="sm" tone="current" /> : null}

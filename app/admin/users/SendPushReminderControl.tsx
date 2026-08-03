@@ -22,19 +22,19 @@ export default function SendPushReminderControl() {
   }
 
   return (
-    <div className="glass-card rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center gap-4 sm:justify-between">
+    <div className="rounded-3xl border border-border/40 bg-surface p-6 shadow-sm flex flex-col sm:flex-row sm:items-center gap-4 sm:justify-between">
       <div>
-        <div className="mono-label text-on-surface-variant uppercase">Push xatırlatma</div>
+        <div className="text-[12px] font-bold uppercase tracking-[0.1em] text-navy">Push xatırlatma</div>
         {lastResult ? (
-          <div className="mt-1 text-label-sm text-on-surface-variant">
+          <div className="mt-1 text-[13px] text-on-surface-variant">
             Göndərildi: {lastResult.sent} · Təmizləndi: {lastResult.cleaned} · Uğursuz: {lastResult.failed}
           </div>
         ) : (
-          <div className="mt-1 text-label-sm text-on-surface-variant">Bütün abunəçilərə push bildirişi göndər</div>
+          <div className="mt-1 text-[13px] text-on-surface-variant">Bütün abunəçilərə push bildirişi göndər</div>
         )}
       </div>
 
-      <Button variant="outline" size="sm" isPending={pending} onPress={handleSend}>
+      <Button variant="outline" size="sm" isPending={pending} onPress={handleSend} className="rounded-full">
         {({ isPending }) => (
           <>
             {isPending ? <Spinner size="sm" tone="current" /> : null}

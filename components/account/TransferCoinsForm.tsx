@@ -21,7 +21,7 @@ export default function TransferCoinsForm({ minAmount }: TransferCoinsFormProps)
         <div className="flex size-10 items-center justify-center rounded-xl bg-safety-yellow/15 text-safety-yellow">
           <CoinIcon />
         </div>
-        <h2 className="text-headline-md text-[18px]">Coin göndər</h2>
+        <h2 className="text-[18px] font-semibold leading-tight text-on-surface">Coin göndər</h2>
       </div>
 
       <form action={formAction} className="space-y-4" key={state.success}>

@@ -24,7 +24,7 @@ export default function ContextFilter({ contexts, current }: ContextFilterProps)
         const value = e.target.value;
         router.push(value ? `${pathname}?context=${encodeURIComponent(value)}` : pathname);
       }}
-      className="mono-label rounded-lg border border-outline-variant/40 bg-surface-container px-2.5 py-1.5 text-on-surface outline-none"
+      className="rounded-full border border-border/40 bg-surface px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-navy outline-none focus:border-primary/60"
       aria-label="Yer üzrə filtr"
     >
       <option value="">Bütün yerlər</option>

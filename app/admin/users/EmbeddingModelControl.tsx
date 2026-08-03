@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useTransition } from 'react';
-import { Chip, Button, Skeleton } from '@heroui/react';
+import { Button, Skeleton } from '@heroui/react';
 import { Spinner } from '@/components/Spinner';
 import { getEmbeddingStatus, setActiveEmbeddingModel, type EmbeddingStatus } from './embeddingActions';
 
@@ -48,23 +48,31 @@ export default function EmbeddingModelControl() {
   const geminiReady = status?.geminiReady ?? false;
 
   return (
-    <div className="glass-card rounded-2xl p-4 flex flex-col sm:flex-row sm:items-start gap-4 sm:justify-between">
+    <div className="rounded-3xl border border-border/40 bg-surface p-6 shadow-sm flex flex-col sm:flex-row sm:items-start gap-4 sm:justify-between">
       <div>
-        <div className="mono-label text-on-surface-variant uppercase">Embedding modeli (qlobal)</div>
+        <div className="text-[12px] font-bold uppercase tracking-[0.1em] text-navy">Embedding modeli (qlobal)</div>
         {loading ? (
           <Skeleton className="h-6 w-32 mt-2 rounded-full" />
         ) : (
           <>
             <div className="mt-1 flex items-center gap-2">
-              <span className="text-xl font-semibold text-on-surface">{MODEL_LABELS[activeModel]}</span>
-              <Chip size="sm" variant="soft" color={activeModel === 'gemini' ? 'accent' : 'default'} className="mono-label">
+              <span className="editorial-display text-xl font-bold leading-none tabular-nums text-primary">{MODEL_LABELS[activeModel]}</span>
+              <span
+                className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.08em] ${
+                  activeModel === 'gemini' ? 'bg-primary/10 text-primary' : 'bg-surface-tertiary text-navy'
+                }`}
+              >
                 {activeModel === 'gemini' ? 'admin təyin edib' : 'standart'}
-              </Chip>
+              </span>
             </div>
-            <div className="mt-1 mono-label text-on-surface-variant">
+            <div className="mt-1 text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant">
               Gemini əhatəsi: {status?.geminiChunks ?? 0} / {status?.totalChunks ?? 0} chunk
             </div>
-            {status?.error && <div className="mt-1 mono-label text-on-surface-variant">{status.error}</div>}
+            {status?.error && (
+              <div className="mt-1 text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant">
+                {status.error}
+              </div>
+            )}
           </>
         )}
       </div>
@@ -77,6 +85,7 @@ export default function EmbeddingModelControl() {
               size="sm"
               isPending={pending}
               onPress={() => handleSelect('local')}
+              className={activeModel === 'local' ? 'glow-primary rounded-full' : 'rounded-full'}
             >
               {({ isPending }) => (
                 <>
@@ -91,6 +100,7 @@ export default function EmbeddingModelControl() {
               isPending={pending}
               isDisabled={!geminiReady}
               onPress={() => handleSelect('gemini')}
+              className={activeModel === 'gemini' ? 'glow-primary rounded-full' : 'rounded-full'}
             >
               {({ isPending }) => (
                 <>
@@ -101,12 +111,16 @@ export default function EmbeddingModelControl() {
             </Button>
           </div>
           {!geminiReady && (
-            <span className="mono-label text-on-surface-variant sm:text-right max-w-xs">
+            <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant sm:text-right max-w-xs">
               Gemini hələ hazır deyil — bütün chunk-lar üçün Gemini embedding-ləri yoxdur. Əvvəlcə backfill skriptini tam
               işə salın.
             </span>
           )}
-          {actionError && <span className="mono-label text-danger sm:text-right max-w-xs">{actionError}</span>}
+          {actionError && (
+            <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-danger sm:text-right max-w-xs">
+              {actionError}
+            </span>
+          )}
         </div>
       )}
     </div>

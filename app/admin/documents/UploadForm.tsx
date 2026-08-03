@@ -309,7 +309,10 @@ export default function UploadForm() {
 
   return (
     <div className="pt-6 space-y-8">
-      <h1 className="text-2xl font-semibold">Sənəd yüklə</h1>
+      <div className="space-y-1">
+        <span className="text-[12px] font-bold uppercase tracking-[0.1em] text-primary">Sənəd bazası</span>
+        <h1 className="text-[28px] font-semibold leading-tight text-navy">Sənəd yüklə</h1>
+      </div>
 
       <Card className="glass-card">
         <form onSubmit={handleUpload}>
@@ -332,7 +335,7 @@ export default function UploadForm() {
                     setTitle(filenameToTitle(selected.name));
                   }
                 }}
-                className="w-full border rounded-md px-3 py-2 text-sm"
+                className="w-full rounded-xl border border-border/40 bg-surface px-3 py-2 text-sm text-navy"
                 required
               />
             </TextField>
@@ -346,7 +349,7 @@ export default function UploadForm() {
             )}
           </Card.Content>
           <Card.Footer>
-            <Button type="submit" variant="primary" className="glow-primary" isPending={uploading}>
+            <Button type="submit" variant="primary" className="glow-primary rounded-full" isPending={uploading}>
               {({ isPending }) => (
                 <>
                   {isPending ? <Spinner size="sm" tone="current" /> : null}
@@ -359,7 +362,7 @@ export default function UploadForm() {
       </Card>
 
       <div>
-        <h2 className="text-lg font-semibold mb-3">Sənədlər</h2>
+        <h2 className="text-[18px] font-semibold text-navy mb-3">Sənədlər</h2>
 
         {/* Always rendered (not conditional) so this row's height is permanently
             reserved — toggling it in/out of the DOM on selection shifted the table

@@ -8,7 +8,10 @@ export default async function BusyPhrasesSection() {
 
   return (
     <div className="pt-6 space-y-6">
-      <h1 className="text-2xl font-semibold">Status cümlələri</h1>
+      <div className="space-y-1">
+        <span className="text-[12px] font-bold uppercase tracking-[0.1em] text-primary">Status mesajları</span>
+        <h1 className="text-[28px] font-semibold leading-tight text-navy">Status cümlələri</h1>
+      </div>
       <BusyPhrasesManager />
     </div>
   );

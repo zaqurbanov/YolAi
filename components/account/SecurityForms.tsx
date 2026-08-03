@@ -41,7 +41,7 @@ export default function SecurityForms() {
         <div className="flex size-10 items-center justify-center rounded-xl bg-regulatory-blue/15 text-regulatory-blue">
           <ShieldIcon />
         </div>
-        <h2 className="text-headline-md text-[18px]">Təhlükəsizlik</h2>
+        <h2 className="text-[18px] font-semibold leading-tight text-on-surface">Təhlükəsizlik</h2>
       </div>
 
       <form action={passwordAction} className="space-y-4">

@@ -57,7 +57,8 @@ export default async function StatsSection() {
   return (
     <div className="pt-6 space-y-8">
       <div className="space-y-1">
-        <h1 className="text-headline-md text-on-surface">Statistika</h1>
+        <span className="text-[12px] font-bold uppercase tracking-[0.1em] text-primary">İzləmə</span>
+        <h1 className="text-[28px] font-semibold leading-tight text-navy">Statistika</h1>
         <p className="text-body-md text-on-surface-variant">
           Yol AI sisteminin cari fəaliyyət göstəricilərinin icmalı.
         </p>
@@ -80,7 +81,7 @@ export default async function StatsSection() {
                 <div className="space-y-2">
                   <span className="text-legal-citation text-on-surface-variant">{c.label}</span>
                   <div className="flex items-center gap-2">
-                    <span className="text-headline-md text-[32px] text-on-surface">{c.value}</span>
+                    <span className="editorial-display text-[32px] font-bold leading-none tabular-nums text-navy">{c.value}</span>
                   </div>
                 </div>
                 {c.sub && (
@@ -95,7 +96,7 @@ export default async function StatsSection() {
       </div>
 
       <div className="glass-card rounded-2xl p-6">
-        <h2 className="text-headline-md text-[18px] text-on-surface mb-1">Sənəd statusları</h2>
+        <h2 className="text-[18px] font-semibold text-navy mb-1">Sənəd statusları</h2>
         <p className="text-body-md text-on-surface-variant mb-6">
           Yüklənmiş sənədlərin emal statusu üzrə paylanması ({documentsTotal} sənəd).
         </p>

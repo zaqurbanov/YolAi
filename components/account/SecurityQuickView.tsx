@@ -20,15 +20,15 @@ export default function SecurityQuickView({ lastSignInAt }: SecurityQuickViewPro
             <ShieldIcon />
           </div>
           <div>
-            <h3 className="text-body-md font-bold text-on-surface">Təhlükəsizlik</h3>
-            <p className="text-label-sm text-on-surface-variant">
+            <h3 className="text-[16px] font-bold text-on-surface">Təhlükəsizlik</h3>
+            <p className="text-[13px] text-on-surface-variant">
               Son giriş: {lastSignInAt ? formatAzDateTime(lastSignInAt) : '—'}
             </p>
           </div>
         </div>
         <a
           href="#security"
-          className="shrink-0 rounded-lg px-4 py-2 text-label-sm font-bold text-error transition-colors hover:bg-error/10"
+          className="shrink-0 rounded-lg px-4 py-2 text-[13px] font-bold text-error transition-colors hover:bg-error/10"
         >
           Yoxla
         </a>
