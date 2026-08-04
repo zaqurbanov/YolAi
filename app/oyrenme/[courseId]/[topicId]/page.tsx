@@ -8,8 +8,10 @@ import LessonMarkdown from '@/components/LessonMarkdown';
 import { ArrowLeftIcon, ArrowRightIcon, DocumentIcon } from '@/components/icons';
 import { getTopicForReading } from '@/lib/quiz/topicTest';
 import { getEnergyStatus } from '@/lib/coins/games';
+import { extractSignImageCodes, getSignImageUrls } from '@/lib/lessons/signImages';
 import DesignSwitch from '@/components/design3d/DesignSwitch';
 import TopicPage3D from '@/components/design3d/TopicPage3D';
+import HideDuringTest, { TopicTestFocusProvider } from '@/components/oyrenme/TopicTestFocus';
 import { getServerDesign } from '@/lib/design/getServerDesign';
 import TopicTest from './TopicTest';
 
@@ -61,13 +63,20 @@ export default async function TopicPage({
     .then((s) => s.balance)
     .catch(() => null);
 
+  // Road-sign images for the lesson: the content embeds `![nisan:1.20]`
+  // markers, resolved here to public sign_images URLs (the same artwork the
+  // sign games use). A marker for a code with no image just renders its
+  // fallback caption — a bad marker can never break the page.
+  const signImageCodes = extractSignImageCodes(topic.content ?? '');
+  const signImages = await getSignImageUrls(topic.documentId, signImageCodes);
+
   // Shared between both trees — same ReactNode-prop pattern as
   // CoinQazanPage3D's cards. TopicTest owns all its own client state/server
   // actions either way; only the surrounding chrome the 3D tree adds differs.
   const article = (
     <>
       {topic.content ? (
-        <LessonMarkdown content={topic.content} />
+        <LessonMarkdown content={topic.content} images={signImages} />
       ) : (
         <p className="text-body-md text-on-surface-variant">Bu mövzunun mətni hələ hazır deyil.</p>
       )}
@@ -107,97 +116,109 @@ export default async function TopicPage({
     />
   );
 
+  // The focus provider has to sit ABOVE both trees: TopicTest sets the flag,
+  // and the article card plus the prev/next nav — its siblings in each tree —
+  // read it. See components/oyrenme/TopicTestFocus.tsx.
   return (
-    <DesignSwitch
-      design={design}
-      simple={
-        <div id="top" className="editorial flex flex-1 flex-col pb-24 md:pb-0">
-          <section className="relative overflow-hidden px-4 pt-6 pb-6 md:px-6 md:pt-10">
-            <div className="absolute inset-0 z-0 bg-gradient-to-b from-primary/10 via-transparent to-transparent" />
-            <div className="relative z-10 mx-auto flex max-w-5xl flex-col gap-4">
-              <nav className="flex flex-wrap items-center gap-1.5 text-label-sm text-on-surface-variant">
-                <Link href="/oyrenme" className="transition-colors hover:text-primary">
-                  Kurslar
-                </Link>
-                <span aria-hidden>/</span>
-                <Link
-                  href={`/oyrenme/${topic.courseId}`}
-                  className="inline-flex items-center gap-1.5 transition-colors hover:text-primary"
-                >
-                  <ArrowLeftIcon width={14} height={14} />
-                  {topic.courseTitle || 'Kurs'}
-                </Link>
-              </nav>
+    <TopicTestFocusProvider>
+      <DesignSwitch
+        design={design}
+        simple={
+          <div id="top" className="editorial flex flex-1 flex-col pb-24 md:pb-0">
+            <section className="relative overflow-hidden px-4 pt-6 pb-6 md:px-6 md:pt-10">
+              <div className="absolute inset-0 z-0 bg-gradient-to-b from-primary/10 via-transparent to-transparent" />
+              <div className="relative z-10 mx-auto flex max-w-5xl flex-col gap-4">
+                <nav className="flex flex-wrap items-center gap-1.5 text-label-sm text-on-surface-variant">
+                  <Link href="/oyrenme" className="transition-colors hover:text-primary">
+                    Kurslar
+                  </Link>
+                  <span aria-hidden>/</span>
+                  <Link
+                    href={`/oyrenme/${topic.courseId}`}
+                    className="inline-flex items-center gap-1.5 transition-colors hover:text-primary"
+                  >
+                    <ArrowLeftIcon width={14} height={14} />
+                    {topic.courseTitle || 'Kurs'}
+                  </Link>
+                </nav>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-legal-citation rounded-full bg-primary/15 px-3 py-1 text-primary">
-                  Mövzu {topic.orderIndex + 1}
-                </span>
-                {topic.passed && (
-                  <Chip size="sm" variant="soft" color="success" className="mono-label">
-                    Keçilib • ən yaxşı {topic.bestScore}
-                  </Chip>
-                )}
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-legal-citation rounded-full bg-primary/15 px-3 py-1 text-primary">
+                    Mövzu {topic.orderIndex + 1}
+                  </span>
+                  {topic.passed && (
+                    <Chip size="sm" variant="soft" color="success" className="mono-label">
+                      Keçilib • ən yaxşı {topic.bestScore}
+                    </Chip>
+                  )}
+                </div>
+
+                <h1 className="text-display-lg text-[30px] text-balance lg:text-[38px]">
+                  {topic.title}
+                </h1>
               </div>
+            </section>
 
-              <h1 className="text-display-lg text-[30px] text-balance lg:text-[38px]">{topic.title}</h1>
-            </div>
-          </section>
+            <section className="px-6 pb-10">
+              <div className="mx-auto flex max-w-5xl flex-col gap-6">
+                {/* Unmounted while an attempt is running — see TopicTestFocus. */}
+                <HideDuringTest>
+                  <article className="glass-card rounded-2xl p-6 lg:p-8">{article}</article>
+                </HideDuringTest>
 
-          <section className="px-6 pb-10">
-            <div className="mx-auto flex max-w-5xl flex-col gap-6">
-              <article className="glass-card rounded-2xl p-6 lg:p-8">{article}</article>
+                {testSection}
 
-              {testSection}
+                <HideDuringTest>
+                  <nav className="flex flex-wrap items-center justify-between gap-3">
+                    {topic.prevTopicId ? (
+                      <Link
+                        href={`/oyrenme/${topic.courseId}/${topic.prevTopicId}`}
+                        className="glass-card inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-label-sm transition-colors hover:text-primary"
+                      >
+                        <ArrowLeftIcon width={16} height={16} />
+                        Əvvəlki mövzu
+                      </Link>
+                    ) : (
+                      <span />
+                    )}
 
-              <nav className="flex flex-wrap items-center justify-between gap-3">
-                {topic.prevTopicId ? (
-                  <Link
-                    href={`/oyrenme/${topic.courseId}/${topic.prevTopicId}`}
-                    className="glass-card inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-label-sm transition-colors hover:text-primary"
-                  >
-                    <ArrowLeftIcon width={16} height={16} />
-                    Əvvəlki mövzu
-                  </Link>
-                ) : (
-                  <span />
-                )}
+                    {/* The next topic is only reachable once THIS one is passed — the
+                        sequential unlock rule is enforced server-side either way, so an
+                        unpassed topic gets no link at all rather than a dead one. */}
+                    {topic.nextTopicId && topic.passed ? (
+                      <Link
+                        href={`/oyrenme/${topic.courseId}/${topic.nextTopicId}`}
+                        className="glass-card inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-label-sm transition-colors hover:text-primary"
+                      >
+                        Növbəti mövzu
+                        <ArrowRightIcon width={16} height={16} />
+                      </Link>
+                    ) : (
+                      <span />
+                    )}
+                  </nav>
+                </HideDuringTest>
+              </div>
+            </section>
 
-                {/* The next topic is only reachable once THIS one is passed — the
-                    sequential unlock rule is enforced server-side either way, so an
-                    unpassed topic gets no link at all rather than a dead one. */}
-                {topic.nextTopicId && topic.passed ? (
-                  <Link
-                    href={`/oyrenme/${topic.courseId}/${topic.nextTopicId}`}
-                    className="glass-card inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-label-sm transition-colors hover:text-primary"
-                  >
-                    Növbəti mövzu
-                    <ArrowRightIcon width={16} height={16} />
-                  </Link>
-                ) : (
-                  <span />
-                )}
-              </nav>
-            </div>
-          </section>
-
-          <Footer />
-        </div>
-      }
-      threeD={
-        <TopicPage3D
-          courseId={topic.courseId}
-          courseTitle={topic.courseTitle}
-          title={topic.title}
-          orderIndex={topic.orderIndex}
-          passed={topic.passed}
-          bestScore={topic.bestScore}
-          article={article}
-          testSection={testSection}
-          prevTopicId={topic.prevTopicId}
-          nextTopicId={topic.nextTopicId}
-        />
-      }
-    />
+            <Footer />
+          </div>
+        }
+        threeD={
+          <TopicPage3D
+            courseId={topic.courseId}
+            courseTitle={topic.courseTitle}
+            title={topic.title}
+            orderIndex={topic.orderIndex}
+            passed={topic.passed}
+            bestScore={topic.bestScore}
+            article={article}
+            testSection={testSection}
+            prevTopicId={topic.prevTopicId}
+            nextTopicId={topic.nextTopicId}
+          />
+        }
+      />
+    </TopicTestFocusProvider>
   );
 }

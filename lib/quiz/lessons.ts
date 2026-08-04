@@ -2,7 +2,11 @@ import 'server-only';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isMissingRelationError } from '@/lib/supabase/missingRelation';
-import { getDefaultCourseUnlockPrice } from '@/lib/coins/lessonUnlock';
+import {
+  canAccessTopicAt,
+  getCourseAccessContext,
+  getDefaultCourseUnlockPrice,
+} from '@/lib/coins/lessonUnlock';
 import { isUserAdmin } from '@/lib/auth/isAdmin';
 import { logError } from '@/lib/logging/logError';
 
@@ -52,6 +56,12 @@ export interface CourseSummary {
   /** Published topics this user has passed. */
   passedTopics: number;
   progressPct: number;
+  /**
+   * Leading topics readable without an unlock (0100). > 0 means the course card
+   * should invite the user IN rather than only offering a purchase — the point
+   * of the preview is that the paywall is met after the sample, not before it.
+   */
+  freeTopicCount: number;
 }
 
 interface CourseRow {
@@ -61,6 +71,7 @@ interface CourseRow {
   order_index: number;
   is_free: boolean;
   unlock_price: number | null;
+  free_topic_count: number | null;
 }
 
 interface TopicIdRow {
@@ -78,7 +89,7 @@ export async function getCourses(userId: string): Promise<CourseSummary[]> {
 
   const { data: courses, error: coursesError } = await supabase
     .from('lesson_courses')
-    .select('id, title, description, order_index, is_free, unlock_price')
+    .select('id, title, description, order_index, is_free, unlock_price, free_topic_count')
     .eq('status', 'published')
     .order('order_index', { ascending: true })
     .returns<CourseRow[]>();
@@ -181,6 +192,12 @@ export async function getCourses(userId: string): Promise<CourseSummary[]> {
       totalTopics,
       passedTopics,
       progressPct: totalTopics > 0 ? Math.round((passedTopics / totalTopics) * 100) : 0,
+      // Null only in a database that has not run 0100 (the column is NOT NULL
+      // there); treated as "no preview", which is the pre-0100 behaviour.
+      freeTopicCount:
+        typeof course.free_topic_count === 'number' && Number.isFinite(course.free_topic_count)
+          ? Math.max(0, Math.floor(course.free_topic_count))
+          : 0,
     };
   });
 }
@@ -203,6 +220,15 @@ export interface TopicSummary {
    * attempt.
    */
   isUnlocked: boolean;
+  /**
+   * THE OTHER lock, and it is a different thing from `isUnlocked`: this topic
+   * sits beyond the course's free window and the user has not bought the
+   * course (0100). `isUnlocked` is earned by passing the previous test;
+   * `requiresUnlock` is cleared by paying. A topic is readable only when
+   * `isUnlocked && !requiresUnlock`, and the UI must say WHICH lock it is —
+   * "keep going" and "buy the course" are not the same message.
+   */
+  requiresUnlock: boolean;
 }
 
 // Ordered topic list for one course. Does NOT return `content` — the reading
@@ -220,16 +246,26 @@ export async function getCourseTopics(courseId: string, userId: string): Promise
   // regardless of the sequential pass rule, so they can read content without
   // passing tests. Resolved BEFORE the topic-list read because it also decides
   // which client that read uses (see below). Fails closed to the normal view.
-  const isAdmin = await isUserAdmin(userId);
+  const [isAdmin, access] = await Promise.all([
+    isUserAdmin(userId),
+    getCourseAccessContext(userId, courseId),
+  ]);
 
   // The topic list (ids/titles, no content) is normally read USER-SCOPED so
-  // lesson_topics' RLS (0060) stays a real second line of defence. But that
-  // policy hides EVERY row of a paid course the caller has not purchased — and
-  // an admin never purchases — so for an admin the list must go through the
-  // service-role client or it comes back empty. Same "THE ONE ADMIN-CLIENT
-  // READ" reasoning as getCourses: ids/titles of published topics leak nothing
-  // beyond the course structure the admin already fully controls.
-  const topicsClient = isAdmin ? createAdminClient() : supabase;
+  // lesson_topics' RLS (0060/0100) stays a real second line of defence. Two
+  // cases need the service-role client instead, because that policy hides every
+  // row the caller cannot read:
+  //   * an ADMIN, who never purchases anything and would otherwise get an empty
+  //     list for every paid course;
+  //   * a user in PREVIEW (0100), who has not unlocked the course. RLS shows
+  //     them only the free window, but the whole point of the preview is to
+  //     display the full syllabus — locked rows included — so they can see what
+  //     the unlock buys. Titles are the marketing copy here.
+  // Either way this select lists ids/titles/order only. `content` is NEVER read
+  // in this function, so no paid body text can leave through it; the body is
+  // fetched in getTopicForReading, which reads USER-SCOPED for non-admins and
+  // is therefore still policed by RLS per topic.
+  const topicsClient = isAdmin || !access.hasFullAccess ? createAdminClient() : supabase;
 
   const [
     { data: topics, error: topicsError },
@@ -280,15 +316,19 @@ export async function getCourseTopics(courseId: string, userId: string): Promise
     const passed = p?.passed ?? false;
     const isUnlocked = isAdmin || previousPassed;
     previousPassed = passed;
+    const orderIndex = topic.order_index as number;
     return {
       id: topic.id as string,
       courseId: topic.course_id as string,
       title: topic.title as string,
-      orderIndex: topic.order_index as number,
+      orderIndex,
       passed,
       bestScore: p?.bestScore ?? 0,
       attempts: p?.attempts ?? 0,
       isUnlocked,
+      // The paywall half of the gate, resolved from the same context the
+      // server-side check uses — never re-derived from is_free here.
+      requiresUnlock: !canAccessTopicAt(access, orderIndex),
     };
   });
 }

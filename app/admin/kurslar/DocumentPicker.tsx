@@ -96,7 +96,7 @@ export default function DocumentPicker({
       <div className="mb-2 text-label-sm text-on-surface-variant">
         Mənbə sənədi ({documents.length})
       </div>
-      <div className="max-h-56 space-y-1.5 overflow-y-auto rounded-xl border border-outline-variant/40 p-2">
+      <div className="max-h-56 space-y-1.5 overflow-y-auto rounded-2xl border border-outline-variant/40 p-2">
         {documents.map((doc) => {
           // A chunkCount of 0 means ingest reported success but persisted no
           // text. Every server action behind this picker refuses such a
@@ -128,7 +128,7 @@ export default function DocumentPicker({
                 size="sm"
                 variant="soft"
                 color={isUnusable ? 'danger' : 'default'}
-                className="mono-label shrink-0"
+                className="shrink-0 text-[11px] font-medium tracking-normal"
               >
                 {isUnusable ? '0 hissə — yararsız' : `${doc.chunkCount} hissə`}
               </Chip>
@@ -138,7 +138,7 @@ export default function DocumentPicker({
       </div>
 
       {unusableCount > 0 && (
-        <p className="mono-label mt-2 text-caution-orange">
+        <p className="text-[11px] leading-4 mt-2 text-caution-orange">
           {unusableCount} sənəd mətn hissəsi olmadan «hazır» görünür və seçilə bilmir — onları
           «Sənədlər» bölməsindən yenidən ingest edin.
         </p>

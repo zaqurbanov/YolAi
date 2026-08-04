@@ -124,9 +124,9 @@ export default function TopicSplitPanel({ topic, onCancel, onSplit }: TopicSplit
   }
 
   return (
-    <div className="mt-3 rounded-xl border border-primary/40 bg-primary/5 p-3">
+    <div className="mt-3 rounded-2xl border border-primary/40 bg-primary/5 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="text-[12px] font-bold uppercase tracking-[0.1em] text-navy">Mövzunu hissələrə böl</div>
+        <div className="text-legal-citation text-navy">Mövzunu hissələrə böl</div>
         <Button variant="ghost" size="sm" isDisabled={splitting} onPress={onCancel}>
           Bağla
         </Button>
@@ -156,7 +156,7 @@ export default function TopicSplitPanel({ topic, onCancel, onSplit }: TopicSplit
                 isDisabled={splitting}
                 onChange={(v) => setPartCount(Array.isArray(v) ? v[0] : v)}
               >
-                <Label className="mono-label">Hissə sayı</Label>
+                <Label className="text-[11px] font-medium tracking-normal">Hissə sayı</Label>
                 <Slider.Output />
                 <Slider.Track>
                   <Slider.Fill />
@@ -164,14 +164,14 @@ export default function TopicSplitPanel({ topic, onCancel, onSplit }: TopicSplit
                 </Slider.Track>
               </Slider>
               {previewing && (
-                <span className="mono-label flex items-center gap-1.5 text-on-surface-variant">
+                <span className="text-[11px] leading-4 flex items-center gap-1.5 text-on-surface-variant">
                   <Spinner size="sm" tone="current" />
                   yenilənir…
                 </span>
               )}
             </div>
           ) : (
-            <p className="mono-label mt-3 text-on-surface-variant">
+            <p className="text-[11px] leading-4 mt-3 text-on-surface-variant">
               Bu mövzu yalnız 2 hissəyə bölünə bilər.
             </p>
           )}
@@ -183,14 +183,14 @@ export default function TopicSplitPanel({ topic, onCancel, onSplit }: TopicSplit
                 className="rounded-lg border border-outline-variant/40 bg-surface/40 p-2.5"
               >
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="mono-label text-on-surface-variant">{part.partIndex + 1}.</span>
+                  <span className="text-[11px] leading-4 text-on-surface-variant">{part.partIndex + 1}.</span>
                   <span className="min-w-0 flex-1 text-sm font-medium text-on-surface">
                     {part.title}
                   </span>
-                  <Chip size="sm" variant="soft" color="default" className="mono-label shrink-0">
+                  <Chip size="sm" variant="soft" color="default" className="shrink-0 text-[11px] font-medium tracking-normal">
                     {part.charCount} simvol
                   </Chip>
-                  <Chip size="sm" variant="soft" color="default" className="mono-label shrink-0">
+                  <Chip size="sm" variant="soft" color="default" className="shrink-0 text-[11px] font-medium tracking-normal">
                     {part.chunkIds.length} parça
                   </Chip>
                 </div>
@@ -199,10 +199,10 @@ export default function TopicSplitPanel({ topic, onCancel, onSplit }: TopicSplit
             ))}
           </div>
 
-          {error && <p className="mono-label mt-3 text-danger">{error}</p>}
+          {error && <p className="text-[11px] leading-4 mt-3 text-danger">{error}</p>}
 
           {confirming ? (
-            <div className="mt-3 rounded-xl border border-danger/40 bg-danger/10 p-3">
+            <div className="mt-3 rounded-2xl border border-danger/40 bg-danger/10 p-3">
               <p className="text-sm font-medium text-danger">
                 Bu əməliyyat geri qaytarıla bilməz.
               </p>
@@ -255,7 +255,7 @@ export default function TopicSplitPanel({ topic, onCancel, onSplit }: TopicSplit
           )}
         </>
       ) : (
-        <p className="mono-label mt-3 text-danger">{error ?? 'Bölgü təklifi alınmadı'}</p>
+        <p className="text-[11px] leading-4 mt-3 text-danger">{error ?? 'Bölgü təklifi alınmadı'}</p>
       )}
     </div>
   );

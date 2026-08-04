@@ -11,7 +11,10 @@ interface CourseTopicRow {
   id: string;
   title: string;
   passed: boolean;
+  /** The sequential rule: the previous topic's test has been passed. */
   isUnlocked: boolean;
+  /** The paywall (0100): beyond the course's free preview window. */
+  requiresUnlock: boolean;
   attempts: number;
   bestScore: number;
   href: string;
@@ -155,6 +158,9 @@ export default function CoursePage3D(props: CoursePage3DProps) {
             : (
               <ol className="flex flex-col gap-3">
                 {topics.map((topic, i) => {
+                  // A topic opens only when BOTH gates are clear — passing the
+                  // previous test and being inside the free window or paid for.
+                  const isOpen = topic.isUnlocked && !topic.requiresUnlock;
                   const badge = topic.passed ? (
                     <span
                       className="flex size-10 shrink-0 items-center justify-center rounded-xl font-bold"
@@ -162,7 +168,7 @@ export default function CoursePage3D(props: CoursePage3DProps) {
                     >
                       ✓
                     </span>
-                  ) : topic.isUnlocked ? (
+                  ) : isOpen ? (
                     <span
                       className="flex size-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold"
                       style={{ background: 'color-mix(in oklab, var(--hud-primary) 15%, transparent)', color: 'var(--hud-primary)', fontFamily: 'var(--hud-font-mono)' }}
@@ -185,7 +191,7 @@ export default function CoursePage3D(props: CoursePage3DProps) {
                         <div className="flex flex-wrap items-center gap-2">
                           <h3
                             className="text-[17px] font-bold"
-                            style={{ color: topic.isUnlocked ? 'var(--hud-on-surface)' : 'var(--hud-on-surface-variant)' }}
+                            style={{ color: isOpen ? 'var(--hud-on-surface)' : 'var(--hud-on-surface-variant)' }}
                           >
                             {topic.title}
                           </h3>
@@ -197,7 +203,7 @@ export default function CoursePage3D(props: CoursePage3DProps) {
                               Keçilib
                             </span>
                           )}
-                          {!topic.isUnlocked && (
+                          {!isOpen && (
                             <span
                               className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest"
                               style={{ fontFamily: 'var(--hud-font-mono)', color: 'var(--hud-on-surface-variant)', background: 'color-mix(in oklab, var(--hud-on-surface) 8%, transparent)' }}
@@ -209,14 +215,16 @@ export default function CoursePage3D(props: CoursePage3DProps) {
                         <p className="mt-1 text-sm" style={{ color: 'var(--hud-on-surface-variant)' }}>
                           {topic.passed
                             ? `Ən yaxşı nəticə: ${topic.bestScore} • ${topic.attempts} cəhd`
-                            : !topic.isUnlocked
-                              ? 'Açmaq üçün əvvəlki mövzunun testini keçin'
+                            : topic.requiresUnlock
+                              ? 'Bu mövzu pulsuz hissədən kənardadır — kursu açın'
+                              : !isOpen
+                                ? 'Açmaq üçün əvvəlki mövzunun testini keçin'
                               : topic.attempts > 0
                                 ? `${topic.attempts} cəhd • ən yaxşı nəticə: ${topic.bestScore}`
                                 : 'Oxu və testi keç'}
                         </p>
                       </div>
-                      {topic.isUnlocked && (
+                      {isOpen && (
                         <span style={{ color: 'var(--hud-on-surface-variant)' }}>→</span>
                       )}
                     </>
@@ -224,11 +232,11 @@ export default function CoursePage3D(props: CoursePage3DProps) {
 
                   const rowClass =
                     'hud-glass flex items-center gap-4 rounded-2xl border-l-4 p-5';
-                  const rowStyle = { borderColor: topic.passed ? 'var(--hud-green)' : topic.isUnlocked ? 'var(--hud-primary)' : 'var(--hud-border)' };
+                  const rowStyle = { borderColor: topic.passed ? 'var(--hud-green)' : isOpen ? 'var(--hud-primary)' : 'var(--hud-border)' };
 
                   return (
                     <li key={topic.id}>
-                      {topic.isUnlocked ? (
+                      {isOpen ? (
                         <Link
                           href={topic.href}
                           className={`${rowClass} transition-transform hover:-translate-y-0.5`}

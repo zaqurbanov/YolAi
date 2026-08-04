@@ -83,8 +83,11 @@ const STAT_CARDS: ReadonlyArray<{
 // empty ("Tezliklə") one is not a thing to sell yet.
 function CourseCardContent({ course }: { course: CourseSummary }) {
   const isEmpty = course.totalTopics === 0;
-  const isLocked = !isEmpty && !course.isUnlocked;
-  const isOpen = !isEmpty && course.isUnlocked;
+  // PREVIEW (0100) counts as open — see EditorialOyrenme's CourseCardBody for
+  // the reasoning; the purchase now lives inside the course, after the sample.
+  const canPreview = !isEmpty && !course.isUnlocked && course.freeTopicCount > 0;
+  const isLocked = !isEmpty && !course.isUnlocked && !canPreview;
+  const isOpen = !isEmpty && (course.isUnlocked || canPreview);
 
   return (
     <>
@@ -143,8 +146,9 @@ const CARD_BASE =
 
 function renderCourseCard(course: CourseSummary, balance: number | null, wide: boolean) {
   const isEmpty = course.totalTopics === 0;
-  const isLocked = !isEmpty && !course.isUnlocked;
-  const isOpen = !isEmpty && course.isUnlocked;
+  const canPreview = !isEmpty && !course.isUnlocked && course.freeTopicCount > 0;
+  const isLocked = !isEmpty && !course.isUnlocked && !canPreview;
+  const isOpen = !isEmpty && (course.isUnlocked || canPreview);
   // snap-start only on the slider branch — the expanded list (wide) is a plain
   // stacked layout, not a snap rail, and must not register snap points.
   const widthClass = wide ? 'w-full' : 'w-72 shrink-0 snap-start';

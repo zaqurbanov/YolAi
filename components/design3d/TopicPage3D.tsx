@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import RoadShaderBackground from '@/components/design3d/RoadShaderBackground';
 import { ArrowLeftIcon, ArrowRightIcon } from '@/components/icons';
+import HideDuringTest from '@/components/oyrenme/TopicTestFocus';
 
 interface TopicPage3DProps {
   courseId: string;
@@ -90,12 +91,16 @@ export default function TopicPage3D({
 
       <section className="relative z-10 px-6 pb-10">
         <div className="mx-auto flex max-w-7xl flex-col gap-6">
-          <article
-            className="hud-glass rounded-2xl border-l-4 p-6 lg:p-8"
-            style={{ borderColor: 'var(--hud-primary)' }}
-          >
-            {article}
-          </article>
+          {/* Unmounted while an attempt is running — the test must be answered
+              from memory, not by scrolling back into the source text. */}
+          <HideDuringTest>
+            <article
+              className="hud-glass rounded-2xl border-l-4 p-6 lg:p-8"
+              style={{ borderColor: 'var(--hud-primary)' }}
+            >
+              {article}
+            </article>
+          </HideDuringTest>
 
           <div
             className="hud-glass rounded-2xl border-l-4 p-1 sm:p-1.5"
@@ -110,33 +115,35 @@ export default function TopicPage3D({
             <div className="px-1 pb-1 sm:px-1.5 sm:pb-1.5">{testSection}</div>
           </div>
 
-          <nav className="flex flex-wrap items-center justify-between gap-3">
-            {prevTopicId ? (
-              <Link
-                href={`/oyrenme/${courseId}/${prevTopicId}`}
-                className="hud-glass inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold transition-colors"
-                style={{ color: 'var(--hud-on-surface-variant)' }}
-              >
-                <ArrowLeftIcon width={16} height={16} />
-                Əvvəlki mövzu
-              </Link>
-            ) : (
-              <span />
-            )}
+          <HideDuringTest>
+            <nav className="flex flex-wrap items-center justify-between gap-3">
+              {prevTopicId ? (
+                <Link
+                  href={`/oyrenme/${courseId}/${prevTopicId}`}
+                  className="hud-glass inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold transition-colors"
+                  style={{ color: 'var(--hud-on-surface-variant)' }}
+                >
+                  <ArrowLeftIcon width={16} height={16} />
+                  Əvvəlki mövzu
+                </Link>
+              ) : (
+                <span />
+              )}
 
-            {nextTopicId && passed ? (
-              <Link
-                href={`/oyrenme/${courseId}/${nextTopicId}`}
-                className="hud-glass inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold transition-colors"
-                style={{ color: 'var(--hud-on-surface-variant)' }}
-              >
-                Növbəti mövzu
-                <ArrowRightIcon width={16} height={16} />
-              </Link>
-            ) : (
-              <span />
-            )}
-          </nav>
+              {nextTopicId && passed ? (
+                <Link
+                  href={`/oyrenme/${courseId}/${nextTopicId}`}
+                  className="hud-glass inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold transition-colors"
+                  style={{ color: 'var(--hud-on-surface-variant)' }}
+                >
+                  Növbəti mövzu
+                  <ArrowRightIcon width={16} height={16} />
+                </Link>
+              ) : (
+                <span />
+              )}
+            </nav>
+          </HideDuringTest>
         </div>
       </section>
     </div>

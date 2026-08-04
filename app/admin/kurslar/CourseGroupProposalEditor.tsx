@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Button, Chip, Input, Label, Switch, TextArea, TextField } from '@heroui/react';
 import { Spinner } from '@/components/Spinner';
 import type { CourseGroupProposal } from '@/lib/lessons/groupTopicsIntoCourses';
@@ -73,6 +73,10 @@ export default function CourseGroupProposalEditor({
   );
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Split-created groups need a key that can never collide with a live one. A
+  // topic-derived key can: split at topic X, move X back into the previous
+  // group, split at X again — two groups would claim the same key.
+  const splitSeq = useRef(0);
 
   function patchGroup(index: number, patch: Partial<DraftGroup>) {
     setGroups((prev) => prev.map((g, i) => (i === index ? { ...g, ...patch } : g)));
@@ -126,6 +130,44 @@ export default function CourseGroupProposalEditor({
             ? [...next[target].topics, topic]
             : [topic, ...next[target].topics],
       };
+      return next;
+    });
+  }
+
+  // ADDING A GROUP IS A SPLIT, NEVER AN EMPTY GROUP.
+  //
+  // The whole model is consecutive ranges with every topic in exactly one group
+  // (see the header of lib/lessons/groupTopicsIntoCourses.ts). An "add empty
+  // group" button would break that invariant on the first press — and an empty
+  // group is already painted red and blocks submit. Splitting at a topic
+  // boundary keeps both consecutiveness and total coverage by construction:
+  // `topicIndex` onward leaves the source group and becomes a new group
+  // inserted immediately after it. Nothing renumbers anything, because course
+  // order is array position at submit time.
+  function splitGroupAt(groupIndex: number, topicIndex: number) {
+    // Splitting at topic 0 would empty the source group — the one case this
+    // primitive must refuse. The control is not rendered there either.
+    if (topicIndex <= 0) return;
+    splitSeq.current += 1;
+    const key = `split-${splitSeq.current}`;
+    setGroups((prev) => {
+      const source = prev[groupIndex];
+      if (!source || topicIndex >= source.topics.length) return prev;
+      const tail = source.topics.slice(topicIndex);
+      const next = [...prev];
+      next[groupIndex] = { ...source, topics: source.topics.slice(0, topicIndex) };
+      next.splice(groupIndex + 1, 0, {
+        key,
+        // Same fallback chain as materialise() in groupTopicsIntoCourses.ts —
+        // the first topic's title, then a positional placeholder.
+        title: tail[0].title.trim() || `Bölmə ${groupIndex + 2}`,
+        description: '',
+        // Price fields start unset: a new course is not implicitly free and
+        // not implicitly priced like the group it was cut out of.
+        isFree: false,
+        unlockPrice: '',
+        topics: tail,
+      });
       return next;
     });
   }
@@ -218,13 +260,13 @@ export default function CourseGroupProposalEditor({
     <div className="glass-card rounded-2xl p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2 text-[12px] font-bold uppercase tracking-[0.1em] text-navy">
+          <div className="text-legal-citation flex flex-wrap items-center gap-2 text-navy">
             Təklif edilən kurslar
             <Chip
               size="sm"
               variant="soft"
               color={proposal.source === 'ai' ? 'accent' : 'default'}
-              className="mono-label"
+              className="text-[11px] font-medium tracking-normal"
             >
               {proposal.source === 'ai' ? 'AI qruplaşdırması' : 'mexaniki bölgü'}
             </Chip>
@@ -261,13 +303,13 @@ export default function CourseGroupProposalEditor({
           not miss — it can also be set while source === 'ai' (repaired ranges,
           or a failure in the topic pass that fed this one). */}
       {proposal.warning && (
-        <div className="mt-3 rounded-xl border border-caution-orange/40 bg-caution-orange/10 px-3 py-2">
-          <p className="mono-label uppercase text-caution-orange">Diqqət</p>
+        <div className="mt-3 rounded-2xl border border-caution-orange/40 bg-caution-orange/10 px-3 py-2">
+          <p className="text-legal-citation text-caution-orange">Diqqət</p>
           <p className="mt-1 break-words text-sm text-on-surface">{proposal.warning}</p>
         </div>
       )}
 
-      {error && <p className="mono-label mt-3 break-words text-danger">{error}</p>}
+      {error && <p className="text-[11px] leading-4 mt-3 break-words text-danger">{error}</p>}
 
       <div className="mt-4 space-y-4">
         {groups.map((group, gi) => (
@@ -279,24 +321,27 @@ export default function CourseGroupProposalEditor({
                 : 'border-outline-variant/40'
             }`}
           >
-            <div className="flex items-start gap-2">
-              <span className="mono-label mt-2.5 w-6 shrink-0 text-on-surface-variant">
+            {/* Wraps: the control cluster is `shrink-0`, so without a floor on
+                the field it is the field that gets squeezed to nothing. */}
+            <div className="flex flex-wrap items-start gap-2">
+              <span className="mt-2.5 w-5 shrink-0 text-[11px] leading-4 text-on-surface-variant">
                 {gi + 1}.
               </span>
 
               <TextField
                 value={group.title}
                 onChange={(v) => patchGroup(gi, { title: v })}
-                className="min-w-0 flex-1"
+                className="min-w-[9rem] flex-1"
                 aria-label={`Kurs ${gi + 1} adı`}
               >
                 <Input placeholder="Kurs adı" />
               </TextField>
 
-              <div className="flex shrink-0 items-center gap-1">
+              <div className="ml-auto flex shrink-0 items-center gap-0.5">
                 <Button
                   variant="ghost"
                   size="sm"
+                  isIconOnly
                   aria-label="Kursu yuxarı daşı"
                   isDisabled={gi === 0}
                   onPress={() => moveGroup(gi, -1)}
@@ -306,6 +351,7 @@ export default function CourseGroupProposalEditor({
                 <Button
                   variant="ghost"
                   size="sm"
+                  isIconOnly
                   aria-label="Kursu aşağı daşı"
                   isDisabled={gi === groups.length - 1}
                   onPress={() => moveGroup(gi, 1)}
@@ -315,6 +361,7 @@ export default function CourseGroupProposalEditor({
                 <Button
                   variant="ghost"
                   size="sm"
+                  isIconOnly
                   aria-label="Kursu sil (mövzular qonşu kursa keçir)"
                   isDisabled={groups.length <= 1}
                   onPress={() => removeGroup(gi)}
@@ -324,7 +371,7 @@ export default function CourseGroupProposalEditor({
               </div>
             </div>
 
-            <div className="mt-3 pl-8">
+            <div className="mt-3 pl-7">
               <TextField
                 value={group.description}
                 onChange={(v) => patchGroup(gi, { description: v })}
@@ -334,7 +381,7 @@ export default function CourseGroupProposalEditor({
               </TextField>
             </div>
 
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 pl-8">
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 pl-7">
               <Switch
                 isSelected={group.isFree}
                 onChange={(v) => patchGroup(gi, { isFree: v })}
@@ -353,41 +400,54 @@ export default function CourseGroupProposalEditor({
               </TextField>
             </div>
 
-            <div className="mt-3 pl-8">
-              <div className="mono-label mb-2 text-on-surface-variant">
+            <div className="mt-3 pl-7">
+              <div className="text-[11px] leading-4 mb-2 text-on-surface-variant">
                 {group.topics.length} mövzu ·{' '}
                 {group.topics.reduce((sum, t) => sum + t.charCount, 0)} simvol
               </div>
 
               {group.topics.length === 0 ? (
-                <p className="mono-label text-danger">
+                <p className="text-[11px] leading-4 text-danger">
                   Bu kursda mövzu yoxdur — kurs yaradıla bilməz. Mövzu köçürün və ya kursu silin.
                 </p>
               ) : (
-                <div className="space-y-2">
+                <div className="divide-y divide-outline-variant/25 overflow-hidden rounded-2xl border border-outline-variant/30">
                   {group.topics.map((topic, ti) => (
-                    <div
-                      key={topic.key}
-                      className="rounded-xl border border-outline-variant/30 p-2.5"
-                    >
-                      <div className="flex items-start gap-2">
-                        <span className="mono-label mt-2.5 w-6 shrink-0 text-on-surface-variant">
+                    <div key={topic.key} className="p-2.5">
+                      <div className="flex flex-wrap items-start gap-2">
+                        <span className="mt-2.5 w-5 shrink-0 text-[11px] leading-4 text-on-surface-variant">
                           {ti + 1}.
                         </span>
 
                         <TextField
                           value={topic.title}
                           onChange={(v) => retitleTopic(gi, ti, v)}
-                          className="min-w-0 flex-1"
+                          className="min-w-[9rem] flex-1"
                           aria-label={`Kurs ${gi + 1}, mövzu ${ti + 1} adı`}
                         >
                           <Input />
                         </TextField>
 
-                        <div className="flex shrink-0 items-center gap-1">
+                        <div className="ml-auto flex shrink-0 items-center gap-0.5">
+                          {/* Rendered only from the second topic on — the
+                              first-topic case has no valid meaning, and a
+                              permanently disabled button on every group's row 1
+                              would be noise the admin has to decode. */}
+                          {ti > 0 && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="px-2 text-[11px] leading-4"
+                              aria-label={`Buradan yeni kurs başlat (${topic.title || `mövzu ${ti + 1}`})`}
+                              onPress={() => splitGroupAt(gi, ti)}
+                            >
+                              Buradan yeni kurs
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"
+                            isIconOnly
                             aria-label="Əvvəlki kursa köçür"
                             isDisabled={gi === 0}
                             onPress={() => moveTopic(gi, ti, -1)}
@@ -397,6 +457,7 @@ export default function CourseGroupProposalEditor({
                           <Button
                             variant="ghost"
                             size="sm"
+                            isIconOnly
                             aria-label="Növbəti kursa köçür"
                             isDisabled={gi === groups.length - 1}
                             onPress={() => moveTopic(gi, ti, 1)}
@@ -406,6 +467,7 @@ export default function CourseGroupProposalEditor({
                           <Button
                             variant="ghost"
                             size="sm"
+                            isIconOnly
                             aria-label="Mövzunu sil"
                             onPress={() => removeTopic(gi, ti)}
                           >
@@ -414,8 +476,8 @@ export default function CourseGroupProposalEditor({
                         </div>
                       </div>
 
-                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 pl-8">
-                        <Chip size="sm" variant="soft" color="default" className="mono-label">
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 pl-7">
+                        <Chip size="sm" variant="soft" color="default" className="text-[11px] font-medium tracking-normal">
                           {topic.charCount} simvol
                         </Chip>
                         {topic.articleLabels.slice(0, 5).map((label) => (
@@ -424,13 +486,13 @@ export default function CourseGroupProposalEditor({
                             size="sm"
                             variant="soft"
                             color="accent"
-                            className="mono-label"
+                            className="text-[11px] font-medium tracking-normal"
                           >
                             {label}
                           </Chip>
                         ))}
                         {topic.articleLabels.length > 5 && (
-                          <span className="mono-label text-on-surface-variant">
+                          <span className="text-[11px] leading-4 text-on-surface-variant">
                             +{topic.articleLabels.length - 5}
                           </span>
                         )}
@@ -444,9 +506,11 @@ export default function CourseGroupProposalEditor({
         ))}
       </div>
 
-      <p className="mono-label mt-4 text-on-surface-variant">
+      <p className="text-[11px] leading-4 mt-4 text-on-surface-variant">
         ↑ / ↓ mövzunu qonşu kursa köçürür: ↑ əvvəlki kursun sonuna, ↓ növbəti kursun əvvəlinə.
-        Kursu silsəniz, mövzuları qonşu kursa keçir — heç bir mövzu itmir.
+        Kursu silsəniz, mövzuları qonşu kursa keçir — heç bir mövzu itmir. «Buradan yeni kurs»
+        həmin mövzudan başlayaraq qalan mövzuları yeni kursa ayırır — kursları artırmaq üçün
+        bundan istifadə edin.
       </p>
     </div>
   );

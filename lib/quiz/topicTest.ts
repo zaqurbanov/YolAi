@@ -3,7 +3,12 @@ import { createHmac, randomInt, timingSafeEqual } from 'crypto';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isMissingRelationError } from '@/lib/supabase/missingRelation';
-import { canAccessCourse, getTopicTestConfig, getLessonRetryCost } from '@/lib/coins/lessonUnlock';
+import {
+  canAccessTopicAt,
+  getCourseAccessContext,
+  getTopicTestConfig,
+  getLessonRetryCost,
+} from '@/lib/coins/lessonUnlock';
 import { isUserAdmin } from '@/lib/auth/isAdmin';
 import { getCourseTopics, type TopicSummary } from '@/lib/quiz/lessons';
 import { logError } from '@/lib/logging/logError';
@@ -49,6 +54,9 @@ export interface TopicSourceCitation {
 export interface TopicReading {
   id: string;
   courseId: string;
+  /** The source document the course was built from — needed to resolve sign
+   *  images (sign_images rows are keyed by document_id). */
+  documentId: string;
   courseTitle: string;
   title: string;
   orderIndex: number;
@@ -149,11 +157,16 @@ export interface AccessibleTopic {
 // content, questions or the attempt RPCs, in this order:
 //   1. the topic exists and is published (service-role, ids only — no content
 //      leaves the database before authorization);
-//   2. canAccessCourse() on the topic's OWN course_id, resolved server-side.
-//      A client-supplied courseId would let a user read a paid course's topic
-//      by naming a free one;
+//   2. the PAYWALL, resolved server-side against the topic's OWN course_id. A
+//      client-supplied courseId would let a user read a paid course's topic by
+//      naming a free one. Since 0100 this is per-topic rather than per-course:
+//      full access (free course / admin / unlock row) OR the topic falling
+//      inside the course's free preview window;
 //   3. the sequential unlock rule, derived from getCourseTopics rather than
 //      reimplemented, so there is exactly one definition of "unlocked".
+// 2 and 3 are INDEPENDENT and both must hold: paying opens the door, passing
+// the previous test opens the next one. A free preview topic is not exempt
+// from the pass rule, and a purchased course does not skip it either.
 // Returns null on any failure, without distinguishing them for the caller —
 // "not found" and "not allowed" must look identical to an end user.
 export async function resolveAccessibleTopic(
@@ -178,12 +191,16 @@ export async function resolveAccessibleTopic(
   }
   if (!topicRow) return null;
 
-  const allowed = await canAccessCourse(userId, topicRow.course_id);
-  if (!allowed) return null;
+  const access = await getCourseAccessContext(userId, topicRow.course_id);
+  if (!access.exists) return null;
 
   const topics = await getCourseTopics(topicRow.course_id, userId);
   const summary = topics.find((t) => t.id === topicId);
   if (!summary || !summary.isUnlocked) return null;
+  // The paywall is re-evaluated from the topic's real order_index rather than
+  // trusted from the summary's requiresUnlock flag — same context, but this
+  // module is the authoritative gate and must not depend on a display field.
+  if (!canAccessTopicAt(access, summary.orderIndex)) return null;
 
   return { topicId, courseId: topicRow.course_id, topics, summary };
 }
@@ -531,7 +548,7 @@ export async function getTopicForReading(
       .eq('id', topicId)
       .eq('status', 'published')
       .maybeSingle(),
-    readClient.from('lesson_courses').select('title').eq('id', access.courseId).maybeSingle(),
+    readClient.from('lesson_courses').select('title, document_id').eq('id', access.courseId).maybeSingle(),
     getAttemptState(userId, topicId),
     getTopicPoolSize(topicId),
     getTopicTestConfig(),
@@ -556,6 +573,7 @@ export async function getTopicForReading(
   return {
     id: topicId,
     courseId: access.courseId,
+    documentId: (course?.document_id as string | undefined) ?? '',
     courseTitle: (course?.title as string | undefined) ?? '',
     title: topic.title as string,
     orderIndex: topic.order_index as number,

@@ -121,7 +121,8 @@ export default function MobileCoursePage({
                 );
               }
 
-              if (topic.isUnlocked) {
+              // Both gates: the sequential rule AND the paywall (0100).
+              if (topic.isUnlocked && !topic.requiresUnlock) {
                 return (
                   <li key={topic.id}>
                     <Link
@@ -167,7 +168,7 @@ export default function MobileCoursePage({
                         {topic.title}
                       </p>
                       <p className="mt-0.5 text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant">
-                        {num} · Bağlı
+                        {num} · {topic.requiresUnlock ? 'Kursu al' : 'Bağlı'}
                       </p>
                     </div>
                   </div>

@@ -142,7 +142,7 @@ export default function CourseCreateForm({ nextOrderIndex, onCreated }: CourseCr
       )}
 
       {(error || documentsError) && (
-        <p className="mono-label mt-3 break-words text-danger">{error ?? documentsError}</p>
+        <p className="text-[11px] leading-4 mt-3 break-words text-danger">{error ?? documentsError}</p>
       )}
     </div>
   );

@@ -182,12 +182,20 @@ export async function proposeTopicsAction(
 // the AI while the grouping falls back, and vice versa is impossible but the
 // admin should still see which half degraded.
 //
+// `groupCount` is the admin's explicit course count for the mechanical split.
+// It was previously chosen by the program alone (desiredGroupCount), which made
+// "mexaniki" mechanical but still automatic. Optional and back-compatible:
+// omitted reproduces the old behaviour exactly, and it never reaches the AI
+// grouping prompt. Untrusted like every server-action argument — clamped inside
+// groupTopicsIntoCourses to [1, topicCount], deliberately NOT to MAX_GROUPS.
+//
 // SLOW ACTION: same budget note as proposeTopicsAction — the admin catch-all
 // page exports maxDuration = 300, and this adds exactly one more structured
 // call on top of the topic pass.
 export async function proposeCourseGroupsAction(
   documentId: string,
-  strategy: 'ai' | 'deterministic' = 'ai'
+  strategy: 'ai' | 'deterministic' = 'ai',
+  groupCount?: number
 ): Promise<AdminActionResult<CourseGroupProposal>> {
   const admin = await requireAdmin();
   if (!admin.ok) return denied(admin.message);
@@ -206,7 +214,7 @@ export async function proposeCourseGroupsAction(
     return denied('Bu sənəddə mətn hissəsi yoxdur — sənəd yenidən ingest edilməlidir');
   }
 
-  const grouped = await groupTopicsIntoCourses(proposal, strategy === 'ai');
+  const grouped = await groupTopicsIntoCourses(proposal, strategy === 'ai', groupCount);
 
   if (grouped.groups.length === 0) {
     return denied('Kurs qrupları hesablanmadı');
@@ -290,6 +298,10 @@ export async function listCourseTopicsAction(
 // generateTopicContentAction then generateTopicQuestionsAction, which is what
 // makes "Suallar yarat" a per-topic button in its own right and makes a
 // question failure reportable without discarding a successful content draft.
+//
+// Both return `data.topic` — the refreshed lesson_topics row — so the client's
+// generation loop can patch that one topic in state immediately instead of
+// waiting for its single end-of-run list resync. See GenerateTopicContentResult.
 export async function generateTopicContentAction(
   topicId: string
 ): Promise<AdminActionResult<GenerateTopicContentResult>> {

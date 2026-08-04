@@ -103,13 +103,13 @@ export default function TopicProposalEditor({
     <div className="glass-card rounded-2xl p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="text-[12px] font-bold uppercase tracking-[0.1em] text-navy flex flex-wrap items-center gap-2">
+          <div className="text-legal-citation flex flex-wrap items-center gap-2 text-navy">
             Təklif edilən mövzular
             <Chip
               size="sm"
               variant="soft"
               color={proposal.source === 'ai' ? 'accent' : 'default'}
-              className="mono-label"
+              className="text-[11px] font-medium tracking-normal"
             >
               {proposal.source === 'ai' ? 'AI qruplaşdırması' : 'mexaniki bölgü'}
             </Chip>
@@ -146,35 +146,39 @@ export default function TopicProposalEditor({
           warning carries the provider's own error text. It can be set even
           when source === 'ai' (a partial batch failure). */}
       {proposal.warning && (
-        <div className="mt-3 rounded-xl border border-caution-orange/40 bg-caution-orange/10 px-3 py-2">
-          <p className="mono-label text-caution-orange uppercase">Diqqət</p>
+        <div className="mt-3 rounded-2xl border border-caution-orange/40 bg-caution-orange/10 px-3 py-2">
+          <p className="text-legal-citation text-caution-orange">Diqqət</p>
           <p className="mt-1 break-words text-sm text-on-surface">{proposal.warning}</p>
         </div>
       )}
 
-      {error && <p className="mono-label mt-3 text-danger">{error}</p>}
+      {error && <p className="text-[11px] leading-4 mt-3 text-danger">{error}</p>}
 
-      <div className="mt-4 space-y-3">
+      {/* One grouped "inset list" instead of N bordered boxes. */}
+      <div className="mt-4 divide-y divide-outline-variant/25 overflow-hidden rounded-2xl border border-outline-variant/30">
         {drafts.map((draft, index) => (
-          <div key={draft.key} className="rounded-xl border border-outline-variant/40 p-3">
-            <div className="flex items-start gap-2">
-              <span className="mono-label mt-2.5 w-6 shrink-0 text-on-surface-variant">
+          <div key={draft.key} className="p-3">
+            {/* Wraps: the control cluster is `shrink-0`, so without a floor on
+                the field it is the field that gets squeezed to nothing. */}
+            <div className="flex flex-wrap items-start gap-2">
+              <span className="mt-2.5 w-5 shrink-0 text-[11px] leading-4 text-on-surface-variant">
                 {index + 1}.
               </span>
 
               <TextField
                 value={draft.title}
                 onChange={(v) => retitle(index, v)}
-                className="min-w-0 flex-1"
+                className="min-w-[9rem] flex-1"
                 aria-label={`Mövzu ${index + 1} adı`}
               >
                 <Input />
               </TextField>
 
-              <div className="flex shrink-0 items-center gap-1">
+              <div className="ml-auto flex shrink-0 items-center gap-0.5">
                 <Button
                   variant="ghost"
                   size="sm"
+                  isIconOnly
                   aria-label="Yuxarı"
                   isDisabled={index === 0}
                   onPress={() => move(index, -1)}
@@ -184,6 +188,7 @@ export default function TopicProposalEditor({
                 <Button
                   variant="ghost"
                   size="sm"
+                  isIconOnly
                   aria-label="Aşağı"
                   isDisabled={index === drafts.length - 1}
                   onPress={() => move(index, 1)}
@@ -193,6 +198,7 @@ export default function TopicProposalEditor({
                 <Button
                   variant="ghost"
                   size="sm"
+                  isIconOnly
                   aria-label="Sil"
                   onPress={() => remove(index)}
                 >
@@ -201,23 +207,23 @@ export default function TopicProposalEditor({
               </div>
             </div>
 
-            <div className="mt-2 flex flex-wrap items-center gap-1.5 pl-8">
-              <Chip size="sm" variant="soft" color="default" className="mono-label">
+            <div className="mt-2 flex flex-wrap items-center gap-1.5 pl-7">
+              <Chip size="sm" variant="soft" color="default" className="text-[11px] font-medium tracking-normal">
                 {draft.charCount} simvol
               </Chip>
               {draft.articleLabels.slice(0, 6).map((label) => (
-                <Chip key={label} size="sm" variant="soft" color="accent" className="mono-label">
+                <Chip key={label} size="sm" variant="soft" color="accent" className="text-[11px] font-medium tracking-normal">
                   {label}
                 </Chip>
               ))}
               {draft.articleLabels.length > 6 && (
-                <span className="mono-label text-on-surface-variant">
+                <span className="text-[11px] leading-4 text-on-surface-variant">
                   +{draft.articleLabels.length - 6}
                 </span>
               )}
             </div>
 
-            <p className="mt-2 pl-8 text-label-sm text-on-surface-variant">{draft.preview}</p>
+            <p className="mt-2 pl-7 text-label-sm text-on-surface-variant">{draft.preview}</p>
           </div>
         ))}
       </div>

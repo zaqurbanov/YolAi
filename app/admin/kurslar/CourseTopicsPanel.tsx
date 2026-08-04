@@ -85,6 +85,14 @@ export default function CourseTopicsPanel({
   // apart from `error` so a warning is never painted as a failure.
   const [notice, setNotice] = useState<string | null>(null);
 
+  // Title edit form — same collapsed-by-default shape as the pricing form
+  // below. Seeded from the prop on open rather than held in sync with it, so a
+  // background list refresh can never overwrite what the admin is typing.
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleValue, setTitleValue] = useState(course.title);
+  const [titleError, setTitleError] = useState<string | null>(null);
+  const [titleSaving, setTitleSaving] = useState(false);
+
   // Pricing edit form — collapsed by default, mirrors CourseCreateForm's
   // isFree/unlockPrice fields since this is the same data on an existing row.
   const [editingPrice, setEditingPrice] = useState(false);
@@ -92,6 +100,7 @@ export default function CourseTopicsPanel({
   const [priceValue, setPriceValue] = useState(
     course.unlockPrice !== null ? String(course.unlockPrice) : ''
   );
+  const [priceValueFreeTopics, setPriceValueFreeTopics] = useState(String(course.freeTopicCount));
   const [priceError, setPriceError] = useState<string | null>(null);
   const [priceSaving, setPriceSaving] = useState(false);
 
@@ -142,6 +151,20 @@ export default function CourseTopicsPanel({
     } finally {
       setProposing(null);
     }
+  }
+
+  // The generation actions return the post-write row, so a completed topic is
+  // patched into `topics` the moment it finishes instead of waiting for the
+  // single end-of-run resync. Without this, «Bax / redaktə et» on topic 1 of a
+  // 20-topic run seeds TopicEditor from a `content: null` row for ~10 minutes
+  // and shows "material hələ yaradılmayıb" for material that already exists.
+  //
+  // `row` is nullable: null means only the post-write READ failed while the
+  // generation itself succeeded, so it is not an error — it just falls through
+  // to the end-of-run loadTopics().
+  function applyTopicRow(row: LessonTopicRow | null) {
+    if (!row) return;
+    setTopics((prev) => prev.map((t) => (t.id === row.id ? row : t)));
   }
 
   function patchStep(topicId: string, step: GenStep, state: GenStepState) {
@@ -196,6 +219,9 @@ export default function CourseTopicsPanel({
           const content = await generateTopicContentAction(topicId);
           if (content.ok) {
             patchStep(topicId, 'content', { status: 'done' });
+            // Carries the model's title rewrite too, so the row's heading
+            // updates in place.
+            applyTopicRow(content.data.topic);
             missingChunkCount = content.data.missingChunkCount || missingChunkCount;
           } else {
             patchStep(topicId, 'content', { status: 'error', message: content.error });
@@ -221,6 +247,9 @@ export default function CourseTopicsPanel({
           const questions = await generateTopicQuestionsAction(topicId);
           if (questions.ok) {
             patchStep(topicId, 'questions', { status: 'done' });
+            // Runs after the content step, so this row is the topic's final
+            // state for the run — question count chips update live from it.
+            applyTopicRow(questions.data.topic);
             questionsCreated = questions.data.questionsCreated;
             belowPoolMinimum = questions.data.belowPoolMinimum;
             missingChunkCount = questions.data.missingChunkCount || missingChunkCount;
@@ -253,11 +282,44 @@ export default function CourseTopicsPanel({
     }
 
     setRunning(false);
-    // One resync at the end rather than one per topic: N extra round trips
-    // during a long run would slow the loop down for no added information,
-    // since live progress already comes from genStates.
+    // Still one resync at the end rather than one refetch per topic — the rows
+    // are already patched in place from each action's own return value, so this
+    // costs nothing extra and only has to cover the case where that post-write
+    // read came back null.
     await loadTopics();
     onTopicsChanged();
+  }
+
+  async function handleSaveTitle() {
+    setTitleError(null);
+
+    const trimmed = titleValue.trim();
+    if (trimmed === '') {
+      setTitleError('Kurs adı boş ola bilməz');
+      return;
+    }
+    if (trimmed === course.title) {
+      setEditingTitle(false);
+      return;
+    }
+
+    setTitleSaving(true);
+    try {
+      const result = await updateCourseAction(course.id, { title: trimmed });
+      if (!result.ok) {
+        setTitleError(result.error);
+        return;
+      }
+      setEditingTitle(false);
+      // Re-reads the course list, which is what feeds this panel's `course`
+      // prop — the new name then appears here and in the left-hand list at
+      // once, without this component holding a second copy of it.
+      onTopicsChanged();
+    } catch (e) {
+      setTitleError(e instanceof Error ? e.message : 'Xəta baş verdi');
+    } finally {
+      setTitleSaving(false);
+    }
   }
 
   async function handleSavePrice() {
@@ -276,11 +338,20 @@ export default function CourseTopicsPanel({
     // Free courses have no unlock price, same as CourseCreateForm's create path.
     if (priceIsFree) price = null;
 
+    // Free preview (0100). Empty means 0 — "no preview", the fully-paid course.
+    const freeTopicsRaw = priceValueFreeTopics.trim();
+    const freeTopicCount = freeTopicsRaw === '' ? 0 : Number(freeTopicsRaw);
+    if (!Number.isInteger(freeTopicCount) || freeTopicCount < 0) {
+      setPriceError('Pulsuz dərs sayı 0 və ya müsbət tam ədəd olmalıdır');
+      return;
+    }
+
     setPriceSaving(true);
     try {
       const result = await updateCourseAction(course.id, {
         isFree: priceIsFree,
         unlockPrice: price,
+        freeTopicCount,
       });
       if (!result.ok) {
         setPriceError(result.error);
@@ -371,14 +442,73 @@ export default function CourseTopicsPanel({
       <div className="glass-card rounded-2xl p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="text-[20px] font-semibold leading-tight text-navy">{course.title}</h2>
-            <p className="mt-1 text-label-sm text-on-surface-variant">
+            {editingTitle ? (
+              <div className="space-y-2">
+                <TextField
+                  value={titleValue}
+                  onChange={setTitleValue}
+                  isDisabled={titleSaving}
+                  className="w-full sm:w-96"
+                  autoFocus
+                >
+                  <Label>Kursun adı</Label>
+                  <Input placeholder="Kursun adı" />
+                </TextField>
+
+                {titleError && <p className="text-[11px] leading-4 text-danger">{titleError}</p>}
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    isPending={titleSaving}
+                    isDisabled={titleSaving}
+                    onPress={() => void handleSaveTitle()}
+                  >
+                    {({ isPending }) => (
+                      <>
+                        {isPending ? <Spinner size="sm" tone="current" /> : null}
+                        Yadda saxla
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    isDisabled={titleSaving}
+                    onPress={() => setEditingTitle(false)}
+                  >
+                    Ləğv et
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <h2 className="text-[17px] font-semibold leading-snug tracking-[-0.01em] text-navy sm:text-[20px]">
+                {course.title}
+              </h2>
+            )}
+            <p className="mt-1 text-[12px] leading-4 text-on-surface-variant sm:text-label-sm">
               Mənbə: {course.documentTitle ?? 'tapılmadı'} · {course.publishedTopicCount}/
               {course.topicCount} mövzu dərc edilib
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {!editingTitle && (
+              <Button
+                variant="tertiary"
+                size="sm"
+                className="rounded-full"
+                isDisabled={running}
+                onPress={() => {
+                  setTitleValue(course.title);
+                  setTitleError(null);
+                  setEditingTitle(true);
+                }}
+              >
+                Adı dəyiş
+              </Button>
+            )}
             {canPublishCourse && (
               <Button variant="primary" size="sm" className="rounded-full" isDisabled={running} onPress={onPublishCourse}>
                 Kursu dərc et
@@ -391,19 +521,19 @@ export default function CourseTopicsPanel({
         </div>
 
         {course.status !== 'published' && !canPublishCourse && (
-          <p className="mono-label mt-3 text-on-surface-variant">
+          <p className="mt-3 text-[11px] leading-4 text-on-surface-variant">
             Kursu dərc etmək üçün ən azı bir mövzu dərc edilməlidir.
           </p>
         )}
 
         {error && (
-          <div className="mt-3 rounded-xl border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">
+          <div className="mt-3 rounded-2xl border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">
             {error}
           </div>
         )}
 
         {notice && (
-          <div className="mt-3 rounded-xl border border-caution-orange/40 bg-caution-orange/10 px-3 py-2 text-sm text-on-surface">
+          <div className="mt-3 rounded-2xl border border-caution-orange/40 bg-caution-orange/10 px-3 py-2 text-sm text-on-surface">
             {notice}
           </div>
         )}
@@ -412,14 +542,14 @@ export default function CourseTopicsPanel({
       <div className="glass-card rounded-2xl p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="text-[12px] font-bold uppercase tracking-[0.1em] text-navy">Enerji qiyməti</div>
+            <div className="text-legal-citation text-navy">Enerji qiyməti</div>
             <div className="mt-2 flex items-center gap-2">
               {course.isFree ? (
-                <Chip size="sm" variant="soft" color="success" className="mono-label">
+                <Chip size="sm" variant="soft" color="success" className="text-[11px] font-medium tracking-normal">
                   Pulsuz
                 </Chip>
               ) : course.unlockPrice !== null ? (
-                <Chip size="sm" variant="soft" color="default" className="mono-label">
+                <Chip size="sm" variant="soft" color="default" className="text-[11px] font-medium tracking-normal">
                   {course.unlockPrice} enerji
                 </Chip>
               ) : (
@@ -427,18 +557,31 @@ export default function CourseTopicsPanel({
                   Qlobal standart qiymət istifadə olunur
                 </p>
               )}
+              {!course.isFree && (
+                <Chip
+                  size="sm"
+                  variant="soft"
+                  color="default"
+                  className="text-[11px] font-medium tracking-normal"
+                >
+                  {course.freeTopicCount > 0
+                    ? `İlk ${course.freeTopicCount} dərs pulsuz`
+                    : 'Pulsuz dərs yoxdur'}
+                </Chip>
+              )}
             </div>
           </div>
 
           {!editingPrice && (
             <Button
-              variant="outline"
+              variant="tertiary"
               size="sm"
               className="rounded-full"
               isDisabled={running}
               onPress={() => {
                 setPriceIsFree(course.isFree);
                 setPriceValue(course.unlockPrice !== null ? String(course.unlockPrice) : '');
+                setPriceValueFreeTopics(String(course.freeTopicCount));
                 setPriceError(null);
                 setEditingPrice(true);
               }}
@@ -466,7 +609,20 @@ export default function CourseTopicsPanel({
               </TextField>
             </div>
 
-            {priceError && <p className="mono-label text-danger">{priceError}</p>}
+            {/* Free preview (0100): how many leading topics open without an
+                unlock. 0 turns the preview off and restores the old
+                all-or-nothing paywall for this course. */}
+            <TextField
+              value={priceValueFreeTopics}
+              onChange={setPriceValueFreeTopics}
+              isDisabled={priceIsFree}
+              className="w-64"
+            >
+              <Label>Pulsuz dərs sayı (0 = tam bağlı)</Label>
+              <Input type="number" min={0} step={1} placeholder="1" />
+            </TextField>
+
+            {priceError && <p className="text-[11px] leading-4 text-danger">{priceError}</p>}
 
             <div className="flex items-center gap-2">
               <Button
@@ -513,7 +669,7 @@ export default function CourseTopicsPanel({
         <div className="glass-card rounded-2xl p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div className="text-[12px] font-bold uppercase tracking-[0.1em] text-navy">
+              <div className="text-legal-citation text-navy">
                 Mövzular ({topics.length})
               </div>
               {running && (
@@ -534,7 +690,7 @@ export default function CourseTopicsPanel({
                       what the AI path degrades to, so it stays selectable when
                       the AI grouping comes back poor. */}
                   <Button
-                    variant="outline"
+                    variant="tertiary"
                     size="sm"
                     className="rounded-full"
                     onPress={() => void handlePropose('deterministic')}
@@ -556,14 +712,14 @@ export default function CourseTopicsPanel({
               )}
 
               {failedTargets.length > 0 && !running && (
-                <Button variant="outline" size="sm" className="rounded-full" onPress={() => void runGeneration(failedTargets)}>
+                <Button variant="tertiary" size="sm" className="rounded-full" onPress={() => void runGeneration(failedTargets)}>
                   {failedTargets.length} uğursuzu təkrarla
                 </Button>
               )}
 
               {running && (
                 <Button
-                  variant="outline"
+                  variant="tertiary"
                   size="sm"
                   className="rounded-full"
                   onPress={() => {
@@ -590,13 +746,13 @@ export default function CourseTopicsPanel({
               runs and counts seconds so the wait reads as progress, not as a
               hang. */}
           {proposing && (
-            <div className="mt-3 rounded-xl border border-primary/40 bg-primary/5 px-4 py-3">
+            <div className="mt-3 rounded-2xl border border-primary/40 bg-primary/5 px-4 py-3">
               <div className="flex items-center gap-2 text-sm text-primary">
                 <Spinner size="sm" tone="current" />
                 {proposing === 'ai'
                   ? 'AI sənədin bölmələrini oxuyur və mövzu sərhədlərini qurur…'
                   : 'Sənəd mexaniki olaraq bölünür…'}
-                <span className="mono-label ml-auto">{proposeElapsed} san.</span>
+                <span className="ml-auto text-[11px] font-medium tabular-nums">{proposeElapsed} san.</span>
               </div>
               <p className="mt-1.5 text-label-sm text-on-surface-variant">
                 {proposing === 'ai'
@@ -616,12 +772,15 @@ export default function CourseTopicsPanel({
                 Mövzular yüklənir…
               </div>
             ) : topics.length === 0 ? (
-              <div className="rounded-xl border border-outline-variant/40 px-4 py-8 text-center text-sm text-on-surface-variant">
+              <div className="rounded-2xl border border-outline-variant/30 px-4 py-8 text-center text-label-sm text-on-surface-variant">
                 Bu kursda hələ mövzu yoxdur. «Mövzuları təklif et (AI)» ilə sənədin bölmə
                 sərhədlərindən mövzu layihələri qurun.
               </div>
             ) : (
-              topics.map((topic, index) => (
+              // One grouped "inset list" instead of N bordered boxes: rows are
+              // separated by a hairline and share the group's outer radius.
+              <div className="divide-y divide-outline-variant/25 overflow-hidden rounded-2xl border border-outline-variant/30">
+                {topics.map((topic, index) => (
                 <TopicCard
                   key={topic.id}
                   topic={topic}
@@ -658,7 +817,8 @@ export default function CourseTopicsPanel({
                   }}
                   onError={setError}
                 />
-              ))
+                ))}
+              </div>
             )}
           </div>
         </div>

@@ -36,6 +36,8 @@ export interface LessonCourseRow {
   isFree: boolean;
   /** null means "use the global lesson_course_unlock_price setting". */
   unlockPrice: number | null;
+  /** Leading topics readable without an unlock (0100). 0 = fully paid. */
+  freeTopicCount: number;
   status: 'draft' | 'published';
   topicCount: number;
   publishedTopicCount: number;
@@ -58,7 +60,7 @@ export interface LessonTopicRow {
 }
 
 const COURSE_COLUMNS =
-  'id, document_id, title, description, order_index, is_free, unlock_price, status, created_at, updated_at, documents(title)';
+  'id, document_id, title, description, order_index, is_free, unlock_price, free_topic_count, status, created_at, updated_at, documents(title)';
 
 const TOPIC_COLUMNS =
   'id, course_id, title, content, source_citations, order_index, status, created_at, updated_at';
@@ -71,6 +73,9 @@ interface CourseSelectRow {
   order_index: number;
   is_free: boolean;
   unlock_price: number | string | null;
+  // Null only against a database that has not run 0100 — the column is NOT
+  // NULL there. Mapped to 0 ("no preview"), i.e. the pre-0100 behaviour.
+  free_topic_count: number | null;
   status: 'draft' | 'published';
   created_at: string;
   updated_at: string;
@@ -146,6 +151,10 @@ export async function listCourses(): Promise<LessonCourseRow[]> {
       orderIndex: row.order_index,
       isFree: row.is_free,
       unlockPrice: parsePrice(row.unlock_price),
+      freeTopicCount:
+        typeof row.free_topic_count === 'number' && Number.isFinite(row.free_topic_count)
+          ? Math.max(0, Math.floor(row.free_topic_count))
+          : 0,
       status: row.status,
       topicCount: counts.total,
       publishedTopicCount: counts.published,
@@ -240,6 +249,13 @@ export async function createCourse(
       orderIndex: data.order_index,
       isFree: data.is_free,
       unlockPrice: parsePrice(data.unlock_price),
+      // The DB default (1 since 0100) is what a new course gets; read back from
+      // the inserted row rather than assumed, so changing the default in SQL
+      // does not silently disagree with what the admin UI shows.
+      freeTopicCount:
+        typeof data.free_topic_count === 'number' && Number.isFinite(data.free_topic_count)
+          ? Math.max(0, Math.floor(data.free_topic_count))
+          : 0,
       status: data.status,
       topicCount: 0,
       publishedTopicCount: 0,
@@ -255,6 +271,8 @@ export interface CoursePatch {
   orderIndex?: number;
   isFree?: boolean;
   unlockPrice?: number | null;
+  /** Leading topics readable without an unlock (0100). 0 disables the preview. */
+  freeTopicCount?: number;
   status?: 'draft' | 'published';
 }
 
@@ -270,6 +288,24 @@ export async function updateCourse(
 
   if (patch.unlockPrice !== undefined && patch.unlockPrice !== null && patch.unlockPrice < 0) {
     return { ok: false, error: 'Qiymət mənfi ola bilməz' };
+  }
+
+  // `title` is NOT NULL but not length-checked in the schema, so an empty
+  // string passes the column constraint and lands on /oyrenme as a nameless
+  // card. Rejected here rather than only in the admin form: updateCourseAction
+  // is a plain POST endpoint that takes an arbitrary patch object.
+  if (patch.title !== undefined && patch.title.trim() === '') {
+    return { ok: false, error: 'Kurs adı boş ola bilməz' };
+  }
+
+  // The column has its own `>= 0` check constraint; this turns what would be a
+  // raw Postgres error into a message the admin form can show, and rejects
+  // fractional values before they are silently truncated.
+  if (
+    patch.freeTopicCount !== undefined &&
+    (!Number.isInteger(patch.freeTopicCount) || patch.freeTopicCount < 0)
+  ) {
+    return { ok: false, error: 'Pulsuz dərs sayı 0 və ya müsbət tam ədəd olmalıdır' };
   }
 
   if (patch.status === 'published') {
@@ -295,6 +331,7 @@ export async function updateCourse(
   if (patch.orderIndex !== undefined) update.order_index = patch.orderIndex;
   if (patch.isFree !== undefined) update.is_free = patch.isFree;
   if (patch.unlockPrice !== undefined) update.unlock_price = patch.unlockPrice;
+  if (patch.freeTopicCount !== undefined) update.free_topic_count = patch.freeTopicCount;
   if (patch.status !== undefined) update.status = patch.status;
 
   const { error } = await admin.from('lesson_courses').update(update).eq('id', id);
@@ -908,12 +945,28 @@ export async function moveTopicToCourse(
   return { ok: true, sourceTopics, targetTopics, warning };
 }
 
+// Both generators return the REFRESHED topic row so the caller can patch that
+// one row in its own state without a round trip. The admin UI drives a
+// per-topic generation loop but re-reads the topic list only ONCE, after the
+// whole batch — on a 20-topic run that resync is ~10 minutes away, so opening a
+// topic that finished minutes ago still showed the `content: null` it started
+// with ("material hələ yaradılmayıb" over freshly written material).
+//
+// The row is read back from the DB, never assembled in memory: generateTopicContent
+// also rewrites `title` from the model's suggestion, and a hand-built object
+// would drop that and reintroduce the same staleness one field down.
+//
+// `topic` is null only when the post-write read itself failed. The generation
+// still succeeded in that case — it must not be downgraded to an error — and
+// the caller's end-of-run resync covers it.
 export interface GenerateTopicContentResult {
   ok: true;
   topicId: string;
   contentGenerated: boolean;
   /** Citations that no longer resolve to a chunk row (document re-ingested). */
   missingChunkCount: number;
+  /** Post-write DB state of the topic, for in-place client patching. */
+  topic: LessonTopicRow | null;
 }
 
 export interface GenerateTopicQuestionsResult {
@@ -924,6 +977,8 @@ export interface GenerateTopicQuestionsResult {
   belowPoolMinimum: boolean;
   /** Citations that no longer resolve to a chunk row (document re-ingested). */
   missingChunkCount: number;
+  /** Post-write DB state of the topic, for in-place client patching. */
+  topic: LessonTopicRow | null;
 }
 
 export type GenerateTopicContentOutcome =
@@ -933,6 +988,56 @@ export type GenerateTopicContentOutcome =
 export type GenerateTopicQuestionsOutcome =
   | GenerateTopicQuestionsResult
   | { ok: false; error: string };
+
+// Same derivation as listCourseTopics, for a single row: the question counts
+// are not columns on lesson_topics, so a row that skipped this step would not
+// be a real LessonTopicRow and the UI's question chips would read 0 after a
+// successful pool generation. Count failures fail OPEN (zeros + a log), exactly
+// as in listCourseTopics — this is a display path.
+async function withQuestionCounts(row: TopicSelectRow): Promise<LessonTopicRow> {
+  const { data, error } = await createAdminClient()
+    .from('quiz_questions')
+    .select('status')
+    .eq('topic_id', row.id)
+    .returns<{ status: string }[]>();
+
+  if (error && !isMissingRelationError(error)) {
+    void logError('lessons.courses.topicQuestionCounts', error, { details: { topicId: row.id } });
+    console.error('[lessons/courses] topic question counts failed:', error);
+  }
+
+  const questions = data ?? [];
+
+  return {
+    id: row.id,
+    courseId: row.course_id,
+    title: row.title,
+    content: row.content,
+    sourceCitations: row.source_citations ?? [],
+    orderIndex: row.order_index,
+    status: row.status,
+    questionCount: questions.length,
+    publishedQuestionCount: questions.filter((q) => q.status === 'published').length,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+async function readTopicRow(topicId: string): Promise<LessonTopicRow | null> {
+  const { data, error } = await createAdminClient()
+    .from('lesson_topics')
+    .select(TOPIC_COLUMNS)
+    .eq('id', topicId)
+    .maybeSingle<TopicSelectRow>();
+
+  if (error || !data) {
+    void logError('lessons.courses.readTopicRow', error, { details: { topicId } });
+    console.error('[lessons/courses] refreshed topic row read failed:', error);
+    return null;
+  }
+
+  return withQuestionCounts(data);
+}
 
 interface TopicSource {
   title: string;
@@ -1000,7 +1105,9 @@ export async function generateTopicContent(
   const reading = await generateTopicReadingContent(loaded.source.title, loaded.source.chunks);
   if (!reading.ok) return { ok: false, error: reading.error };
 
-  const { error: contentError } = await createAdminClient()
+  // The update returns its own row, so the refreshed state is the very tuple
+  // that was just written — no second read and no chance of racing another edit.
+  const { data: updated, error: contentError } = await createAdminClient()
     .from('lesson_topics')
     .update({
       content: reading.content.content,
@@ -1009,7 +1116,9 @@ export async function generateTopicContent(
       ...(reading.content.title.trim() ? { title: reading.content.title.trim() } : {}),
       updated_at: new Date().toISOString(),
     })
-    .eq('id', topicId);
+    .eq('id', topicId)
+    .select(TOPIC_COLUMNS)
+    .maybeSingle<TopicSelectRow>();
 
   if (contentError) {
     void logError('lessons.courses.topicContentWrite', contentError, { details: { topicId } });
@@ -1022,6 +1131,7 @@ export async function generateTopicContent(
     topicId,
     contentGenerated: true,
     missingChunkCount: loaded.source.missingChunkCount,
+    topic: updated ? await withQuestionCounts(updated) : await readTopicRow(topicId),
   };
 }
 
@@ -1085,12 +1195,17 @@ export async function generateTopicQuestionPool(
 
   const questionsCreated = inserted?.length ?? 0;
 
+  // Read AFTER the insert so questionCount/publishedQuestionCount on the
+  // returned row already include the pool that was just written.
+  const topic = await readTopicRow(topicId);
+
   return {
     ok: true,
     topicId,
     questionsCreated,
     belowPoolMinimum: questionsCreated < TOPIC_POOL_MIN,
     missingChunkCount: loaded.source.missingChunkCount,
+    topic,
   };
 }
 

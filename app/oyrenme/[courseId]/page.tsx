@@ -9,10 +9,13 @@ import {
   ArrowRightIcon,
   AwardIcon,
   CheckIcon,
+  EnergyIcon,
   LockIcon,
   PlayIcon,
 } from '@/components/icons';
-import { canAccessCourse } from '@/lib/coins/lessonUnlock';
+import { getCourseAccessContext } from '@/lib/coins/lessonUnlock';
+import { getEnergyStatus } from '@/lib/coins/games';
+import UnlockCourseCard from '../UnlockCourseCard';
 import { getCourses, getCourseTopics } from '@/lib/quiz/lessons';
 import DesignSwitch from '@/components/design3d/DesignSwitch';
 import CoursePage3D from '@/components/design3d/CoursePage3D';
@@ -50,8 +53,15 @@ export default async function CoursePage({ params }: { params: Promise<{ courseI
   // THE gate, and it runs before any topic read. proxy.ts only guards the
   // /oyrenme prefix optimistically from a cookie — it is not authorization,
   // and it knows nothing about which courses this user has unlocked.
-  const allowed = await canAccessCourse(user.id, courseId);
-  if (!allowed) {
+  //
+  // Since 0100 the gate is no longer all-or-nothing: a course with a free
+  // preview window is ENTERABLE without an unlock. What that buys the visitor
+  // is the syllabus and the free topics — every topic's CONTENT is still gated
+  // individually by resolveAccessibleTopic and by RLS. Only a course with no
+  // preview at all (free_topic_count = 0) still shows the closed door.
+  const access = await getCourseAccessContext(user.id, courseId);
+  const canPreview = access.exists && !access.hasFullAccess && access.freeTopicCount > 0;
+  if (!access.exists || (!access.hasFullAccess && !canPreview)) {
     // Locked or nonexistent, deliberately indistinguishable: no title, no topic
     // count, nothing about the course leaves the server. The grid on /oyrenme
     // is where a locked course is actually purchasable.
@@ -95,11 +105,52 @@ export default async function CoursePage({ params }: { params: Promise<{ courseI
   // Coin balance is no longer read here: the mobile course header that showed
   // it was removed in favour of the global NavBar's CoinBadge, which fetches
   // its own balance client-side. One fewer per-request DB round trip.
-  const [topics, courses] = await Promise.all([
+  // The energy balance is read only in preview mode — it is display for the
+  // purchase dialog, and a fully-unlocked course has no dialog to show. Fails
+  // open to null, which renders as "—".
+  const [topics, courses, energyBalance] = await Promise.all([
     getCourseTopics(courseId, user.id),
     getCourses(user.id),
+    canPreview
+      ? getEnergyStatus(user.id)
+          .then((s) => s.balance)
+          .catch(() => null)
+      : Promise.resolve(null),
   ]);
   const course = courses.find((c) => c.id === courseId);
+  const lockedTopicCount = topics.filter((t) => t.requiresUnlock).length;
+
+  // The paywall banner, shown only while previewing and only when there is
+  // actually something behind the wall. Wraps the same UnlockCourseCard the
+  // /oyrenme grid uses, so there is one purchase dialog in the app, not two.
+  const unlockBanner =
+    canPreview && lockedTopicCount > 0 && course ? (
+      <UnlockCourseCard
+        courseId={courseId}
+        title={course.title}
+        price={course.price}
+        balance={energyBalance}
+        className="block w-full text-left"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-primary/40 bg-surface p-6 shadow-sm">
+          <div className="min-w-0">
+            <p className="text-[12px] font-bold uppercase tracking-[0.1em] text-primary">
+              Pulsuz hissə bitir
+            </p>
+            <p className="mt-1 text-[16px] font-semibold text-navy">
+              Qalan {lockedTopicCount} mövzunu açmaq üçün kursu al
+            </p>
+            <p className="mt-1 text-[13px] leading-relaxed text-on-surface-variant">
+              Birdəfəlik ödəniş — kurs həmişəlik açıq qalır. Testləri yenə özün keçməlisən.
+            </p>
+          </div>
+          <span className="inline-flex shrink-0 items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-[13px] font-bold text-on-primary">
+            <EnergyIcon width={15} height={15} aria-hidden />
+            {course.price} enerji
+          </span>
+        </div>
+      </UnlockCourseCard>
+    ) : null;
   const passedCount = topics.filter((t) => t.passed).length;
   const progressPct = topics.length > 0 ? Math.round((passedCount / topics.length) * 100) : 0;
   // "Sizin üçün seçilənlər" mobile rail — same getCourses() read as above,
@@ -113,6 +164,7 @@ export default async function CoursePage({ params }: { params: Promise<{ courseI
     title: topic.title,
     passed: topic.passed,
     isUnlocked: topic.isUnlocked,
+    requiresUnlock: topic.requiresUnlock,
     attempts: topic.attempts,
     bestScore: topic.bestScore,
     href: `/oyrenme/${courseId}/${topic.id}`,
@@ -234,6 +286,11 @@ export default async function CoursePage({ params }: { params: Promise<{ courseI
                   <h2 className="mt-2 text-[28px] font-semibold leading-tight text-navy md:text-[40px]">
                     Mövzuları ardıcıllıqla keç.
                   </h2>
+
+                  {/* Above the list on purpose: it explains the padlocks the
+                      visitor is about to scroll past, instead of waiting at the
+                      bottom of a 19-row syllabus. */}
+                  {unlockBanner && <div className="mt-6">{unlockBanner}</div>}
                   {/* [&>li]:min-w-0 — same grid-item min-width:auto trap as the
                       mobile list: without it a row wider than its 1fr track
                       (icon + CTA + text) overflows at tablet widths. */}
@@ -272,7 +329,11 @@ export default async function CoursePage({ params }: { params: Promise<{ courseI
                         );
                       }
 
-                      if (!topic.passed && topic.isUnlocked) {
+                      // Both gates must be clear to open a topic: the
+                      // sequential rule (isUnlocked) AND the paywall
+                      // (requiresUnlock). They fail for different reasons and
+                      // the locked row below says which.
+                      if (!topic.passed && topic.isUnlocked && !topic.requiresUnlock) {
                         return (
                           <li key={topic.id}>
                             <Link
@@ -318,7 +379,7 @@ export default async function CoursePage({ params }: { params: Promise<{ courseI
                                 {topic.title}
                               </p>
                               <p className="mt-0.5 text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant">
-                                {num} · Bağlı
+                                {num} · {topic.requiresUnlock ? 'Kursu al' : 'Bağlı'}
                               </p>
                             </div>
                           </div>

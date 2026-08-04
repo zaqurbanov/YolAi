@@ -8,6 +8,10 @@ import type { GenState } from './CourseTopicsPanel';
 import { deleteTopicAction, moveTopicAction, updateTopicAction } from './actions';
 import TopicSplitPanel from './TopicSplitPanel';
 
+// Calmer than the `.editorial .mono-label` treatment (Manrope 700 / 0.1em),
+// which reads as shouting when four chips sit under every row title.
+const CHIP_TEXT = 'text-[11px] font-medium tracking-normal';
+
 interface TopicCardProps {
   topic: LessonTopicRow;
   index: number;
@@ -105,22 +109,26 @@ export default function TopicCard({
 
   return (
     <div
-      className={`rounded-xl border p-3 transition ${
-        isGenerating ? 'border-primary/60 bg-primary/5' : 'border-outline-variant/40'
+      className={`border-l-2 px-3 py-3 transition sm:px-4 ${
+        isGenerating ? 'border-primary bg-primary/5' : 'border-transparent'
       }`}
     >
-      <div className="flex flex-wrap items-start justify-between gap-2">
+      <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-2.5">
         <div className="flex min-w-0 items-start gap-2">
-          <span className="mono-label mt-0.5 w-6 shrink-0 text-on-surface-variant">{index + 1}.</span>
+          <span className="mt-px w-5 shrink-0 text-[11px] font-medium tabular-nums text-on-surface-variant">
+            {index + 1}.
+          </span>
           <div className="min-w-0">
-            <div className="font-medium text-on-surface">{topic.title}</div>
+            <div className="text-label-sm font-medium tracking-[-0.01em] text-on-surface">
+              {topic.title}
+            </div>
 
-            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            <div className="mt-1.5 flex flex-wrap items-center gap-1">
               <Chip
                 size="sm"
                 variant="soft"
                 color={isPublished ? 'success' : 'default'}
-                className="mono-label"
+                className={CHIP_TEXT}
               >
                 {isPublished ? 'dərc edilib' : 'layihə'}
               </Chip>
@@ -129,7 +137,7 @@ export default function TopicCard({
                 size="sm"
                 variant="soft"
                 color={hasContent ? 'accent' : 'default'}
-                className="mono-label"
+                className={CHIP_TEXT}
               >
                 {hasContent ? 'material var' : 'material yoxdur'}
               </Chip>
@@ -138,13 +146,13 @@ export default function TopicCard({
                 size="sm"
                 variant="soft"
                 color={topic.questionCount > 0 ? 'accent' : 'default'}
-                className="mono-label"
+                className={CHIP_TEXT}
               >
                 {topic.publishedQuestionCount}/{topic.questionCount} sual
               </Chip>
 
               {topic.sourceCitations.length > 0 && (
-                <Chip size="sm" variant="soft" color="default" className="mono-label">
+                <Chip size="sm" variant="soft" color="default" className={CHIP_TEXT}>
                   {topic.sourceCitations.length} istinad
                 </Chip>
               )}
@@ -152,25 +160,31 @@ export default function TopicCard({
           </div>
         </div>
 
-        <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+        {/* No `shrink-0`: this row wraps, so a non-shrinkable flex item resolves
+            its basis to the max-content width of all five buttons and pushes
+            past a 375px viewport. It gets its own full-width line on mobile
+            instead. */}
+        <div className="flex w-full min-w-0 flex-wrap items-center gap-1.5 sm:w-auto sm:justify-end">
           {isGenerating && (
-            <span className="mono-label flex items-center gap-1.5 text-primary">
+            <span className="flex items-center gap-1.5 text-[11px] font-medium text-primary">
               <Spinner size="sm" tone="current" />
               {contentRunning ? 'material yaradılır…' : questionsRunning ? 'suallar yaradılır…' : 'yaradılır…'}
             </span>
           )}
-          {isQueued && <span className="mono-label text-on-surface-variant">növbədə</span>}
+          {isQueued && (
+            <span className="text-[11px] font-medium text-on-surface-variant">növbədə</span>
+          )}
 
           {/* Content and questions are separate backend calls and a topic can
               legitimately have one without the other, so they get separate
               buttons rather than one "material" button doing both. */}
           {!isGenerating && !isQueued && (
             <>
-              <Button variant="outline" size="sm" isDisabled={isRunLocked} onPress={onGenerateContent}>
+              <Button variant="tertiary" size="sm" isDisabled={isRunLocked} onPress={onGenerateContent}>
                 {hasContent ? 'Materialı yenidən yarat' : 'Dərs materialı yarat'}
               </Button>
               <Button
-                variant="outline"
+                variant="tertiary"
                 size="sm"
                 isDisabled={isRunLocked}
                 onPress={onGenerateQuestions}
@@ -179,7 +193,7 @@ export default function TopicCard({
               </Button>
               {canSplit && (
                 <Button
-                  variant="ghost"
+                  variant="tertiary"
                   size="sm"
                   isDisabled={isRunLocked}
                   onPress={() => setSplitOpen((v) => !v)}
@@ -199,7 +213,7 @@ export default function TopicCard({
                   }
                 >
                   <Button
-                    variant="ghost"
+                    variant="tertiary"
                     size="sm"
                     isDisabled={isRunLocked || !canMove || movingTo !== null}
                     onPress={() => setMoveOpen((v) => !v)}
@@ -215,7 +229,9 @@ export default function TopicCard({
             </>
           )}
 
-          <Button variant="ghost" size="sm" onPress={() => setExpanded((v) => !v)}>
+          {/* The row's one clear action, tinted rather than filled — the iOS
+              "tinted button" role. Everything else stays neutral/quiet. */}
+          <Button variant="secondary" size="sm" onPress={() => setExpanded((v) => !v)}>
             {expanded ? 'Gizlət' : 'Bax / redaktə et'}
           </Button>
         </div>
@@ -225,23 +241,23 @@ export default function TopicCard({
           text (model id + message) is rendered verbatim — collapsing it into
           "Xəta" is what made these failures invisible in the first place. */}
       {gen?.content?.status === 'error' && (
-        <p className="mono-label mt-2 pl-8 break-words text-danger">
+        <p className="mt-2 pl-7 text-[11px] leading-4 break-words text-danger">
           Dərs materialı uğursuz oldu: {gen.content.message ?? 'naməlum xəta'}
         </p>
       )}
 
       {gen?.questions?.status === 'error' && (
-        <p className="mono-label mt-2 pl-8 break-words text-danger">
+        <p className="mt-2 pl-7 text-[11px] leading-4 break-words text-danger">
           Suallar uğursuz oldu: {gen.questions.message ?? 'naməlum xəta'}
         </p>
       )}
 
       {gen?.status === 'idle' && gen.message && (
-        <p className="mono-label mt-2 pl-8 text-on-surface-variant">{gen.message}</p>
+        <p className="mt-2 pl-7 text-[11px] leading-4 text-on-surface-variant">{gen.message}</p>
       )}
 
       {gen?.status === 'done' && (
-        <p className="mono-label mt-2 pl-8 text-go-green">
+        <p className="mt-2 pl-7 text-[11px] leading-4 text-go-green">
           {gen.content?.status === 'done' ? 'Material hazırdır' : null}
           {gen.content?.status === 'done' && gen.questions?.status === 'done' ? ' · ' : null}
           {gen.questions?.status === 'done' ? `${gen.questionsCreated ?? 0} sual yaradıldı` : null}
@@ -252,14 +268,14 @@ export default function TopicCard({
           means a 10-question draw barely varies between attempts), so it is
           shown as a persistent warning rather than folded into the counts. */}
       {gen?.belowPoolMinimum && (
-        <p className="mono-label mt-1 pl-8 text-caution-orange">
+        <p className="mt-1 pl-7 text-[11px] leading-4 text-caution-orange">
           Diqqət: sual bankı 15-dən azdır. Testin təsadüfiliyi zəif olacaq — yenidən yaratmağı
           düşünün.
         </p>
       )}
 
       {gen?.missingChunkCount ? (
-        <p className="mono-label mt-1 pl-8 text-caution-orange">
+        <p className="mt-1 pl-7 text-[11px] leading-4 text-caution-orange">
           {gen.missingChunkCount} mənbə hissəsi tapılmadı — material natamam ola bilər.
         </p>
       ) : null}
@@ -268,15 +284,15 @@ export default function TopicCard({
           document picker uses, and it keeps the keyboard path a plain tab-and-
           enter with no popover state to manage. */}
       {moveOpen && canMove && (
-        <div className="mt-3 rounded-xl border border-outline-variant/40 p-3">
-          <div className="mono-label mb-2 uppercase text-on-surface-variant">
+        <div className="mt-3 rounded-2xl border border-outline-variant/30 p-3">
+          <div className="text-legal-citation mb-2 text-on-surface-variant">
             Hədəf kurs (eyni sənəd)
           </div>
           <div className="space-y-1.5">
             {moveTargets.map((target) => (
               <Button
                 key={target.id}
-                variant="outline"
+                variant="tertiary"
                 size="sm"
                 className="w-full justify-start"
                 isPending={movingTo === target.id}
@@ -292,7 +308,7 @@ export default function TopicCard({
               </Button>
             ))}
           </div>
-          <p className="mono-label mt-2 text-on-surface-variant">
+          <p className="mt-2 text-[11px] leading-4 text-on-surface-variant">
             Mövzu hədəf kursun sonuna əlavə olunur. İrəliləyiş qeydi olan və ya dərc edilmiş mövzu
             köçürülmür.
           </p>
@@ -384,7 +400,7 @@ function TopicEditor({
   }
 
   return (
-        <div className="mt-3 space-y-3 border-t border-outline-variant/40 pt-3">
+        <div className="mt-3 space-y-3 border-t border-outline-variant/30 pt-3">
           <TextField value={title} onChange={setTitle} aria-label="Mövzu adı">
             <TextArea rows={1} />
           </TextField>
@@ -395,22 +411,22 @@ function TopicEditor({
               placeholder="Material hələ yaradılmayıb. «Dərs materialı yarat» düyməsini işlədin və ya əl ilə yazın."
             />
           </TextField>
-          <p className="mono-label text-on-surface-variant">
+          <p className="text-[11px] leading-4 text-on-surface-variant">
             Format: sadələşdirilmiş Markdown — ## / ### başlıqlar, «- » siyahılar, **qalın», «&gt; »
             sitat, adi abzaslar. Cədvəl, HTML və kod bloku dəstəklənmir.
           </p>
 
           {topic.sourceCitations.length > 0 && (
             <div>
-              <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant mb-1.5">İstinadlar</div>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="text-legal-citation mb-1.5 text-on-surface-variant">İstinadlar</div>
+              <div className="flex flex-wrap gap-1">
                 {topic.sourceCitations.map((c, i) => (
                   <Chip
                     key={`${c.chunk_id}-${i}`}
                     size="sm"
                     variant="soft"
                     color="default"
-                    className="mono-label"
+                    className={CHIP_TEXT}
                   >
                     {c.article_label ?? 'mənbə'}
                     {c.page_number !== null ? ` · s.${c.page_number}` : ''}
@@ -421,9 +437,9 @@ function TopicEditor({
           )}
 
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               <Button
-                variant="outline"
+                variant="tertiary"
                 size="sm"
                 isPending={saving}
                 isDisabled={saving || isRunLocked}
@@ -441,7 +457,6 @@ function TopicEditor({
                 <Button
                   variant="primary"
                   size="sm"
-                  className="rounded-full"
                   isPending={publishing}
                   isDisabled={publishing || isRunLocked}
                   onPress={onPublish}
@@ -467,7 +482,7 @@ function TopicEditor({
           </div>
 
           {!canPublish && !isPublished && (
-            <p className="mono-label text-on-surface-variant">
+            <p className="text-[11px] leading-4 text-on-surface-variant">
               Dərc etmək üçün mövzunun materialı və ən azı bir sualı olmalıdır.
             </p>
           )}

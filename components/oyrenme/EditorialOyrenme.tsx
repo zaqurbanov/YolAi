@@ -82,9 +82,14 @@ const PILL = 'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11
  */
 function CourseCardBody({ course, index }: { course: CourseSummary; index: number }) {
   const isEmpty = course.totalTopics === 0;
-  const isLocked = !isEmpty && !course.isUnlocked;
-  const isOpen = !isEmpty && course.isUnlocked;
-  const isDone = isOpen && course.passedTopics === course.totalTopics;
+  // PREVIEW (0100): not purchased, but the first topics are free. Such a card
+  // behaves like an OPEN one — it links into the course, where the syllabus and
+  // the free lessons are, and the purchase is offered there. Selling before the
+  // user has seen anything is the shape this replaced.
+  const canPreview = !isEmpty && !course.isUnlocked && course.freeTopicCount > 0;
+  const isLocked = !isEmpty && !course.isUnlocked && !canPreview;
+  const isOpen = !isEmpty && (course.isUnlocked || canPreview);
+  const isDone = !isEmpty && course.isUnlocked && course.passedTopics === course.totalTopics;
 
   return (
     <>
@@ -99,10 +104,15 @@ function CourseCardBody({ course, index }: { course: CourseSummary; index: numbe
             Kilidli
           </span>
         )}
+        {canPreview && (
+          <span className={`${PILL} bg-sage/40 text-teal-deep`}>
+            {course.freeTopicCount} dərs pulsuz
+          </span>
+        )}
         {isEmpty && (
           <span className={`${PILL} bg-surface-tertiary text-on-surface-variant`}>Tezliklə</span>
         )}
-        {isOpen && (
+        {isOpen && !canPreview && (
           <span
             className={`${PILL} tabular-nums ${isDone ? 'bg-sage/40 text-teal-deep' : 'bg-surface-tertiary text-navy'}`}
           >
@@ -363,8 +373,11 @@ export default function EditorialOyrenme({
                 // "Empty" wins over "locked": a course with nothing published
                 // in it isn't a thing to sell yet.
                 const isEmpty = course.totalTopics === 0;
-                const isLocked = !isEmpty && !course.isUnlocked;
-                const isOpen = !isEmpty && course.isUnlocked;
+                // Same three-way split as CourseCardBody: a previewable course
+                // is a LINK (into the free lessons), not a purchase button.
+                const canPreview = !isEmpty && !course.isUnlocked && course.freeTopicCount > 0;
+                const isLocked = !isEmpty && !course.isUnlocked && !canPreview;
+                const isOpen = !isEmpty && (course.isUnlocked || canPreview);
                 const body = <CourseCardBody course={course} index={i} />;
 
                 if (isLocked) {
@@ -448,7 +461,12 @@ export default function EditorialOyrenme({
               </Link>
             </div>
 
-            <ul className="mt-8 grid gap-3 md:grid-cols-2">
+            {/* [&>li]:min-w-0 — same grid-item min-width:auto trap as the
+                mobile course-page list and the desktop topic grid: without it a
+                row's intrinsic width (icon + CTA + nowrap text) forces the track
+                wider than the viewport and the topic cards overflow off-screen
+                on mobile. min-w-0 lets the flex text span's own truncate engage. */}
+            <ul className="mt-8 grid gap-3 md:grid-cols-2 [&>li]:min-w-0">
               {syllabus.map((topic, i) => {
                 const num = String(i + 1).padStart(2, '0');
                 const href = `/oyrenme/${featuredCourse.id}/${topic.id}`;

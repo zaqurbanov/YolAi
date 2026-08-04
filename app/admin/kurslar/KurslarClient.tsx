@@ -105,7 +105,7 @@ export default function KurslarClient({ initialCourses }: KurslarClientProps) {
             {showGroups ? 'Bağla' : 'Sənəddən kurslar yarat'}
           </Button>
           <Button
-            variant="outline"
+            variant="tertiary"
             size="sm"
             className="rounded-full"
             onPress={() => {
@@ -119,7 +119,7 @@ export default function KurslarClient({ initialCourses }: KurslarClientProps) {
       </div>
 
       {error && (
-        <div className="mb-4 rounded-xl border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger">
+        <div className="mb-4 rounded-2xl border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger">
           {error}
         </div>
       )}
@@ -141,7 +141,7 @@ export default function KurslarClient({ initialCourses }: KurslarClientProps) {
 
       <div className="grid gap-6 lg:grid-cols-[22rem_1fr]">
         <div className="space-y-3">
-          <div className="mono-label text-on-surface-variant uppercase">
+          <div className="text-legal-citation text-on-surface-variant">
             Kurs siyahısı ({courses.length})
           </div>
 
@@ -170,7 +170,7 @@ export default function KurslarClient({ initialCourses }: KurslarClientProps) {
                       size="sm"
                       variant="soft"
                       color={course.status === 'published' ? 'success' : 'default'}
-                      className="mono-label shrink-0"
+                      className="shrink-0 text-[11px] font-medium tracking-normal"
                     >
                       {course.status === 'published' ? 'dərc edilib' : 'layihə'}
                     </Chip>

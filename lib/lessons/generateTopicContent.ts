@@ -1,8 +1,8 @@
 import 'server-only';
 import { z } from 'zod';
 import {
-  getChatModelChain,
-  getChatModelId,
+  getLessonContentModelChain,
+  getLessonContentModelId,
   getRewriteModelChain,
   getRewriteModelId,
   getProviderCallOptions,
@@ -130,8 +130,8 @@ MÜTLƏQ ƏMƏL EDİLMƏLİ OLAN ƏSAS QAYDA — HEÇ NƏ UYDURMA:
 - Mətndə dərs üçün yararlı heç nə yoxdursa, content sahəsini boş sətir kimi qaytar.
 
 DƏRSİN QURULUŞU (content sahəsi, Markdown) — DƏRS BİR GÜNDƏLİK SƏHNƏ ƏTRAFINDA QURULUR:
-1. AÇILIŞ (2-4 cümlə, başlıqdan dərhal sonra, başlıqsız): oxucunu bu qaydanın hökm sürdüyü yol vəziyyətinə qoyan qısa, canlı səhnə. Oxucuya "sən" deyə müraciət et. Səhnəni sənə verilən SƏHNƏ ÇƏRÇİVƏSİ üzərində qur. Səhnə oxucunu maraqlandırmalı, amma heç bir yeni qayda gətirməməlidir.
-   AÇILIŞI ŞABLONA ÇEVİRMƏ — bu qayda pozulmamalıdır: dərsi vaxt bildirən ifadə ilə BAŞLATMA. "Səhər tezdən", "Səhər saatlarında", "Axşam", "Bir gün", "Günlərin bir günü" və bənzər açılışlar QADAĞANDIR. Birinci cümlə birbaşa səhnənin içindən başlasın — sənin etdiyin hərəkətdən, qarşında gördüyün mənzərədən və ya yolun vəziyyətindən.
+1. AÇILIŞ (2-4 cümlə, başlıqdan dərhal sonra, başlıqsız): oxucunu bu qaydanın hökm sürdüyü yol vəziyyətinə qoyan qısa, canlı səhnə. Oxucuya "sən" deyə müraciət et. Səhnə oxucunu maraqlandırmalı, amma heç bir yeni qayda gətirməməlidir.
+   BİRİNCİ CÜMLƏ sənə verilən SƏHNƏ ÇƏRÇİVƏSİNİN özünü təsvir etməlidir — həmin çərçivədə göstərilən yerdən, yol tipindən və şəraitdən. Cümləni oxucunun etdiyi hərəkətlə və ya gördüyü mənzərə ilə aç. Günün vaxtı yalnız çərçivənin özündə varsa qeyd oluna bilər; çərçivədə yoxdursa, vaxtdan ümumiyyətlə danışma.
 2. "## " bölmə başlıqları altında hekayə irəliləyir: hər bölmə səhnənin bir mərhələsini göstərir və o mərhələdə tətbiq olunan qaydaları sıx siyahı halında DEYİL, hərəkəti və onun səbəbini izah edən qısa abzaslarla (2-4 cümlə) verir. Qaydaları səhnənin axınına qur — oxucu qaydanı "nə etməliyəm" kimi deyil, "niyə belə edirəm" kimi başa düşməlidir. Ən vacib ifadələri **qalın** yaz.
 3. Yalnız həqiqətən ardıcıl yoxlama tələb edən yerlərdə "- " sadalama işlət (məsələn addım-addım hərəkət sırası). Hər qaydanı siyahıya çevirmə.
 4. Mümkün olduqda "### Niyə vacibdir" alt başlığı: qaydanın arxasındakı səbəbi izah et — yalnız mətndən çıxan mənaya əsaslanaraq.
@@ -156,6 +156,22 @@ DƏRSİN QURULUŞU (content sahəsi, Markdown) — DƏRS BİR GÜNDƏLİK SƏHN�
 // came back starting "Səhər tezdən". That example is gone, but removing it only
 // changes WHICH phrase gets over-used, so the caller now assigns each topic a
 // concrete scene frame instead.
+//
+// TWO THINGS THAT DID NOT WORK, both removed — do not reintroduce either:
+//
+//   1. A BLACKLIST of banned openings ("Səhər tezdən", "Səhər saatlarında",
+//      "Bir gün", …). Naming the phrase you don't want is negation priming: it
+//      makes the phrase the most concrete opening text anywhere in the prompt.
+//      Output moved from "Səhər tezdən" straight to "Səhər saatlarında" — the
+//      SECOND entry on the list. Say what the opening MUST be, never what it
+//      must not be.
+//   2. An ESCAPE HATCH ("if this frame doesn't suit the topic, pick another
+//      everyday driving situation"). It was meant to protect quality on topics
+//      where a road scene is awkward, but a model offered an opt-out takes it
+//      on essentially every call and falls back to its own habitual opener —
+//      which is exactly the uniformity this whole mechanism exists to prevent.
+//      The frame is now unconditional, and it is the FIRST line of the user
+//      prompt rather than a clause buried before the source text.
 //
 // The frame is picked deterministically from the topic title (see pickSceneFrame),
 // not at random: regenerating a topic must reproduce the same lesson, otherwise an
@@ -224,9 +240,13 @@ function describeLlmError(modelId: string, error: unknown): string {
   return `${modelId}: ${truncated}`;
 }
 
-// Reading material is prose, not structured extraction, so it uses the main
-// chat model rather than the small/cheap rewrite model — the same quality bar
-// as a user-facing chat answer applies, since this is the text learners read.
+// Reading material is prose, not structured extraction, so it never uses the
+// small/cheap rewrite model. It does NOT follow LLM_PROVIDER either: it runs on
+// its own Gemini-first chain (getLessonContentModelChain), because Azerbaijani
+// long-form prose is where the current chat provider is weakest — see that
+// function's comment in lib/llm/index.ts for the full reasoning. The question
+// pool below is unaffected; that IS structured extraction and stays on the
+// rewrite chain.
 export async function generateTopicReadingContent(
   topicTitle: string,
   chunks: TopicSourceChunk[]
@@ -237,10 +257,10 @@ export async function generateTopicReadingContent(
   }
 
   try {
-    const { object } = await generateObjectWithRouting(getChatModelChain(), readingContentSchema, {
+    const { object } = await generateObjectWithRouting(getLessonContentModelChain(), readingContentSchema, {
       system: READING_SYSTEM_PROMPT,
       providerOptions: getProviderCallOptions(),
-      prompt: `Mövzunun təxmini adı: ${topicTitle}\n\nSƏHNƏ ÇƏRÇİVƏSİ (bu dərsin açılış səhnəsini bu şəraitin üzərində qur): ${pickSceneFrame(topicTitle)}\nBu çərçivə mövzuya heç cür uyğun gəlmirsə, mövzuya uyğun başqa bir gündəlik sürücülük şəraiti seç — amma dərsi yenə də vaxt bildirən ifadə ilə başlatma.\n\nSənədin bu mövzuya aid hissəsi:\n"""\n${sourceText}\n"""`,
+      prompt: `SƏHNƏ ÇƏRÇİVƏSİ — bu dərsin açılış cümləsi məhz bu şəraiti təsvir etməlidir: ${pickSceneFrame(topicTitle)}\n\nMövzunun təxmini adı: ${topicTitle}\n\nSənədin bu mövzuya aid hissəsi:\n"""\n${sourceText}\n"""`,
     });
 
     if (!object.content.trim()) {
@@ -254,7 +274,10 @@ export async function generateTopicReadingContent(
   } catch (error) {
     void logError('lessons.generateTopicContent.reading', error);
     console.error('[lessons/generateTopicContent] reading content generation failed:', error);
-    return { ok: false, error: `Dərs materialı yaradılmadı — ${describeLlmError(getChatModelId(), error)}` };
+    return {
+      ok: false,
+      error: `Dərs materialı yaradılmadı — ${describeLlmError(getLessonContentModelId(), error)}`,
+    };
   }
 }
 

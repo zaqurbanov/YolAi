@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Button, Chip } from '@heroui/react';
+import { Button, Chip, NumberField } from '@heroui/react';
 import { Spinner } from '@/components/Spinner';
 import type { CourseGroupProposal } from '@/lib/lessons/groupTopicsIntoCourses';
 import type { CreatedCourseWithTopics, FailedCourseCreation } from '@/lib/lessons/courses';
@@ -37,6 +37,10 @@ export default function CourseGroupsCreator({
   const [documentId, setDocumentId] = useState<string | null>(null);
   const [proposing, setProposing] = useState<'ai' | 'deterministic' | null>(null);
   const [elapsed, setElapsed] = useState(0);
+  // undefined = "let the program decide", which is the pre-existing behaviour
+  // and must stay reachable. NaN is React Aria's empty value for NumberField,
+  // so it is normalised away here rather than sent as 0.
+  const [groupCount, setGroupCount] = useState<number | undefined>(undefined);
   const [proposal, setProposal] = useState<CourseGroupProposal | null>(null);
   // Bumped per proposal so the editor remounts with fresh drafts instead of
   // being reset from an effect (react-hooks/set-state-in-effect is an error).
@@ -62,7 +66,17 @@ export default function CourseGroupsCreator({
     setElapsed(0);
     setProposing(strategy);
     try {
-      const response = await proposeCourseGroupsAction(documentId, strategy);
+      // The count is meaningless to the AI grouping (the model picks its own
+      // boundaries), so it is only sent on the deterministic path. The server
+      // clamps to [1, topic count] — deliberately NOT to MAX_GROUPS — so no
+      // upper bound is imposed here.
+      const response = await proposeCourseGroupsAction(
+        documentId,
+        strategy,
+        strategy === 'deterministic' && groupCount !== undefined && groupCount >= 1
+          ? Math.floor(groupCount)
+          : undefined
+      );
       if (!response.ok) {
         // Deliberately does NOT store a failed proposal: an empty one would
         // collapse the panel and leave no way to retry.
@@ -88,12 +102,12 @@ export default function CourseGroupsCreator({
     return (
       <div className="glass-card rounded-2xl p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="text-[12px] font-bold uppercase tracking-[0.1em] text-navy">
+          <div className="text-legal-citation text-navy">
             Nəticə
           </div>
           <div className="flex items-center gap-2">
             <Button
-              variant="outline"
+              variant="tertiary"
               size="sm"
               className="rounded-full"
               onPress={() => {
@@ -119,14 +133,14 @@ export default function CourseGroupsCreator({
             {result.created.map(({ course, topics }) => (
               <div
                 key={course.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-outline-variant/40 px-3 py-2"
+                className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-outline-variant/40 px-3 py-2"
               >
                 <span className="min-w-0 text-sm text-on-surface">{course.title}</span>
                 <div className="flex shrink-0 items-center gap-1.5">
-                  <Chip size="sm" variant="soft" color="default" className="mono-label">
+                  <Chip size="sm" variant="soft" color="default" className="text-[11px] font-medium tracking-normal">
                     {topics.length} mövzu
                   </Chip>
-                  <Chip size="sm" variant="soft" color="success" className="mono-label">
+                  <Chip size="sm" variant="soft" color="success" className="text-[11px] font-medium tracking-normal">
                     {course.isFree
                       ? 'pulsuz'
                       : course.unlockPrice !== null
@@ -143,15 +157,15 @@ export default function CourseGroupsCreator({
             carries the backend's own error text, and an orphanCourseId means an
             EMPTY course row is live and only a human can clean it up. */}
         {result.failed.length > 0 && (
-          <div className="mt-4 rounded-xl border border-danger/40 bg-danger/5 p-3">
-            <p className="mono-label uppercase text-danger">Uğursuz kurslar</p>
+          <div className="mt-4 rounded-2xl border border-danger/40 bg-danger/5 p-3">
+            <p className="text-legal-citation text-danger">Uğursuz kurslar</p>
             <div className="mt-2 space-y-2">
               {result.failed.map((fail, i) => (
                 <div key={`${fail.title}-${i}`}>
                   <p className="text-sm font-medium text-on-surface">{fail.title}</p>
-                  <p className="mono-label break-words text-danger">{fail.error}</p>
+                  <p className="text-[11px] leading-4 break-words text-danger">{fail.error}</p>
                   {fail.orphanCourseId && (
-                    <p className="mono-label mt-1 break-words text-caution-orange">
+                    <p className="text-[11px] leading-4 mt-1 break-words text-caution-orange">
                       Boş kurs sətri qaldı və avtomatik silinmədi — kurs siyahısından «
                       {fail.title}» kursunu (id: {fail.orphanCourseId}) əl ilə silin.
                     </p>
@@ -163,7 +177,7 @@ export default function CourseGroupsCreator({
         )}
 
         {result.created.length > 0 && (
-          <p className="mono-label mt-3 text-on-surface-variant">
+          <p className="text-[11px] leading-4 mt-3 text-on-surface-variant">
             Kurslar layihə (draft) statusundadır. Hər kurs üçün mövzuların materialını və suallarını
             yaradın, sonra dərc edin.
           </p>
@@ -211,17 +225,17 @@ export default function CourseGroupsCreator({
       </div>
 
       {(error || documentsError) && (
-        <p className="mono-label mt-3 break-words text-danger">{error ?? documentsError}</p>
+        <p className="text-[11px] leading-4 mt-3 break-words text-danger">{error ?? documentsError}</p>
       )}
 
       {proposing ? (
-        <div className="mt-4 rounded-xl border border-primary/40 bg-primary/5 px-4 py-3">
+        <div className="mt-4 rounded-2xl border border-primary/40 bg-primary/5 px-4 py-3">
           <div className="flex items-center gap-2 text-sm text-primary">
             <Spinner size="sm" tone="current" />
             {proposing === 'ai'
               ? 'AI sənədi mövzulara, sonra mövzuları kurslara bölür…'
-              : 'Sənəd mexaniki olaraq bölünür…'}
-            <span className="mono-label ml-auto">{elapsed} san.</span>
+              : `Sənəd${groupCount ? ` ${Math.floor(groupCount)}` : ''} bərabər kursa bölünür…`}
+            <span className="text-[11px] leading-4 ml-auto">{elapsed} san.</span>
           </div>
           <p className="mt-1.5 text-label-sm text-on-surface-variant">
             {proposing === 'ai'
@@ -235,27 +249,55 @@ export default function CourseGroupsCreator({
       ) : (
         documents !== null &&
         documents.length > 0 && (
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <Button
-              variant="primary"
-              size="sm"
-              className="rounded-full"
-              isDisabled={!documentId}
-              onPress={() => void handlePropose('ai')}
-            >
-              Kursları təklif et (AI)
-            </Button>
-            {/* Escape hatch: the mechanical split is instant and is also what
-                the AI path degrades to, so it stays selectable. */}
-            <Button
-              variant="outline"
-              size="sm"
-              className="rounded-full"
-              isDisabled={!documentId}
-              onPress={() => void handlePropose('deterministic')}
-            >
-              Mexaniki bölgü
-            </Button>
+          <div className="mt-4 space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="primary"
+                size="sm"
+                className="rounded-full"
+                isDisabled={!documentId}
+                onPress={() => void handlePropose('ai')}
+              >
+                Kursları təklif et (AI)
+              </Button>
+
+              {/* Escape hatch: the AI-free split is instant and is also what
+                  the AI path degrades to, so it stays selectable. Named
+                  «AI-siz», not «mexaniki» — the old label read as "manual
+                  split", the opposite of what the button does. */}
+              <NumberField
+                value={groupCount ?? Number.NaN}
+                onChange={(v) =>
+                  setGroupCount(typeof v === 'number' && Number.isFinite(v) ? v : undefined)
+                }
+                minValue={1}
+                step={1}
+                isDisabled={!documentId}
+                aria-label="Kurs sayı (boş buraxsanız avtomatik seçilir)"
+                className="w-[9.5rem] shrink-0"
+              >
+                <NumberField.Group>
+                  <NumberField.DecrementButton />
+                  <NumberField.Input className="w-full text-center" placeholder="avto" />
+                  <NumberField.IncrementButton />
+                </NumberField.Group>
+              </NumberField>
+
+              <Button
+                variant="tertiary"
+                size="sm"
+                className="rounded-full"
+                isDisabled={!documentId}
+                onPress={() => void handlePropose('deterministic')}
+              >
+                AI-siz bərabər bölgü
+              </Button>
+            </div>
+
+            <p className="text-[11px] leading-4 text-on-surface-variant">
+              Soldakı xanaya neçə kurs istədiyinizi yazın. Boş qoysanız, kurs sayını proqram
+              özü seçir. Bu say yalnız «AI-siz bərabər bölgü» üçün işləyir.
+            </p>
           </div>
         )
       )}

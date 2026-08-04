@@ -7,6 +7,7 @@ import { Alert, Button, Chip, Radio, RadioGroup } from '@heroui/react';
 import { buttonVariants } from '@heroui/styles';
 import { Spinner } from '@/components/Spinner';
 import { CheckIcon, CloseIcon, EnergyIcon, LockIcon } from '@/components/icons';
+import { useTopicTestFocus } from '@/components/oyrenme/TopicTestFocus';
 import {
   startTopicAttemptAction,
   submitTopicAttemptAction,
@@ -61,6 +62,10 @@ export default function TopicTest({
 }: TopicTestProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  // Owns nothing itself — flips the page-level flag that unmounts the lesson
+  // text and the prev/next nav while an attempt is open. See
+  // components/oyrenme/TopicTestFocus.tsx for why the article has to go away.
+  const { setTestRunning } = useTopicTestFocus();
 
   const [questions, setQuestions] = useState<DrawnQuestion[] | null>(null);
   const [token, setToken] = useState<string | null>(null);
@@ -84,6 +89,7 @@ export default function TopicTest({
     setToken(null);
     setAnswers({});
     setResult(null);
+    setTestRunning(false);
   }
 
   function handleStart() {
@@ -97,7 +103,12 @@ export default function TopicTest({
         setToken(res.token);
         setAnswers({});
         setResult(null);
+        setTestRunning(true);
         if (typeof res.passThreshold === 'number') setLiveThreshold(res.passThreshold);
+        // The article above is unmounted in the same commit, so the page
+        // shrinks under the current scroll offset and would otherwise leave the
+        // learner looking at the middle of the question list.
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
 
@@ -135,6 +146,9 @@ export default function TopicTest({
       if (res.status === 'success') {
         setResult(res);
         setRetryUnlocked(false);
+        // The attempt is over: the lesson text comes back alongside the answer
+        // review, which is exactly when re-reading it is useful.
+        setTestRunning(false);
         router.refresh();
         return;
       }
@@ -263,6 +277,12 @@ export default function TopicTest({
       {/* ------------------------------------------------------------- running */}
       {phase === 'running' && questions && (
         <>
+          <p className="mb-4 flex items-start gap-2 rounded-2xl border border-outline-variant/40 px-4 py-3 text-label-sm text-on-surface-variant">
+            <LockIcon width={15} height={15} className="mt-0.5 shrink-0" />
+            Test müddətində dərs mətni gizlədilir — məqsəd oxuduğunu yadda saxlamaqdır, mətndən
+            köçürmək deyil. Test bitəndən sonra mətn yenidən açılır.
+          </p>
+
           <div className="mb-5">
             <div className="mb-2 flex items-center justify-between text-label-sm text-on-surface-variant">
               <span>Cavablandırılıb</span>

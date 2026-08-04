@@ -215,6 +215,31 @@ function desiredGroupCount(topicCount: number): number {
   return count === 1 && topicCount >= 2 * MIN_TOPICS_PER_GROUP ? 2 : Math.max(1, count);
 }
 
+/**
+ * Resolves the group count for the deterministic path: the admin's explicit
+ * number when there is one, desiredGroupCount()'s heuristic otherwise.
+ *
+ * AN EXPLICIT COUNT DELIBERATELY BYPASSES MAX_GROUPS (and every other
+ * heuristic here). "Mexaniki bölgü" was mechanical but still automatic — the
+ * program picked the count and the admin could not influence it, which is the
+ * complaint this exists to answer. MAX_GROUPS/MIN_TOPICS_PER_GROUP are taste
+ * for the automatic path, not structural limits; the only real bounds are "at
+ * least one course" and "no more courses than there are topics" (evenRanges
+ * would otherwise emit empty groups). Same reason mergeUntilSane() is NOT
+ * applied on this path: it would squeeze the count back toward 8.
+ *
+ * Untrusted input — this number originates in a server action's arguments.
+ * Non-numeric / non-finite values fall back to the automatic count rather than
+ * clamping to 1, so a broken client cannot silently collapse a document into a
+ * single course.
+ */
+function resolveGroupCount(topicCount: number, requested?: number): number {
+  if (typeof requested !== 'number' || !Number.isFinite(requested)) {
+    return desiredGroupCount(topicCount);
+  }
+  return Math.min(Math.max(Math.floor(requested), 1), Math.max(topicCount, 1));
+}
+
 /** Even split by topic COUNT — topics are already size-normalised upstream. */
 function evenRanges(topics: ProposedTopic[], groupCount: number): RawRange[] {
   const ranges: RawRange[] = [];
@@ -276,9 +301,13 @@ function describeError(error: unknown): string {
 
 function deterministicProposal(
   proposal: TopicProposal,
-  warning?: string
+  warning?: string,
+  groupCount?: number
 ): CourseGroupProposal {
-  const ranges = evenRanges(proposal.topics, desiredGroupCount(proposal.topics.length));
+  const ranges = evenRanges(
+    proposal.topics,
+    resolveGroupCount(proposal.topics.length, groupCount)
+  );
   return {
     documentId: proposal.documentId,
     documentTitle: proposal.documentTitle,
@@ -296,10 +325,17 @@ function deterministicProposal(
  *
  * `useAi = false` skips the model entirely — both an escape hatch for the admin
  * and exactly the path an AI failure degrades to.
+ *
+ * `groupCount` is the admin's explicit course count for the mechanical split.
+ * Omitted (the default, and every pre-existing caller) reproduces the previous
+ * desiredGroupCount() behaviour exactly. It only reaches the deterministic
+ * splitter — including the one an AI failure degrades to; the model's own
+ * grouping prompt is untouched by it.
  */
 export async function groupTopicsIntoCourses(
   proposal: TopicProposal,
-  useAi = true
+  useAi = true,
+  groupCount?: number
 ): Promise<CourseGroupProposal> {
   if (proposal.topics.length === 0) {
     return {
@@ -310,7 +346,7 @@ export async function groupTopicsIntoCourses(
     };
   }
 
-  if (!useAi) return deterministicProposal(proposal);
+  if (!useAi) return deterministicProposal(proposal, undefined, groupCount);
 
   // Titles and sizes only — the outline for 50 topics is ~50 short lines, which
   // is why this fits in a single call where the topic pass needed batching.
@@ -333,7 +369,8 @@ export async function groupTopicsIntoCourses(
     console.error('[lessons/groupTopicsIntoCourses] grouping call failed:', error);
     return deterministicProposal(
       proposal,
-      `Kurs qruplaşdırması üçün AI cavabı alınmadı, bərabər mexaniki bölgü göstərilir. Xəta: ${getRewriteModelId()}: ${describeError(error)}`
+      `Kurs qruplaşdırması üçün AI cavabı alınmadı, bərabər mexaniki bölgü göstərilir. Xəta: ${getRewriteModelId()}: ${describeError(error)}`,
+      groupCount
     );
   }
 
@@ -341,7 +378,8 @@ export async function groupTopicsIntoCourses(
   if (!repaired) {
     return deterministicProposal(
       proposal,
-      'AI etibarlı kurs bölgüsü qaytarmadı, bərabər mexaniki bölgü göstərilir.'
+      'AI etibarlı kurs bölgüsü qaytarmadı, bərabər mexaniki bölgü göstərilir.',
+      groupCount
     );
   }
 
@@ -362,7 +400,8 @@ export async function groupTopicsIntoCourses(
   if (groups.length === 0) {
     return deterministicProposal(
       proposal,
-      'AI etibarlı kurs bölgüsü qaytarmadı, bərabər mexaniki bölgü göstərilir.'
+      'AI etibarlı kurs bölgüsü qaytarmadı, bərabər mexaniki bölgü göstərilir.',
+      groupCount
     );
   }
 

@@ -117,8 +117,14 @@ interface CoursePricingRow {
   id: string;
   is_free: boolean;
   unlock_price: number | null;
+  free_topic_count: number | null;
   status: 'draft' | 'published';
 }
+
+// Pre-0100 fallback. The column is NOT NULL in the schema, so `null` here only
+// ever means "this database has not run 0100 yet" — in which case the honest
+// answer is 0 (no free window), i.e. exactly the old all-or-nothing behaviour.
+const NO_FREE_TOPICS = 0;
 
 // Replaces isValidCategory. A course id arriving from outside (server action
 // argument, route param) is an arbitrary uuid until this says otherwise —
@@ -130,7 +136,7 @@ interface CoursePricingRow {
 async function getPublishedCourse(courseId: string): Promise<CoursePricingRow | null> {
   const { data, error } = await createAdminClient()
     .from('lesson_courses')
-    .select('id, is_free, unlock_price, status')
+    .select('id, is_free, unlock_price, free_topic_count, status')
     .eq('id', courseId)
     .eq('status', 'published')
     .maybeSingle<CoursePricingRow>();
@@ -195,6 +201,70 @@ export async function canAccessCourse(userId: string, courseId: string): Promise
   // grants access to published content. isUserAdmin fails closed.
   if (await isUserAdmin(userId)) return true;
   return hasUnlockedCourse(userId, courseId);
+}
+
+export interface CourseAccessContext {
+  /** The course exists AND is published. Everything else is meaningless if false. */
+  exists: boolean;
+  /** Every topic is readable: free course, admin, or a purchased unlock row. */
+  hasFullAccess: boolean;
+  /**
+   * Topics with `orderIndex < freeTopicCount` are readable WITHOUT an unlock
+   * (0100). 0 means the course is fully behind the paywall.
+   */
+  freeTopicCount: number;
+}
+
+// THE access context — one read that answers both "can this user open the whole
+// course" and "how much of it is free anyway", so the two questions can never
+// be answered from two different reads of the same row.
+//
+// Introduced with the free preview (0100): before it, course access was a
+// single boolean and canAccessCourse() was the whole story. It still is for
+// the all-or-nothing case — `hasFullAccess` is exactly what canAccessCourse
+// used to return — but a caller that serves ONE topic must now also know the
+// free window, and callers must use canAccessTopicAt() rather than re-deriving
+// the comparison.
+//
+// Fails CLOSED in every direction: a nonexistent/draft course, or any read
+// error underneath, yields `{ exists: false, hasFullAccess: false,
+// freeTopicCount: 0 }`, which denies everything.
+export async function getCourseAccessContext(
+  userId: string,
+  courseId: string
+): Promise<CourseAccessContext> {
+  const course = await getPublishedCourse(courseId);
+  if (!course) return { exists: false, hasFullAccess: false, freeTopicCount: NO_FREE_TOPICS };
+
+  const freeTopicCount =
+    typeof course.free_topic_count === 'number' && Number.isFinite(course.free_topic_count)
+      ? Math.max(0, Math.floor(course.free_topic_count))
+      : NO_FREE_TOPICS;
+
+  if (course.is_free) return { exists: true, hasFullAccess: true, freeTopicCount };
+  // Admins are exempt from the paywall, same rule (and same fail-closed
+  // isUserAdmin) as canAccessCourse below.
+  if (await isUserAdmin(userId)) return { exists: true, hasFullAccess: true, freeTopicCount };
+
+  return {
+    exists: true,
+    hasFullAccess: await hasUnlockedCourse(userId, courseId),
+    freeTopicCount,
+  };
+}
+
+/**
+ * Whether ONE topic is readable, given its position in the course. The
+ * authoritative per-topic paywall check — RLS on lesson_topics (0100) encodes
+ * the identical rule independently.
+ *
+ * Says nothing about the SEQUENTIAL rule (pass topic N to open N+1); that is
+ * getCourseTopics'/resolveAccessibleTopic's job, and both gates must pass.
+ */
+export function canAccessTopicAt(context: CourseAccessContext, orderIndex: number): boolean {
+  if (!context.exists) return false;
+  if (context.hasFullAccess) return true;
+  return Number.isFinite(orderIndex) && orderIndex < context.freeTopicCount;
 }
 
 export type UnlockCourseResult =
