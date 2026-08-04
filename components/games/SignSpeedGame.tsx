@@ -176,6 +176,37 @@ function QuestionBoxes({
   );
 }
 
+/**
+ * Placeholder for the sign code + option list while the question's image is
+ * still loading.
+ *
+ * WHY: the code and options are gated on imageReady so text never leads the
+ * image. Until this existed the gate rendered NOTHING, so the area below the
+ * image skeleton collapsed to zero height and every advance looked like the
+ * screen had gone blank — worse here than in Nişan Tapmacası, because this
+ * round is TIMED and the countdown keeps running while the player waits.
+ *
+ * Mirrors the real markup's box model (same radius, border, and a height
+ * matching px-4 py-2.5 + body-md) and uses the REAL option count, which is
+ * already known: only the image is outstanding, never the question data.
+ */
+function QuestionSkeleton({ optionCount }: { optionCount: number }) {
+  return (
+    <>
+      <div className="h-7 w-24 animate-pulse rounded bg-surface-tertiary/60" />
+
+      <div className="grid w-full grid-cols-1 gap-2">
+        {Array.from({ length: optionCount }, (_, i) => (
+          <div
+            key={i}
+            className="h-[42px] animate-pulse rounded-xl border border-outline-variant/40 bg-surface-tertiary/40"
+          />
+        ))}
+      </div>
+    </>
+  );
+}
+
 export default function SignSpeedGame({ energy, onSettled }: SignSpeedGameProps) {
   const [phase, setPhase] = useState<Phase>('idle');
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -362,7 +393,7 @@ export default function SignSpeedGame({ energy, onSettled }: SignSpeedGameProps)
           </div>
         ) : null}
 
-        {imageReady && (
+        {imageReady ? (
           <>
             <p className="text-headline-md text-[22px] text-primary">{question.code}</p>
 
@@ -379,6 +410,8 @@ export default function SignSpeedGame({ energy, onSettled }: SignSpeedGameProps)
               ))}
             </div>
           </>
+        ) : (
+          <QuestionSkeleton optionCount={question.options.length} />
         )}
       </div>
     );

@@ -3,9 +3,9 @@
 import { useState } from 'react';
 import { Button, Chip, TextArea, TextField } from '@heroui/react';
 import { Spinner } from '@/components/Spinner';
-import type { LessonTopicRow } from '@/lib/lessons/courses';
+import type { LessonCourseRow, LessonTopicRow, MoveTopicResult } from '@/lib/lessons/courses';
 import type { GenState } from './CourseTopicsPanel';
-import { deleteTopicAction, updateTopicAction } from './actions';
+import { deleteTopicAction, moveTopicAction, updateTopicAction } from './actions';
 import TopicSplitPanel from './TopicSplitPanel';
 
 interface TopicCardProps {
@@ -14,11 +14,14 @@ interface TopicCardProps {
   gen: GenState | undefined;
   /** True while a batch run is in flight — per-topic mutations are held back. */
   isRunLocked: boolean;
+  /** Other courses over the SAME document — the only legal move targets. */
+  moveTargets: LessonCourseRow[];
   onGenerateContent: () => void;
   onGenerateQuestions: () => void;
   onPublish: () => void;
   /** Receives the course's full refreshed topic list after a split. */
   onSplit: (topics: LessonTopicRow[]) => void;
+  onMoved: (result: MoveTopicResult) => void;
   onChanged: () => void;
   onError: (message: string) => void;
 }
@@ -28,15 +31,19 @@ export default function TopicCard({
   index,
   gen,
   isRunLocked,
+  moveTargets,
   onGenerateContent,
   onGenerateQuestions,
   onPublish,
   onSplit,
+  onMoved,
   onChanged,
   onError,
 }: TopicCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [splitOpen, setSplitOpen] = useState(false);
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [movingTo, setMovingTo] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
 
   const isGenerating = gen?.status === 'running';
@@ -49,6 +56,11 @@ export default function TopicCard({
   // A published topic is live material a learner may be mid-way through; the
   // backend refuses to split one, so the button is not offered at all.
   const canSplit = !isPublished && topic.sourceCitations.length > 1;
+  // The backend refuses to move a published topic (a learner may be mid-way
+  // through it) and one that already carries progress rows. The first is known
+  // here and disables the control outright; the second is only knowable
+  // server-side, so its error text is surfaced verbatim instead.
+  const canMove = !isPublished && moveTargets.length > 0;
 
   async function handleDelete() {
     if (!window.confirm(`"${topic.title}" mövzusu silinsin?`)) return;
@@ -61,6 +73,24 @@ export default function TopicCard({
       onChanged();
     } catch (e) {
       onError(e instanceof Error ? e.message : 'Xəta baş verdi');
+    }
+  }
+
+  async function handleMove(target: LessonCourseRow) {
+    if (!window.confirm(`"${topic.title}" mövzusu «${target.title}» kursuna köçürülsün?`)) return;
+    setMovingTo(target.id);
+    try {
+      const result = await moveTopicAction(topic.id, target.id);
+      if (!result.ok) {
+        onError(result.error);
+        return;
+      }
+      setMoveOpen(false);
+      onMoved(result.data);
+    } catch (e) {
+      onError(e instanceof Error ? e.message : 'Xəta baş verdi');
+    } finally {
+      setMovingTo(null);
     }
   }
 
@@ -157,6 +187,31 @@ export default function TopicCard({
                   {splitOpen ? 'Bölgünü bağla' : 'Hissələrə böl'}
                 </Button>
               )}
+              {moveTargets.length > 0 && (
+                // The title sits on a wrapper: a disabled button gets no
+                // pointer events of its own, so the tooltip has to come from
+                // an element that still does.
+                <span
+                  title={
+                    isPublished
+                      ? 'Dərc edilmiş mövzu köçürülə bilməz — əvvəlcə onu layihəyə qaytarın'
+                      : undefined
+                  }
+                >
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    isDisabled={isRunLocked || !canMove || movingTo !== null}
+                    onPress={() => setMoveOpen((v) => !v)}
+                  >
+                    {isPublished
+                      ? 'Köçürülmür (dərc edilib)'
+                      : moveOpen
+                        ? 'Köçürməni bağla'
+                        : 'Başqa kursa köçür'}
+                  </Button>
+                </span>
+              )}
             </>
           )}
 
@@ -208,6 +263,41 @@ export default function TopicCard({
           {gen.missingChunkCount} mənbə hissəsi tapılmadı — material natamam ola bilər.
         </p>
       ) : null}
+
+      {/* A list of target buttons rather than a Select: the same pattern the
+          document picker uses, and it keeps the keyboard path a plain tab-and-
+          enter with no popover state to manage. */}
+      {moveOpen && canMove && (
+        <div className="mt-3 rounded-xl border border-outline-variant/40 p-3">
+          <div className="mono-label mb-2 uppercase text-on-surface-variant">
+            Hədəf kurs (eyni sənəd)
+          </div>
+          <div className="space-y-1.5">
+            {moveTargets.map((target) => (
+              <Button
+                key={target.id}
+                variant="outline"
+                size="sm"
+                className="w-full justify-start"
+                isPending={movingTo === target.id}
+                isDisabled={movingTo !== null}
+                onPress={() => void handleMove(target)}
+              >
+                {({ isPending }) => (
+                  <>
+                    {isPending ? <Spinner size="sm" tone="current" /> : null}
+                    {target.title}
+                  </>
+                )}
+              </Button>
+            ))}
+          </div>
+          <p className="mono-label mt-2 text-on-surface-variant">
+            Mövzu hədəf kursun sonuna əlavə olunur. İrəliləyiş qeydi olan və ya dərc edilmiş mövzu
+            köçürülmür.
+          </p>
+        </div>
+      )}
 
       {splitOpen && canSplit && (
         <TopicSplitPanel

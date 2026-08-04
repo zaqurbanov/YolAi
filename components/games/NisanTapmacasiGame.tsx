@@ -208,6 +208,45 @@ function QuestionBoxes({
   );
 }
 
+/**
+ * Placeholder for the hint card + option grid while the question's photo is
+ * still loading.
+ *
+ * WHY: the hint and the options are gated on imageReady, so that text never
+ * leads the image (the blurred photo IS the question). Until this existed the
+ * gate rendered NOTHING — the photo had its own skeleton, but everything below
+ * it collapsed to zero height, so advancing to the next question read as the
+ * screen going blank and then jumping when the content popped back in.
+ *
+ * The markup mirrors the real hint card and option buttons box-for-box — same
+ * padding, radius, border, grid and glyph size — and takes the REAL option
+ * count, which is already known here: only the image is outstanding, never the
+ * question data. That keeps the layout height stable across the swap.
+ */
+function QuestionSkeleton({ optionCount }: { optionCount: number }) {
+  return (
+    <>
+      <div className="w-full animate-pulse rounded-2xl border border-outline-variant/40 bg-surface-secondary/60 p-4">
+        <div className="h-4 w-20 rounded bg-surface-tertiary/60" />
+        <div className="mt-3 h-4 w-full rounded bg-surface-tertiary/60" />
+        <div className="mt-2 h-4 w-3/5 rounded bg-surface-tertiary/60" />
+      </div>
+
+      <div className="grid w-full grid-cols-2 gap-3">
+        {Array.from({ length: optionCount }, (_, i) => (
+          <div
+            key={i}
+            className="flex animate-pulse items-center gap-2.5 rounded-2xl border border-outline-variant/40 bg-surface-tertiary/40 p-3"
+          >
+            <span className="size-5 shrink-0 rounded bg-surface-tertiary/60" />
+            <span className="h-4 min-w-0 flex-1 rounded bg-surface-tertiary/60" />
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
 export default function NisanTapmacasiGame({ energy, onSettled }: NisanTapmacasiGameProps) {
   const [phase, setPhase] = useState<Phase>('idle');
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -382,14 +421,18 @@ export default function NisanTapmacasiGame({ energy, onSettled }: NisanTapmacasi
               <div className="absolute inset-0 h-44 animate-pulse rounded-2xl bg-surface-tertiary/60" />
             )}
           </div>
-          {imageReady && (
-            <p className="mt-1.5 text-center text-legal-citation text-on-surface-variant">
-              Toxun kiçik ipucu üçün
-            </p>
-          )}
+          {/* Kept mounted and merely hidden while loading — an `&&` here removed
+              the line's height and shifted everything below it on every advance. */}
+          <p
+            className={`mt-1.5 text-center text-legal-citation text-on-surface-variant ${
+              imageReady ? '' : 'invisible'
+            }`}
+          >
+            Toxun kiçik ipucu üçün
+          </p>
         </div>
 
-        {imageReady && (
+        {imageReady ? (
           <>
             <div className="w-full rounded-2xl border border-outline-variant/40 bg-surface-secondary/60 p-4">
               <div className="flex items-center gap-2 text-label-sm font-semibold text-on-surface-variant">
@@ -415,6 +458,8 @@ export default function NisanTapmacasiGame({ energy, onSettled }: NisanTapmacasi
               ))}
             </div>
           </>
+        ) : (
+          <QuestionSkeleton optionCount={question.options.length} />
         )}
       </div>
     );

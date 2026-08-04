@@ -19,6 +19,8 @@ import TopicCard from './TopicCard';
 
 interface CourseTopicsPanelProps {
   course: LessonCourseRow;
+  /** Every course in the admin list — filtered here to legal move targets. */
+  allCourses: LessonCourseRow[];
   onPublishCourse: () => void;
   onDeleteCourse: () => void;
   onTopicsChanged: () => void;
@@ -66,6 +68,7 @@ interface GenTarget {
 // individually retryable.
 export default function CourseTopicsPanel({
   course,
+  allCourses,
   onPublishCourse,
   onDeleteCourse,
   onTopicsChanged,
@@ -78,6 +81,9 @@ export default function CourseTopicsPanel({
   const [genStates, setGenStates] = useState<Record<string, GenState>>({});
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Non-fatal outcomes (a move that landed but left a numbering gap) — kept
+  // apart from `error` so a warning is never painted as a failure.
+  const [notice, setNotice] = useState<string | null>(null);
 
   // Pricing edit form — collapsed by default, mirrors CourseCreateForm's
   // isFree/unlockPrice fields since this is the same data on an existing row.
@@ -354,6 +360,12 @@ export default function CourseTopicsPanel({
   const canPublishCourse =
     course.status !== 'published' && topics.some((t) => t.status === 'published');
 
+  // moveTopicToCourse refuses a target built from a different document, so
+  // offering one would only produce an error the admin cannot act on.
+  const moveTargets = allCourses.filter(
+    (c) => c.id !== course.id && c.documentId === course.documentId
+  );
+
   return (
     <div className="space-y-4">
       <div className="glass-card rounded-2xl p-5">
@@ -387,6 +399,12 @@ export default function CourseTopicsPanel({
         {error && (
           <div className="mt-3 rounded-xl border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">
             {error}
+          </div>
+        )}
+
+        {notice && (
+          <div className="mt-3 rounded-xl border border-caution-orange/40 bg-caution-orange/10 px-3 py-2 text-sm text-on-surface">
+            {notice}
           </div>
         )}
       </div>
@@ -610,6 +628,14 @@ export default function CourseTopicsPanel({
                   index={index}
                   gen={genStates[topic.id]}
                   isRunLocked={running}
+                  moveTargets={moveTargets}
+                  onMoved={(result) => {
+                    // sourceTopics IS this course's list after the move — no
+                    // refetch needed, and it already reflects the compaction.
+                    setTopics(result.sourceTopics);
+                    setNotice(result.warning ?? null);
+                    onTopicsChanged();
+                  }}
                   onGenerateContent={() =>
                     void runGeneration([{ id: topic.id, steps: ['content'] }])
                   }

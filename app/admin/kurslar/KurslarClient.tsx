@@ -3,9 +3,10 @@
 import { useState, useTransition } from 'react';
 import { Button, Chip } from '@heroui/react';
 import { Spinner } from '@/components/Spinner';
-import type { LessonCourseRow } from '@/lib/lessons/courses';
+import type { CreatedCourseWithTopics, LessonCourseRow } from '@/lib/lessons/courses';
 import { listCoursesAction, updateCourseAction, deleteCourseAction } from './actions';
 import CourseCreateForm from './CourseCreateForm';
+import CourseGroupsCreator from './CourseGroupsCreator';
 import CourseTopicsPanel from './CourseTopicsPanel';
 
 interface KurslarClientProps {
@@ -21,6 +22,7 @@ export default function KurslarClient({ initialCourses }: KurslarClientProps) {
   const [courses, setCourses] = useState(initialCourses);
   const [selectedId, setSelectedId] = useState<string | null>(initialCourses[0]?.id ?? null);
   const [showCreate, setShowCreate] = useState(initialCourses.length === 0);
+  const [showGroups, setShowGroups] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isRefreshing, startRefresh] = useTransition();
 
@@ -38,6 +40,14 @@ export default function KurslarClient({ initialCourses }: KurslarClientProps) {
     setCourses((prev) => [...prev, course].sort((a, b) => a.orderIndex - b.orderIndex));
     setSelectedId(course.id);
     setShowCreate(false);
+  }
+
+  // The batch create can partially succeed, so the list is re-read from the
+  // server rather than patched from what came back — `created` is the source of
+  // truth for which course to select, not for what the list now contains.
+  function handleGroupsCreated(created: CreatedCourseWithTopics[]) {
+    if (created.length > 0) setSelectedId(created[0].course.id);
+    refreshCourses();
   }
 
   async function handlePublishCourse(course: LessonCourseRow) {
@@ -81,8 +91,29 @@ export default function KurslarClient({ initialCourses }: KurslarClientProps) {
         </div>
         <div className="flex items-center gap-2">
           {isRefreshing && <Spinner size="sm" tone="current" />}
-          <Button variant="outline" size="sm" className="rounded-full" onPress={() => setShowCreate((v) => !v)}>
-            {showCreate ? 'Bağla' : 'Yeni kurs'}
+          {/* Two entry points, mutually exclusive: one document → one course,
+              or one document → 6-8 separately priced courses. */}
+          <Button
+            variant="primary"
+            size="sm"
+            className="rounded-full"
+            onPress={() => {
+              setShowGroups((v) => !v);
+              setShowCreate(false);
+            }}
+          >
+            {showGroups ? 'Bağla' : 'Sənəddən kurslar yarat'}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="rounded-full"
+            onPress={() => {
+              setShowCreate((v) => !v);
+              setShowGroups(false);
+            }}
+          >
+            {showCreate ? 'Bağla' : 'Yeni tək kurs'}
           </Button>
         </div>
       </div>
@@ -90,6 +121,15 @@ export default function KurslarClient({ initialCourses }: KurslarClientProps) {
       {error && (
         <div className="mb-4 rounded-xl border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger">
           {error}
+        </div>
+      )}
+
+      {showGroups && (
+        <div className="mb-6">
+          <CourseGroupsCreator
+            onCoursesCreated={handleGroupsCreated}
+            onClose={() => setShowGroups(false)}
+          />
         </div>
       )}
 
@@ -107,8 +147,8 @@ export default function KurslarClient({ initialCourses }: KurslarClientProps) {
 
           {courses.length === 0 ? (
             <div className="glass-panel rounded-2xl px-4 py-8 text-center text-sm text-on-surface-variant">
-              Hələ kurs yaradılmayıb. Yuxarıdakı «Yeni kurs» düyməsi ilə ingest edilmiş sənəddən
-              kurs yaradın.
+              Hələ kurs yaradılmayıb. Yuxarıdakı «Sənəddən kurslar yarat» düyməsi ilə ingest
+              edilmiş sənədi bir neçə kursa bölün.
             </div>
           ) : (
             courses.map((course) => {
@@ -153,6 +193,10 @@ export default function KurslarClient({ initialCourses }: KurslarClientProps) {
             <CourseTopicsPanel
               key={selected.id}
               course={selected}
+              // Move targets: resolved here because the full course list only
+              // exists at this level. The panel filters it down to the same
+              // document, which is the only move the backend accepts.
+              allCourses={courses}
               onPublishCourse={() => void handlePublishCourse(selected)}
               onDeleteCourse={() => void handleDeleteCourse(selected)}
               onTopicsChanged={refreshCourses}

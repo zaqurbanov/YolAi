@@ -1,25 +1,22 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Button, Chip, Input, Label, Skeleton, Switch, TextArea, TextField } from '@heroui/react';
+import { useState } from 'react';
+import { Button, Input, Label, Switch, TextArea, TextField } from '@heroui/react';
 import { Spinner } from '@/components/Spinner';
 import type { IngestedDocumentOption, LessonCourseRow } from '@/lib/lessons/courses';
-import { createCourseAction, listIngestedDocumentsAction } from './actions';
+import { createCourseAction } from './actions';
+import DocumentPicker, { useIngestedDocuments } from './DocumentPicker';
 
 interface CourseCreateFormProps {
   nextOrderIndex: number;
   onCreated: (course: LessonCourseRow) => void;
 }
 
-// A scrollable list of documents rather than a Select: the picker has to show
-// chunk count per document (the admin's signal for whether a document is
-// actually ingested and worth building a course from), and there are ~27 of
-// them, which is past the point where a dropdown reads well.
+// The SINGLE-course flow: one document becomes one course. The multi-course
+// flow (CourseGroupsCreator) is a separate entry point; this one stays because
+// it is still the right tool for a small document.
 export default function CourseCreateForm({ nextOrderIndex, onCreated }: CourseCreateFormProps) {
-  // Fetched here rather than passed down from the page: the underlying read is
-  // one exact-count query per document and would otherwise stall the whole
-  // admin page's first paint for a list only this form needs.
-  const [documents, setDocuments] = useState<IngestedDocumentOption[] | null>(null);
+  const { documents, error: documentsError } = useIngestedDocuments();
   const [documentId, setDocumentId] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -28,29 +25,7 @@ export default function CourseCreateForm({ nextOrderIndex, onCreated }: CourseCr
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      const result = await listIngestedDocumentsAction();
-      if (cancelled) return;
-      if (result.ok) setDocuments(result.data);
-      else {
-        setDocuments([]);
-        setError(result.error);
-      }
-    }
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   function pickDocument(doc: IngestedDocumentOption) {
-    // A chunkCount of 0 means ingest reported success but persisted no text.
-    // createCourseAction refuses these server-side; the picker refuses them
-    // here too so the admin never gets a course whose only possible next step
-    // ("Mövzuları təklif et") is guaranteed to fail.
-    if (doc.chunkCount === 0) return;
     setDocumentId(doc.id);
     // Prefill from the document, still fully editable — the course title is
     // usually the document title, but not always.
@@ -112,74 +87,16 @@ export default function CourseCreateForm({ nextOrderIndex, onCreated }: CourseCr
     }
   }
 
-  const unusableCount = documents?.filter((d) => d.chunkCount === 0).length ?? 0;
-
   return (
     <div className="glass-card rounded-2xl p-5">
       <div className="text-[18px] font-semibold text-navy">Yeni kurs</div>
 
-      {documents === null ? (
-        <div className="mt-4 space-y-2">
-          <div className="text-label-sm text-on-surface-variant">Sənədlər yüklənir…</div>
-          {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="h-9 w-full rounded-lg" />
-          ))}
-        </div>
-      ) : documents.length === 0 ? (
-        <p className="mt-4 text-sm text-on-surface-variant">
-          Ingest edilmiş sənəd yoxdur. Əvvəlcə «Sənədlər» bölməsindən PDF yükləyin.
-        </p>
-      ) : (
+      <div className="mt-4">
+        <DocumentPicker documents={documents} selectedId={documentId} onSelect={pickDocument} />
+      </div>
+
+      {documents !== null && documents.length > 0 && (
         <>
-          <div className="mt-4">
-            <div className="mb-2 text-label-sm text-on-surface-variant">
-              Mənbə sənədi ({documents.length})
-            </div>
-            <div className="max-h-56 space-y-1.5 overflow-y-auto rounded-xl border border-outline-variant/40 p-2">
-              {documents.map((doc) => {
-                const isUnusable = doc.chunkCount === 0;
-                return (
-                  <button
-                    key={doc.id}
-                    type="button"
-                    disabled={isUnusable}
-                    aria-disabled={isUnusable}
-                    title={
-                      isUnusable
-                        ? 'Bu sənəddə mətn hissəsi yoxdur — kurs qurmaq üçün yenidən ingest edilməlidir'
-                        : undefined
-                    }
-                    onClick={() => pickDocument(doc)}
-                    className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm transition ${
-                      isUnusable
-                        ? 'cursor-not-allowed text-on-surface-variant/60 line-through decoration-danger/50'
-                        : doc.id === documentId
-                          ? 'bg-primary/15 text-primary'
-                          : 'hover:bg-surface-tertiary/50'
-                    }`}
-                  >
-                    <span className="min-w-0 truncate">{doc.title}</span>
-                    <Chip
-                      size="sm"
-                      variant="soft"
-                      color={isUnusable ? 'danger' : 'default'}
-                      className="mono-label shrink-0"
-                    >
-                      {isUnusable ? '0 hissə — yararsız' : `${doc.chunkCount} hissə`}
-                    </Chip>
-                  </button>
-                );
-              })}
-            </div>
-
-            {unusableCount > 0 && (
-              <p className="mono-label mt-2 text-caution-orange">
-                {unusableCount} sənəd mətn hissəsi olmadan «hazır» görünür və seçilə bilmir —
-                onları «Sənədlər» bölməsindən yenidən ingest edin.
-              </p>
-            )}
-          </div>
-
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <TextField value={title} onChange={setTitle}>
               <Label>Kurs adı</Label>
@@ -221,8 +138,11 @@ export default function CourseCreateForm({ nextOrderIndex, onCreated }: CourseCr
             </Button>
           </div>
 
-          {error && <p className="mono-label mt-3 text-danger">{error}</p>}
         </>
+      )}
+
+      {(error || documentsError) && (
+        <p className="mono-label mt-3 break-words text-danger">{error ?? documentsError}</p>
       )}
     </div>
   );

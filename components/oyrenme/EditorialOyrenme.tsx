@@ -152,8 +152,13 @@ function CourseCardBody({ course, index }: { course: CourseSummary; index: numbe
       )}
 
       <div className="mt-5 flex items-center justify-between gap-3 border-t border-border/40 pt-4">
+        {/* Lesson count sits next to the price so a locked card reads
+            "10 dərs · 15 enerji". The description no longer carries it: a
+            course created from a document group has a real description, which
+            used to hide the fallback that mentioned the topic count. */}
         <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-teal-deep">
-          {course.isFree ? 'Pulsuz' : 'Kurs'}
+          {isEmpty ? 'Kurs' : `${course.totalTopics} dərs`}
+          {course.isFree ? ' · Pulsuz' : ''}
         </span>
 
         {isLocked && (

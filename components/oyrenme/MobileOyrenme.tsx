@@ -115,10 +115,13 @@ function CourseCardContent({ course }: { course: CourseSummary }) {
           </span>
         )}
         {isLocked && (
-          <span className="flex items-center gap-1 text-xs font-bold text-safety-yellow">
-            <EnergyIcon width={14} height={14} />
-            {formatCoinBalance(course.price)}
-          </span>
+          <>
+            <span className="text-xs text-on-surface-variant">{course.totalTopics} dərs</span>
+            <span className="flex items-center gap-1 text-xs font-bold text-safety-yellow">
+              <EnergyIcon width={14} height={14} />
+              {formatCoinBalance(course.price)}
+            </span>
+          </>
         )}
         {isEmpty && <span className="text-xs text-on-surface-variant">Hazırlanır</span>}
         {isOpen && <ArrowRightIcon width={15} height={15} className="shrink-0 text-on-surface-variant" />}

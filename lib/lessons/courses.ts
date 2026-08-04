@@ -465,6 +465,185 @@ export async function createTopics(
   };
 }
 
+export interface CourseWithTopicsInput {
+  title: string;
+  description?: string | null;
+  isFree?: boolean;
+  /**
+   * ENERGY, not coins (0098 moved course unlocks onto the energy currency).
+   * null / omitted means "use the global lesson_course_unlock_price setting" —
+   * see lib/coins/lessonUnlock.ts. Do not resolve the global here and store it:
+   * that would freeze the course's price at today's global value.
+   */
+  unlockPrice?: number | null;
+  /** In course order. Position in the array IS the topic's order_index. */
+  topics: { title: string; chunkIds: string[] }[];
+}
+
+export interface CreatedCourseWithTopics {
+  course: LessonCourseRow;
+  topics: LessonTopicRow[];
+}
+
+export interface FailedCourseCreation {
+  /** The requested course title, so the admin can identify which group failed. */
+  title: string;
+  error: string;
+  /**
+   * Set ONLY when the course row was inserted, its topic insert failed AND the
+   * compensating delete also failed — i.e. an empty course row is live and
+   * needs manual cleanup. Normally absent.
+   */
+  orphanCourseId?: string;
+}
+
+export interface CreateCoursesWithTopicsInput {
+  documentId: string;
+  courses: CourseWithTopicsInput[];
+  createdBy: string;
+}
+
+export type CreateCoursesWithTopicsOutcome =
+  | { ok: true; created: CreatedCourseWithTopics[]; failed: FailedCourseCreation[] }
+  | { ok: false; error: string };
+
+// Creates N courses over ONE document (0060 deliberately leaves
+// lesson_courses.document_id non-unique) plus each course's draft topic shells.
+//
+// NO LLM RUNS HERE. This is the "accept the proposal" write: inserts only, fast
+// enough to finish well inside one request. Content and questions stay
+// client-driven and one topic at a time — see the header of
+// app/admin/kurslar/actions.ts for why a server-side generation loop is banned.
+//
+// PARTIAL FAILURE, and there is no transaction: PostgREST gives one statement
+// per request, so eight courses are at least sixteen independent writes. The
+// chosen policy is COMPENSATING DELETE OF THE FAILING COURSE ONLY:
+//   * courses fully created before the failure are KEPT — they are complete,
+//     valid, draft rows, and throwing them away would mean re-running the whole
+//     proposal to get back what already worked;
+//   * the course whose topic insert failed is DELETED again, because a course
+//     row with zero topics is a dead half-object: it cannot be published
+//     (updateCourse refuses), it shows up in the admin list as if it were real,
+//     and nothing in the UI would tell the admin which of the eight is the
+//     broken one;
+//   * the loop CONTINUES to the next course rather than aborting, so one bad
+//     group does not cost the seven good ones.
+// Nothing is consumed by a failed attempt (no coins, no LLM spend, no
+// user-visible state — everything created is a draft), so re-running the
+// remaining groups is always safe. The caller gets both lists and must tell the
+// admin exactly what landed; a silent partial success is not acceptable.
+export async function createCoursesWithTopics(
+  input: CreateCoursesWithTopicsInput
+): Promise<CreateCoursesWithTopicsOutcome> {
+  if (input.courses.length === 0) return { ok: false, error: 'Heç bir kurs qrupu göndərilmədi' };
+
+  // Validated in full BEFORE the first write: a malformed group discovered
+  // halfway through would leave a half-built document behind for a reason the
+  // admin could have been told about instantly.
+  for (const [index, course] of input.courses.entries()) {
+    if (!course.title.trim()) {
+      return { ok: false, error: `${index + 1}-ci kursun adı boş ola bilməz` };
+    }
+    if (course.topics.length === 0) {
+      return { ok: false, error: `"${course.title.trim()}" kursunda heç bir mövzu yoxdur` };
+    }
+    if (course.topics.some((t) => !t.title.trim())) {
+      return { ok: false, error: `"${course.title.trim()}" kursunda adsız mövzu var` };
+    }
+    if (course.topics.some((t) => t.chunkIds.length === 0)) {
+      return {
+        ok: false,
+        error: `"${course.title.trim()}" kursunda mənbə mətni olmayan mövzu var`,
+      };
+    }
+    if (course.unlockPrice !== undefined && course.unlockPrice !== null && course.unlockPrice < 0) {
+      return { ok: false, error: `"${course.title.trim()}" kursunun qiyməti mənfi ola bilməz` };
+    }
+  }
+
+  // Checked once up front so a chunk-less document fails with ONE clear error
+  // instead of N identical ones. createCourse re-checks per course; that is a
+  // head-only count and cheap enough to leave as the invariant it is.
+  const hasChunks = await assertDocumentHasChunks(input.documentId);
+  if (!hasChunks.ok) return hasChunks;
+
+  const admin = createAdminClient();
+
+  // The course list is ordered globally by order_index, so a new batch appends
+  // after everything that already exists rather than interleaving with it.
+  const { data: lastCourse, error: lastCourseError } = await admin
+    .from('lesson_courses')
+    .select('order_index')
+    .order('order_index', { ascending: false })
+    .limit(1)
+    .maybeSingle<{ order_index: number }>();
+
+  if (lastCourseError) {
+    void logError('lessons.courses.createCoursesWithTopicsOrderBase', lastCourseError, {
+      details: { documentId: input.documentId },
+    });
+    console.error('[lessons/courses] course order base read failed:', lastCourseError);
+    if (isMissingRelationError(lastCourseError)) {
+      return { ok: false, error: 'Kurs cədvəlləri hələ yaradılmayıb (0060 migrasiyası icra edilməyib)' };
+    }
+    return { ok: false, error: 'Mövcud kursları oxumaq uğursuz oldu' };
+  }
+
+  let nextOrderIndex = (lastCourse?.order_index ?? -1) + 1;
+
+  const created: CreatedCourseWithTopics[] = [];
+  const failed: FailedCourseCreation[] = [];
+
+  for (const course of input.courses) {
+    const title = course.title.trim();
+
+    const courseResult = await createCourse({
+      documentId: input.documentId,
+      title,
+      description: course.description ?? null,
+      orderIndex: nextOrderIndex,
+      isFree: course.isFree ?? false,
+      unlockPrice: course.unlockPrice ?? null,
+      createdBy: input.createdBy,
+    });
+
+    if (!courseResult.ok) {
+      failed.push({ title, error: courseResult.error });
+      continue;
+    }
+
+    nextOrderIndex += 1;
+
+    const topicsResult = await createTopics(
+      course.topics.map((topic, index) => ({
+        courseId: courseResult.course.id,
+        title: topic.title,
+        orderIndex: index,
+        chunkIds: topic.chunkIds,
+      }))
+    );
+
+    if (!topicsResult.ok) {
+      const rollback = await deleteCourse(courseResult.course.id);
+      failed.push({
+        title,
+        error: rollback.ok
+          ? topicsResult.error
+          : `${topicsResult.error} (boş kurs sətri silinə bilmədi — əl ilə silin)`,
+        ...(rollback.ok ? {} : { orphanCourseId: courseResult.course.id }),
+      });
+      continue;
+    }
+
+    created.push({
+      course: { ...courseResult.course, topicCount: topicsResult.topics.length },
+      topics: topicsResult.topics,
+    });
+  }
+
+  return { ok: true, created, failed };
+}
+
 export interface TopicPatch {
   title?: string;
   content?: string | null;
@@ -546,6 +725,187 @@ export async function reorderTopics(
   }
 
   return { ok: true };
+}
+
+export interface MoveTopicResult {
+  /** The source course's topic list after compaction. */
+  sourceTopics: LessonTopicRow[];
+  /** The target course's topic list with the moved topic appended. */
+  targetTopics: LessonTopicRow[];
+  /**
+   * Set when the topic moved but the source course's order_index compaction
+   * failed. The move itself is durable; the leftover is a numbering GAP, which
+   * every reader tolerates (they all sort by order_index and never assume it is
+   * dense), so this is a warning and not a failure.
+   */
+  warning?: string;
+}
+
+// Moves ONE topic to another course of the SAME document, appending it to the
+// end of the target and closing the gap it leaves behind.
+//
+// KEPT OUT OF TopicPatch DELIBERATELY. This is not a column edit: it is a
+// relocate plus a full reorder of the source course, with guards of its own.
+// Folding it into updateTopic would make every ordinary title edit a code path
+// that can renumber a course.
+//
+// THE PROGRESS GUARD IS THE REASON THIS FAILS CLOSED. lib/quiz/lessons.ts walks
+// a course's published topics in order_index order carrying "was the previous
+// one passed" forward. Moving a topic that already has user_topic_progress rows
+// corrupts that walk on BOTH sides: in the source course a learner loses the
+// step that unlocked what came after it, and in the target course a topic
+// arrives already marked passed and unlocks a topic the learner never earned.
+// There is no repair that is correct for every affected learner, so the move is
+// refused outright for any topic that is published or that has any progress
+// row. Both checks are needed — an unpublished topic can still carry progress
+// rows from when it was live.
+//
+// SAME-DOCUMENT ONLY: lesson_topics.source_citations point at that document's
+// chunks, and a course mixing two documents' material cannot be reviewed or
+// regenerated coherently.
+//
+// NO MIGRATION IS NEEDED for any of this. The target index is max+1, which no
+// row in the target course holds, so the single relocate update never collides
+// with the (course_id, order_index) unique constraint; the source course is
+// then recompacted through the existing reorder_lesson_topics RPC, which is the
+// only sound way to write a permutation against that DEFERRABLE constraint.
+export async function moveTopicToCourse(
+  topicId: string,
+  targetCourseId: string
+): Promise<({ ok: true } & MoveTopicResult) | { ok: false; error: string }> {
+  const admin = createAdminClient();
+
+  const { data: topic, error: topicError } = await admin
+    .from('lesson_topics')
+    .select('id, course_id, status')
+    .eq('id', topicId)
+    .maybeSingle<{ id: string; course_id: string; status: 'draft' | 'published' }>();
+
+  if (topicError || !topic) {
+    void logError('lessons.courses.moveTopicLookup', topicError, { details: { topicId } });
+    console.error('[lessons/courses] move topic lookup failed:', topicError);
+    return { ok: false, error: 'Mövzu tapılmadı' };
+  }
+
+  if (topic.course_id === targetCourseId) {
+    return { ok: false, error: 'Mövzu artıq bu kursdadır' };
+  }
+
+  if (topic.status === 'published') {
+    return {
+      ok: false,
+      error:
+        'Dərc edilmiş mövzu köçürülə bilməz — əvvəlcə onu qaralamaya qaytarın (öyrənənlərin ardıcıl açılışı bu mövzuya bağlıdır)',
+    };
+  }
+
+  const { count: progressCount, error: progressError } = await admin
+    .from('user_topic_progress')
+    .select('*', { count: 'exact', head: true })
+    .eq('topic_id', topicId);
+
+  if (progressError) {
+    void logError('lessons.courses.moveTopicProgressCount', progressError, { details: { topicId } });
+    console.error('[lessons/courses] move topic progress count failed:', progressError);
+    return { ok: false, error: 'Mövzunun irəliləyiş qeydlərini yoxlamaq uğursuz oldu' };
+  }
+
+  if ((progressCount ?? 0) > 0) {
+    return {
+      ok: false,
+      error: `Bu mövzu köçürülə bilməz — ${progressCount} öyrənənin irəliləyiş qeydi ona bağlıdır. Köçürmək əvəzinə hədəf kursda yeni mövzu yaradın.`,
+    };
+  }
+
+  const [{ data: sourceCourse }, { data: targetCourse, error: targetError }] = await Promise.all([
+    admin
+      .from('lesson_courses')
+      .select('id, document_id')
+      .eq('id', topic.course_id)
+      .maybeSingle<{ id: string; document_id: string }>(),
+    admin
+      .from('lesson_courses')
+      .select('id, document_id')
+      .eq('id', targetCourseId)
+      .maybeSingle<{ id: string; document_id: string }>(),
+  ]);
+
+  if (targetError || !targetCourse) {
+    void logError('lessons.courses.moveTopicTargetLookup', targetError, {
+      details: { topicId, targetCourseId },
+    });
+    console.error('[lessons/courses] move topic target lookup failed:', targetError);
+    return { ok: false, error: 'Hədəf kurs tapılmadı' };
+  }
+
+  if (sourceCourse && sourceCourse.document_id !== targetCourse.document_id) {
+    return {
+      ok: false,
+      error: 'Mövzu yalnız eyni sənəddən yaradılmış kursa köçürülə bilər',
+    };
+  }
+
+  const { data: targetLast, error: targetLastError } = await admin
+    .from('lesson_topics')
+    .select('order_index')
+    .eq('course_id', targetCourseId)
+    .order('order_index', { ascending: false })
+    .limit(1)
+    .maybeSingle<{ order_index: number }>();
+
+  if (targetLastError) {
+    void logError('lessons.courses.moveTopicTargetOrder', targetLastError, {
+      details: { topicId, targetCourseId },
+    });
+    console.error('[lessons/courses] move topic target order read failed:', targetLastError);
+    return { ok: false, error: 'Hədəf kursun mövzu sırasını oxumaq uğursuz oldu' };
+  }
+
+  const { error: moveError } = await admin
+    .from('lesson_topics')
+    .update({
+      course_id: targetCourseId,
+      order_index: (targetLast?.order_index ?? -1) + 1,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', topicId);
+
+  if (moveError) {
+    void logError('lessons.courses.moveTopic', moveError, { details: { topicId, targetCourseId } });
+    console.error('[lessons/courses] move topic failed:', moveError);
+    return { ok: false, error: 'Mövzunu köçürmək uğursuz oldu' };
+  }
+
+  // Close the hole left in the source course. Runs AFTER the move so a failure
+  // here leaves a gap, never a duplicate index.
+  let warning: string | undefined;
+  const { data: remaining, error: remainingError } = await admin
+    .from('lesson_topics')
+    .select('id')
+    .eq('course_id', topic.course_id)
+    .order('order_index', { ascending: true })
+    .returns<{ id: string }[]>();
+
+  if (remainingError) {
+    void logError('lessons.courses.moveTopicSourceList', remainingError, {
+      details: { topicId, courseId: topic.course_id },
+    });
+    console.error('[lessons/courses] move topic source list failed:', remainingError);
+    warning = 'Mövzu köçürüldü, lakin köhnə kursun sırası yenilənmədi';
+  } else if (remaining.length > 0) {
+    const reordered = await reorderTopics(
+      topic.course_id,
+      remaining.map((t) => t.id)
+    );
+    if (!reordered.ok) warning = 'Mövzu köçürüldü, lakin köhnə kursun sırası yenilənmədi';
+  }
+
+  const [sourceTopics, targetTopics] = await Promise.all([
+    listCourseTopics(topic.course_id),
+    listCourseTopics(targetCourseId),
+  ]);
+
+  return { ok: true, sourceTopics, targetTopics, warning };
 }
 
 export interface GenerateTopicContentResult {

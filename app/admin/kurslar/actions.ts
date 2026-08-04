@@ -12,8 +12,13 @@ import {
   type TopicSplitPart,
 } from '@/lib/lessons/splitTopic';
 import {
+  groupTopicsIntoCourses,
+  type CourseGroupProposal,
+} from '@/lib/lessons/groupTopicsIntoCourses';
+import {
   assertDocumentHasChunks,
   createCourse,
+  createCoursesWithTopics,
   createTopics,
   deleteCourse,
   deleteTopic,
@@ -22,17 +27,22 @@ import {
   listCourseTopics,
   listCourses,
   listIngestedDocuments,
+  moveTopicToCourse,
   publishTopicQuestions,
   reorderTopics,
   updateCourse,
   updateTopic,
   type CoursePatch,
+  type CourseWithTopicsInput,
+  type CreatedCourseWithTopics,
   type CreateTopicInput,
+  type FailedCourseCreation,
   type GenerateTopicContentResult,
   type GenerateTopicQuestionsResult,
   type IngestedDocumentOption,
   type LessonCourseRow,
   type LessonTopicRow,
+  type MoveTopicResult,
   type TopicPatch,
 } from '@/lib/lessons/courses';
 
@@ -155,6 +165,90 @@ export async function proposeTopicsAction(
   }
 
   return { ok: true, data: proposal };
+}
+
+// The MULTI-COURSE proposal: the same topic breakdown as proposeTopicsAction,
+// then a second pass that groups those ~50 topics into 6-8 consecutive COURSE
+// groups (lib/lessons/groupTopicsIntoCourses.ts). Read-only, writes nothing,
+// re-runnable — the admin edits the grouping and only then calls
+// createCoursesWithTopicsAction.
+//
+// proposeTopicsAction is deliberately left in place: the single-course flow is
+// still the right tool for a small document, and this action is additive.
+//
+// `strategy` controls BOTH passes, so 'deterministic' means no LLM call at all
+// (instant, mechanical, and exactly what an AI failure degrades to). The two
+// `source` fields are reported separately — the topic breakdown can come from
+// the AI while the grouping falls back, and vice versa is impossible but the
+// admin should still see which half degraded.
+//
+// SLOW ACTION: same budget note as proposeTopicsAction — the admin catch-all
+// page exports maxDuration = 300, and this adds exactly one more structured
+// call on top of the topic pass.
+export async function proposeCourseGroupsAction(
+  documentId: string,
+  strategy: 'ai' | 'deterministic' = 'ai'
+): Promise<AdminActionResult<CourseGroupProposal>> {
+  const admin = await requireAdmin();
+  if (!admin.ok) return denied(admin.message);
+
+  const hasChunks = await assertDocumentHasChunks(documentId);
+  if (!hasChunks.ok) return denied(hasChunks.error);
+
+  const proposal =
+    strategy === 'deterministic'
+      ? await proposeTopicsForDocument(documentId)
+      : await aiProposeTopicsForDocument(documentId);
+
+  if (!proposal) return denied('Sənəd və ya onun mətn hissələri tapılmadı');
+
+  if (proposal.topics.length === 0) {
+    return denied('Bu sənəddə mətn hissəsi yoxdur — sənəd yenidən ingest edilməlidir');
+  }
+
+  const grouped = await groupTopicsIntoCourses(proposal, strategy === 'ai');
+
+  if (grouped.groups.length === 0) {
+    return denied('Kurs qrupları hesablanmadı');
+  }
+
+  // The topic pass's own warning must not be swallowed by the grouping pass's —
+  // "12 sections were split mechanically" and "the grouping was repaired" are
+  // different problems and the admin needs both.
+  const warning = [proposal.warning, grouped.warning].filter(Boolean).join(' | ') || undefined;
+
+  return { ok: true, data: { ...grouped, warning } };
+}
+
+// Accepts the edited grouping: N lesson_courses rows over ONE document plus
+// each course's DRAFT topic shells. No LLM, no generation loop (see the ONE
+// TOPIC PER CALL note below) — inserts only.
+//
+// ALWAYS RETURNS BOTH LISTS on ok:true. `failed` being non-empty is a partial
+// success and the UI must say so explicitly: the courses in `created` are live
+// drafts, the ones in `failed` were rolled back (or, when `orphanCourseId` is
+// set, could not be rolled back and need manual deletion). See
+// createCoursesWithTopics for why the batch continues past a failure instead of
+// aborting.
+export async function createCoursesWithTopicsAction(
+  documentId: string,
+  courses: CourseWithTopicsInput[]
+): Promise<
+  AdminActionResult<{ created: CreatedCourseWithTopics[]; failed: FailedCourseCreation[] }>
+> {
+  const admin = await requireAdmin();
+  if (!admin.ok) return denied(admin.message);
+
+  const result = await createCoursesWithTopics({
+    documentId,
+    courses,
+    createdBy: admin.userId,
+  });
+  if (!result.ok) return denied(result.error);
+
+  revalidatePath('/admin/kurslar');
+  revalidatePath('/oyrenme');
+  return { ok: true, data: { created: result.created, failed: result.failed } };
 }
 
 // Persists the admin-adjusted proposal as DRAFT topic shells — titles, order
@@ -310,6 +404,36 @@ export async function reorderTopicsAction(
 
   revalidatePath('/admin/kurslar');
   return { ok: true, data: null };
+}
+
+// Moves one DRAFT topic to another course of the SAME document (append to the
+// end of the target, recompact the source). Refused for a published topic or
+// one that already has learner progress — see moveTopicToCourse for why that
+// fails closed rather than warns.
+//
+// `data.warning` is set when the move landed but the source course's
+// order_index compaction did not; that leaves a numbering gap, which every
+// reader tolerates, so it is not an error.
+export async function moveTopicAction(
+  topicId: string,
+  targetCourseId: string
+): Promise<AdminActionResult<MoveTopicResult>> {
+  const admin = await requireAdmin();
+  if (!admin.ok) return denied(admin.message);
+
+  const result = await moveTopicToCourse(topicId, targetCourseId);
+  if (!result.ok) return denied(result.error);
+
+  revalidatePath('/admin/kurslar');
+  revalidatePath('/oyrenme');
+  return {
+    ok: true,
+    data: {
+      sourceTopics: result.sourceTopics,
+      targetTopics: result.targetTopics,
+      warning: result.warning,
+    },
+  };
 }
 
 // Publishes the whole reviewed pool for one topic. Must run BEFORE
