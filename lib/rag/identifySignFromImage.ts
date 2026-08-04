@@ -1,6 +1,7 @@
 import 'server-only';
-import { generateText, convertToModelMessages, type UIMessage, type FileUIPart } from 'ai';
-import { getVisionModel } from '@/lib/llm';
+import { convertToModelMessages, type UIMessage, type FileUIPart } from 'ai';
+import { getVisionModelChain } from '@/lib/llm';
+import { generateTextWithRouting } from '@/lib/llm/fallback';
 
 // This is step 1 of the two-step hybrid flow (see app/api/chat/route.ts) — its
 // job is to produce a SHORT, factual Azerbaijani description of what is visibly
@@ -65,8 +66,8 @@ export async function identifySignFromImage(
   imagePart: FileUIPart,
   userCaption?: string,
 ): Promise<string> {
-  const model = getVisionModel();
-  if (!model) {
+  const chain = getVisionModelChain();
+  if (chain.length === 0) {
     throw new Error('identifySignFromImage called while no vision model is configured');
   }
 
@@ -81,8 +82,11 @@ export async function identifySignFromImage(
 
   const [modelMessage] = await convertToModelMessages([syntheticMessage]);
 
-  const { text } = await generateText({
-    model,
+  // Rides the full vision chain (gemini lite → gemini flash → groq → mistral,
+  // across both keys of each provider): a single 503 from one provider used to
+  // sink the whole image request. See getVisionModelChain() for who is in the
+  // chain, in what order, and which candidates were measured and rejected.
+  const { text } = await generateTextWithRouting(chain, {
     system: IDENTIFY_SYSTEM_PROMPT,
     // Gemini 2.5 models think by default — a live call with this prompt spent
     // 659 hidden thought tokens to name the contents of a trivial image. This
@@ -95,5 +99,15 @@ export async function identifySignFromImage(
     messages: [modelMessage],
   });
 
-  return text.trim();
+  // An empty identification is a FAILURE, not a result. A reasoning model whose
+  // thinking was stripped can return nothing at all, and returning '' here
+  // would silently become the retrieval query — the exact "confident answer to
+  // nothing" shape this whole path is being hardened against. Throwing puts it
+  // on the caller's failure branch, which now tells the user honestly.
+  const identification = text.trim();
+  if (!identification) {
+    throw new Error('vision model returned an empty identification');
+  }
+
+  return identification;
 }

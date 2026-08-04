@@ -371,11 +371,104 @@ export function getVisionModel(): LanguageModel | null {
   return modelId ? google(modelId) : null;
 }
 
+// VISION CHAIN — the image-identification call (lib/rag/identifySignFromImage.ts)
+// rides this, not the single getVisionModel() above.
+//
+// WHY IT EXISTS. Vision was the ONLY LLM path in this app without a fallback
+// chain: one model, one API key. On 2026-08-04 Google returned 503 "this model
+// is currently experiencing high demand" for gemini-3.5-flash three times in a
+// row; identification threw, and app/api/chat/route.ts fell back to retrieving
+// on the user's bare caption. The user saw a confident, completely unrelated
+// answer to their photo (error_logs: context 'chat.identifySign'). One 503 must
+// not be able to do that again.
+//
+// MEMBERSHIP IS MEASURED, NOT ASSUMED. Every candidate below was tested live
+// against four visually distinct sign images (piyada keçidi / sürət həddi /
+// yol ver / yanacaqdoldurma) before being included:
+//
+//   gemini-3.1-flash-lite   4/4 correct, ~0.7s   -> primary
+//   gemini-3.5-flash        4/4 correct, ~10-13s -> kept, but demoted: it is
+//                                                   15x slower and this call
+//                                                   sits BEFORE rewrite,
+//                                                   retrieval and the answer
+//                                                   inside a 60s maxDuration
+//   qwen/qwen3.6-27b (groq) correct, fast, but reasons out loud unless
+//                           GROQ_REASONING_OFF is applied (it is, per slot)
+//   pixtral-12b (mistral)   4/4 correct, ~0.4s, but answered in TURKISH
+//                           ("yaya geçidi", "yakıt istasyonu") on a bare
+//                           prompt. Last on purpose: the identification string
+//                           feeds Azerbaijani retrieval, so Turkish output is
+//                           a degraded — though still useful — signal.
+//
+// DELIBERATELY EXCLUDED, each verified rather than assumed:
+//   DeepSeek        HTTP 400 `unknown variant image_url` — the API rejects
+//                   image parts outright. It CANNOT do vision at any model id,
+//                   including deepseek-chat. (Asked for directly; measured.)
+//   NVIDIA NIM      HTTP 500 "multimodal processing is not enabled".
+//   OpenRouter      the free vision slugs now 404 ("unavailable for free").
+//   mistral-small   THE DANGEROUS ONE: HTTP 200, and wrong 4 times out of 4
+//                   ("Dönüş yolu" for a fuel-station sign). A model that
+//                   accepts an image and confabulates is worse than one that
+//                   errors — the chain would stop at it and hand a confident
+//                   wrong identification to retrieval, which is precisely the
+//                   bug this chain exists to fix. Never add a vision slot
+//                   without running the discriminating test first.
+export function getVisionModelChain(): ModelSlot[] {
+  const provider = process.env.LLM_PROVIDER ?? 'openrouter';
+
+  // Claude has vision and is the configured provider — it leads, matching
+  // getVisionModel()'s existing precedence.
+  if (provider === 'anthropic' && process.env.ANTHROPIC_API_KEY) {
+    const modelId = resolveChatModelId();
+    return [{ model: anthropic(modelId), modelId: `${modelId}:anthropic` }];
+  }
+
+  const chain: ModelSlot[] = [];
+
+  const primaryGoogle = process.env.GOOGLE_VISION_MODEL ?? 'gemini-3.1-flash-lite';
+  const backupGoogle = process.env.GOOGLE_VISION_MODEL_BACKUP ?? 'gemini-3.5-flash';
+  for (const modelId of primaryGoogle === backupGoogle
+    ? [primaryGoogle]
+    : [primaryGoogle, backupGoogle]) {
+    for (const [key, label] of [
+      [process.env.GOOGLE_GENERATIVE_AI_API_KEY, 'g1'],
+      [process.env.GOOGLE_GENERATIVE_AI_API_KEY_2, 'g2'],
+    ] as const) {
+      const slot = geminiSlot(modelId, key, label);
+      if (slot) chain.push(slot);
+    }
+  }
+
+  // Cross-PROVIDER tail. The Gemini slots above share one upstream: the 503
+  // that started this was a Google-side capacity problem, and two API keys
+  // against the same overloaded model do not route around it.
+  const groqVisionModel = process.env.GROQ_VISION_MODEL ?? process.env.GROQ_MODEL;
+  if (groqVisionModel) {
+    for (const [key, label] of [
+      [process.env.GROQ_API_KEY, 'groq1'],
+      [process.env.GROQ_API_KEY_2, 'groq2'],
+    ] as const) {
+      const slot = groqSlot(groqVisionModel, key, label, GROQ_REASONING_OFF);
+      if (slot) chain.push(slot);
+    }
+  }
+
+  const mistralVisionModel = process.env.MISTRAL_VISION_MODEL ?? 'pixtral-12b-latest';
+  const mistral = mistralSlot(mistralVisionModel, process.env.MISTRAL_API_KEY);
+  if (mistral) chain.push(mistral);
+
+  return chain;
+}
+
 // Cheap/sync (no network call) by design — called both as a server-side route
 // guard and passed down as a prop to the /chat page on every load to decide
 // whether to show the image-attach UI at all.
+//
+// Reads the CHAIN, not getVisionModel(): a deployment with no Google key but a
+// Groq or Mistral one can still look at a photo, and the attach button must
+// appear for it.
 export function isVisionAvailable(): boolean {
-  return getVisionModel() !== null;
+  return getVisionModelChain().length > 0;
 }
 
 // Whether the model getChatModel() returns can accept image content parts.

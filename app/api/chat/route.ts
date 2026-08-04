@@ -48,6 +48,13 @@ const IMAGE_PLACEHOLDER_CONTENT = '[Şəkil göndərildi]';
 // model ran on those rows).
 const SCOPE_REFUSAL_MODEL_LABEL = 'scope-gate:refusal';
 
+// Same marker convention for the other deterministic non-answer: every slot of
+// the vision chain failed, so the image request was declined instead of being
+// answered without the image. Distinct label so the two are separable in the
+// admin logs dashboard — one is a user asking something off-topic, the other is
+// a provider outage on our side.
+const VISION_FAILURE_MODEL_LABEL = 'vision:unavailable';
+
 export const maxDuration = 60;
 
 // Conversation context handed to the scope-gate classifier. A legitimate
@@ -472,12 +479,27 @@ export async function POST(request: Request) {
   // comment. Stays null when identification fails, so the model is never told
   // about an image whose contents are unknown.
   let imageIdentification: string | null = null;
+  // Set when the photo could not be identified AT ALL — i.e. every slot in the
+  // vision chain failed. Drives the honest-failure return below.
+  let imageIdentificationFailed = false;
   if (imagePart && identifyPromise) {
     try {
       imageIdentification = await identifyPromise;
       retrievalSourceText = imageIdentification;
     } catch (err) {
-      console.error('[chat] identifySignFromImage failed, falling back to raw query text:', err);
+      // WAS: this swallowed the error and let the request continue on
+      // `retrievalSourceText = query` — the bare caption. Retrieval then ran on
+      // something like "bu nədir?", which carries no retrieval signal, and the
+      // answering model produced a confident, completely unrelated answer to a
+      // photo it was never told about. From the user's side that is
+      // indistinguishable from the app hallucinating (reported 2026-08-04,
+      // error_logs 'chat.identifySign': Google 503 x3 on gemini-3.5-flash).
+      //
+      // NOW: the request stops here and says so. Answering an image request
+      // without the image is worse than not answering it — this app's whole
+      // premise is grounded answers.
+      imageIdentificationFailed = true;
+      console.error('[chat] identifySignFromImage failed on every vision slot:', err);
       void logError('chat.identifySign', err, {
         userId: user?.id,
         requestId,
@@ -497,6 +519,83 @@ export async function POST(request: Request) {
       return { citations, coins: { balance: coinBalance, price: coinPrice }, conversationId: conversationIdMeta };
     }
     return { citations, conversationId: conversationIdMeta };
+  }
+
+  // ---------------------------------------------------------------------------
+  // HONEST FAILURE: the photo could not be read by ANY vision provider.
+  //
+  // Everything downstream — rewrite, embedding, retrieval, rerank, the
+  // answering model — is skipped, exactly like the scope-gate refusal below.
+  //
+  // NO COIN IS CHARGED HERE, and that is deliberate rather than an oversight:
+  // checkAndReserveCoins() only checks (it never decrements — see
+  // lib/chat/coins.ts), and debitCoins() lives further down the normal path, so
+  // returning before it means the user pays nothing for a request the app could
+  // not perform. Contrast the scope refusal, which DOES debit because its
+  // classifier call really did produce an answer's worth of provider work.
+  // ---------------------------------------------------------------------------
+  if (imageIdentificationFailed) {
+    const failureText =
+      'Göndərdiyiniz şəkli oxuya bilmədim — şəkil emalı xidməti hazırda cavab vermir. ' +
+      'Zəhmət olmasa bir az sonra yenidən cəhd edin. ' +
+      'Tələsirsinizsə, şəkildə gördüyünüzü sözlə yazın (məsələn: "üçbucaqlı nişan, içində piyada təsviri") — ' +
+      'bu halda sualınızı dərhal cavablandıra bilərəm. Bu mesaj üçün balansınızdan heç nə silinmədi.';
+
+    if (assistantMessageId) {
+      const { error: failureUpdateError } = await supabase
+        .from('messages')
+        .update({ content: failureText, citations: [] })
+        .eq('id', assistantMessageId);
+      if (failureUpdateError) {
+        console.error('[chat] failed to persist vision failure message:', failureUpdateError);
+        void logError('chat.persistVisionFailure', failureUpdateError, {
+          userId: user?.id,
+          requestId,
+          details: { conversationId: conversation?.id, messageId: assistantMessageId },
+        });
+      }
+    }
+
+    createAdminClient()
+      .from('chat_request_logs')
+      .insert({
+        request_id: requestId,
+        conversation_id: conversation?.id ?? null,
+        message_id: assistantMessageId,
+        query,
+        rewrite_ms: null,
+        embed_ms: null,
+        db_search_ms: null,
+        rerank_ms: null,
+        llm_first_token_ms: null,
+        llm_total_ms: null,
+        used_fallback: false,
+        model_used: VISION_FAILURE_MODEL_LABEL,
+        prompt_tokens: null,
+        completion_tokens: null,
+        total_tokens: null,
+      })
+      .then(({ error }) => {
+        if (error) {
+          console.error('[chat] failed to persist vision failure log:', error);
+          void logError('chat.timingLog.persist', error, { userId: user?.id, requestId });
+        }
+      });
+
+    const failureMetadata = buildMessageMetadata([], VISION_FAILURE_MODEL_LABEL);
+    const failureTextPartId = crypto.randomUUID();
+
+    return createUIMessageStreamResponse({
+      stream: createUIMessageStream({
+        execute: ({ writer }) => {
+          writer.write({ type: 'start', messageMetadata: failureMetadata });
+          writer.write({ type: 'text-start', id: failureTextPartId });
+          writer.write({ type: 'text-delta', id: failureTextPartId, delta: failureText });
+          writer.write({ type: 'text-end', id: failureTextPartId });
+          writer.write({ type: 'finish', finishReason: 'stop', messageMetadata: failureMetadata });
+        },
+      }),
+    });
   }
 
   const rewriteStart = performance.now();
