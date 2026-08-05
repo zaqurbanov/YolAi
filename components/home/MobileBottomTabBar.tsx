@@ -20,7 +20,10 @@ interface TabItem {
 }
 
 const TABS: TabItem[] = [
-  { key: 'home', label: 'Ana səhifə', icon: GridIcon, iconSrc: '/icons/home-icon.png', href: '/' },
+  // /home, not `/`: the tab bar only renders on in-app routes, whose visitors
+  // are signed in, and `/` is the public landing page they would be bounced off
+  // by proxy.ts anyway.
+  { key: 'home', label: 'Ana səhifə', icon: GridIcon, iconSrc: '/icons/home-icon.png', href: '/home' },
   { key: 'chat', label: 'AI Chat', icon: GridIcon, iconSrc: '/icons/ai-bot.png', href: '/chat' },
   {
     key: 'academy',
@@ -53,11 +56,27 @@ export default function MobileBottomTabBar() {
   // out for the loading fallback). It self-gates to the routes that always had
   // the bar, so auth/admin/static pages are unchanged. Keep this list in sync
   // with where the bar used to be mounted — the five tabs plus /account.
-  const TAB_BAR_ROUTES = ['/chat', '/oyrenme', '/coin-qazan', '/imtahan', '/account'];
+  //
+  // /qiymetler is on the list even though it is not one of the five tabs (the
+  // same situation as /account): it is a normal in-app destination reachable
+  // from the nav, and dropping the bar there left a mobile visitor on a
+  // dead-end page with no way back into the app.
+  const TAB_BAR_ROUTES = [
+    '/home',
+    '/chat',
+    '/oyrenme',
+    '/coin-qazan',
+    '/imtahan',
+    '/account',
+    '/qiymetler',
+  ];
 
   function shouldShowTabBar(pathname: string | null): boolean {
     if (!pathname) return false;
-    if (pathname === '/') return true;
+    // `/` is the public landing page now, not an in-app screen: a stranger
+    // reading a marketing page should not be shown an app tab bar whose tabs
+    // mostly lead to /login. The dashboard it used to represent is /home,
+    // which is on the list below.
     return TAB_BAR_ROUTES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
   }
 

@@ -2,7 +2,15 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ChatIcon, CoinIcon, HomeIcon, RulesIcon, SettingsIcon, TrophyIcon } from '@/components/icons';
+import {
+  ChatIcon,
+  CoinIcon,
+  HomeIcon,
+  RulesIcon,
+  SettingsIcon,
+  SparkleIcon,
+  TrophyIcon,
+} from '@/components/icons';
 import { useSidebar } from '@/components/SidebarContext';
 
 const ICONS = {
@@ -12,6 +20,7 @@ const ICONS = {
   settings: SettingsIcon,
   coin: CoinIcon,
   trophy: TrophyIcon,
+  pricing: SparkleIcon,
 };
 
 interface NavItem {

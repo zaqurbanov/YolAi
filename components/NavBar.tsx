@@ -11,7 +11,7 @@ import EnergyBadge from '@/components/EnergyBadge';
 import NotificationBell from '@/components/NotificationBell';
 import MobileAccountMenu from '@/components/MobileAccountMenu';
 import ThemeToggle from '@/components/ThemeToggle';
-import { CoinIcon } from '@/components/icons';
+import { CoinIcon, SparkleIcon } from '@/components/icons';
 import { useNavState } from '@/components/useNavState';
 
 // Mobile-only section labels. This bar is the single top navigation bar on
@@ -76,6 +76,23 @@ export default function NavBar() {
       </div>
 
       <div className="flex shrink-0 items-center gap-1.5 text-sm sm:gap-2">
+        {/* Public, and rendered outside the auth branch below because it does
+            not depend on auth at all. On MOBILE it is shown only to logged-out
+            visitors: they have no avatar menu (that renders for `nav.user`
+            only), so this bar is their sole navigation surface — while a
+            logged-in user's bar already carries the coin and energy badges and
+            reaches /qiymetler through the avatar menu instead. While auth state
+            is still resolving it stays desktop-only, so nothing appears and
+            then vanishes. */}
+        <Link
+          href="/qiymetler"
+          className={`glass-card mono-label items-center gap-1.5 rounded-full px-3 py-1.5 text-on-surface transition-colors hover:bg-surface-tertiary/60 ${
+            nav !== null && !nav.user ? 'flex' : 'hidden sm:flex'
+          }`}
+        >
+          <SparkleIcon width={14} height={14} />
+          <span>Qiymətlər</span>
+        </Link>
         {nav === null ? (
           <span aria-hidden className="h-8 w-16 rounded-full bg-surface-hover/40 sm:w-40" />
         ) : (

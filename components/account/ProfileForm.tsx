@@ -5,18 +5,9 @@ import { TextField, Label, Input, Description, Button, Alert, Avatar } from '@he
 import { updateProfile, type AccountFormState } from '@/app/account/actions';
 import { Spinner } from '@/components/Spinner';
 import { UserIcon } from '@/components/icons';
+import { initialsFrom } from '@/lib/format/initials';
 
 const initialState: AccountFormState = {};
-
-function initialsFrom(name: string): string {
-  const trimmed = name.trim();
-  if (!trimmed) return '?';
-  return trimmed
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('');
-}
 
 interface ProfileFormProps {
   fullName: string;
@@ -42,7 +33,7 @@ export default function ProfileForm({ fullName, avatarUrl, email }: ProfileFormP
         <div className="flex items-center gap-4">
           <Avatar size="lg" className="ring-2 ring-primary/20">
             {previewAvatarUrl ? <Avatar.Image src={previewAvatarUrl} alt="Profil şəkli" /> : null}
-            <Avatar.Fallback>{initialsFrom(previewName || fullName)}</Avatar.Fallback>
+            <Avatar.Fallback>{initialsFrom(previewName || fullName, email)}</Avatar.Fallback>
           </Avatar>
           <p className="text-[14px] text-on-surface-variant">Şəkil önizləməsi</p>
         </div>

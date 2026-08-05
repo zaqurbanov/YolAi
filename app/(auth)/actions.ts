@@ -72,7 +72,9 @@ export async function login(_prevState: AuthFormState, formData: FormData): Prom
     return { error: 'Email və ya şifrə yanlışdır' };
   }
 
-  redirect('/');
+  // Straight to the personal dashboard — `/` is the landing page for visitors
+  // who are not signed in, and proxy.ts would bounce them off it anyway.
+  redirect('/home');
 }
 
 export async function signInWithGoogle(formData?: FormData) {

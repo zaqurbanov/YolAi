@@ -4,22 +4,13 @@ import Link from 'next/link';
 import { useState, type CSSProperties } from 'react';
 import { Avatar, Popover } from '@heroui/react';
 import { buttonVariants } from '@heroui/styles';
-import { logout } from '@/app/(auth)/actions';
+import LogoutForm from '@/components/auth/LogoutForm';
+import { initialsFrom } from '@/lib/format/initials';
 import { useNavState } from '@/components/useNavState';
 import { useTour } from '@/components/onboarding/TourProvider';
 import { useDarkMode } from '@/lib/theme/useDarkMode';
 import InstallAppButton from '@/components/InstallAppButton';
-import { CoinIcon, MoonIcon, PlusIcon, SunIcon } from '@/components/icons';
-
-function initialsFrom(name: string | null | undefined, email: string | null): string {
-  const source = name?.trim() || email || '';
-  return source
-    .split(/[\s@.]+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('');
-}
+import { CoinIcon, MoonIcon, PlusIcon, SparkleIcon, SunIcon } from '@/components/icons';
 
 // Per-user avatar colour. Keyed on the immutable auth user id (not the email or
 // display name) so the colour a user learns to recognise never changes under
@@ -132,6 +123,15 @@ export default function MobileAccountMenu() {
               Chat
             </Link>
 
+            {/* On mobile the top bar hides the /qiymetler pill for logged-in
+                users (the coin and energy badges need that space), so this
+                popover is where it has to stay reachable — the same reasoning
+                as the /sual shortcut below. */}
+            <Link href="/qiymetler" className={itemClass} onClick={closeMenu}>
+              <SparkleIcon width={16} height={16} />
+              Qiymətlər
+            </Link>
+
             {/* "Bizə yazın" lives in the desktop sidebar footer; on mobile that
                 sidebar is hidden, so this popover (present at every breakpoint)
                 is where the /sual shortcut must also live to stay reachable. */}
@@ -172,14 +172,14 @@ export default function MobileAccountMenu() {
               Turu yenidən göstər
             </button>
 
-            <form action={logout} onSubmit={closeMenu}>
+            <LogoutForm onSubmitted={closeMenu}>
               <button
                 type="submit"
                 className={`${itemClass} text-rose-500 hover:text-rose-400 hover:bg-rose-500/10`}
               >
                 Çıxış
               </button>
-            </form>
+            </LogoutForm>
           </div>
         </Popover.Dialog>
       </Popover.Content>

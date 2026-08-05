@@ -2067,3 +2067,84 @@ html:not(.dark) .tour-spotlight {
   max-width: 56rem; /* 4xl — narrower, more legible transcript column inside the max-w-7xl HUD frame */
   margin-inline: auto;
 }
+
+/* ---------------------------------------------------------------------------
+   Illustration icons ("canlı ikonlar")
+   ---------------------------------------------------------------------------
+   The home page's 3D PNG illustrations (/public/icons/*.png). A raster image
+   can only be animated AS A WHOLE — nothing inside it can move — so the
+   liveliness here is deliberately about weight and depth rather than about
+   parts: the icon lifts slightly toward the reader and casts a soft shadow
+   when its card is hovered, and it settles in with one gentle rise on first
+   paint.
+
+   Applied to the <img> itself, driven by a `group` on the card, so the whole
+   card is the hover target rather than the 34px icon — chasing a tiny image
+   with the cursor is not an interaction.
+
+   The shadow is a drop-shadow FILTER, not box-shadow: these PNGs are
+   transparent cut-outs, and box-shadow would draw a rectangle around the
+   invisible bounding box instead of following the artwork's silhouette.
+
+   If a specific icon ever needs its parts animated (a coin flipping, a page
+   turning), that one icon has to become an inline SVG or a Lottie — this class
+   cannot do it, and stretching it to try would only produce the "wobbling
+   sticker" look.
+--------------------------------------------------------------------------- */
+.icon-illustration {
+  transition:
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    filter 220ms ease;
+  will-change: transform;
+}
+
+.group:hover .icon-illustration,
+.group:focus-visible .icon-illustration {
+  transform: translateY(-3px) scale(1.08) rotate(-2deg);
+  filter: drop-shadow(0 6px 10px rgb(0 0 0 / 0.18));
+}
+
+/* Dark surfaces swallow a black shadow; a light halo reads as depth there. */
+html.dark .group:hover .icon-illustration,
+html.dark .group:focus-visible .icon-illustration {
+  filter: drop-shadow(0 6px 12px rgb(0 0 0 / 0.5));
+}
+
+/* One-time settle on mount. Deliberately short and small — this fires on every
+   card at once, and anything longer reads as the page still loading.
+
+   FILL MODE IS `backwards`, NOT `both`, and that is not a detail: `both` keeps
+   the keyframes' final `transform: none` applied forever, and an animation's
+   value outranks the element's own declarations — so the hover transform below
+   silently stopped working while the drop-shadow still applied (verified live:
+   filter changed on hover, transform stayed the identity matrix). `backwards`
+   only pre-applies the `from` state before the animation starts and hands the
+   element back to its normal styles once it ends. */
+.icon-illustration-enter {
+  animation: icon-illustration-in 420ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+@keyframes icon-illustration-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icon-illustration,
+  .group:hover .icon-illustration,
+  .group:focus-visible .icon-illustration {
+    transition: none;
+    transform: none;
+    filter: none;
+  }
+
+  .icon-illustration-enter {
+    animation: none;
+  }
+}

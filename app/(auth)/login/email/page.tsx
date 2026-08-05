@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { TextField, Label, Input, Button, Alert } from '@heroui/react';
 import { login, type AuthFormState } from '../../actions';
 import { Spinner } from '@/components/Spinner';
+import { invalidateNavState } from '@/components/useNavState';
 
 const initialState: AuthFormState = {};
 
@@ -28,7 +29,16 @@ function EmailLoginForm() {
         </div>
 
         <div className="glass-panel rounded-2xl p-6 sm:p-8">
-          <form action={formAction} className="flex flex-col gap-5">
+          {/* Drops the cached nav identity before the action redirects. Without
+              it the sidebar and top bar keep painting the logged-OUT nav on the
+              page you land on — the same staleness as logout, in reverse.
+              useNavState revalidates per route as the safety net; this just
+              makes the correction immediate. */}
+          <form
+            action={formAction}
+            onSubmit={() => invalidateNavState()}
+            className="flex flex-col gap-5"
+          >
             <TextField name="email" isRequired>
               <Label>Email</Label>
               <Input type="email" placeholder="ad@nümunə.com" />

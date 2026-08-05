@@ -6,6 +6,7 @@ import { logError } from '@/lib/logging/logError';
 import { getActiveGaragePerk } from '@/lib/garage/perks';
 import { msUntilNextBakuDayStart } from '@/lib/date/baku';
 import { applyDailyGrant } from '@/lib/coins/dailyGrant';
+import { getActiveSubscription } from '@/lib/billing/subscriptions';
 
 // Hardcoded TS default (not an env var) — this is a brand-new concept with
 // no prior env var to preserve compatibility with, unlike
@@ -87,7 +88,16 @@ export async function checkAndReserveCoins(
   // Mercedes G-Class garage perk: +chatDailyBonus flat on top of the global
   // daily free-message limit. Not cumulative with any other tier's perk.
   const garagePerk = await getActiveGaragePerk(userId);
-  const dailyGrant = baseDailyGrant + garagePerk.chatDailyBonus;
+  // Must stay identical to resolveCoinFloor() in lib/coins/dailyGrant.ts — that
+  // one decides what the balance is topped up TO, this one is what the user is
+  // TOLD their limit is. If the two drift, a subscriber is quoted a limit they
+  // do not have. A subscription raises the floor and never lowers it, hence
+  // Math.max in both places.
+  const subscription = await getActiveSubscription(userId);
+  const dailyGrant = Math.max(
+    baseDailyGrant + garagePerk.chatDailyBonus,
+    subscription?.coinDailyFloor ?? 0
+  );
   const { data, error } = await createAdminClient()
     .rpc('check_and_reserve_coins', {
       p_user_id: userId,
@@ -175,7 +185,12 @@ export async function getCoinBalanceStatus(
   const price = await getGlobalMessagePrice();
   const baseDailyGrant = await getGlobalDailyCoinGrant();
   const garagePerk = await getActiveGaragePerk(userId);
-  const dailyGrant = baseDailyGrant + garagePerk.chatDailyBonus;
+  // Same composition as checkAndReserveCoins above — see the note there.
+  const subscription = await getActiveSubscription(userId);
+  const dailyGrant = Math.max(
+    baseDailyGrant + garagePerk.chatDailyBonus,
+    subscription?.coinDailyFloor ?? 0
+  );
   const msUntilReset = msUntilNextBakuDayStart();
   const { data, error } = await createAdminClient()
     .from('user_coins')

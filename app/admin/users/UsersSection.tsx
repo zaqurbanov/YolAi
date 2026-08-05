@@ -1,9 +1,7 @@
 import { redirect } from 'next/navigation';
-import Link from 'next/link';
+import type { ReactNode } from 'react';
 import { requireAdmin } from '@/lib/auth/requireAdmin';
 import { getAdminUsers } from '@/lib/admin/getUsers';
-import { formatAzDate } from '@/lib/format/date';
-import { formatCoinBalance } from '@/lib/format/coins';
 import GlobalRateLimitControl from './GlobalRateLimitControl';
 import LlmCircuitBreakerControl from './LlmCircuitBreakerControl';
 import GlobalCoinPriceControl from './GlobalCoinPriceControl';
@@ -18,6 +16,7 @@ import SendBroadcastNotificationControl from './SendBroadcastNotificationControl
 import EmbeddingModelControl from './EmbeddingModelControl';
 import LessonEconomyControl from './LessonEconomyControl';
 import GameRewardsControl from './GameRewardsControl';
+import GameEnergyCostControl from './GameEnergyCostControl';
 import EnergyToCoinControl from './EnergyToCoinControl';
 import WheelPrizesControl from './WheelPrizesControl';
 import GaragePerksControl from './GaragePerksControl';
@@ -25,6 +24,30 @@ import CategoryContentControl from './CategoryContentControl';
 import CarTiersControl from './CarTiersControl';
 import VipPlatePriceControl from './VipPlatePriceControl';
 import PlateModerationControl from './PlateModerationControl';
+import UsersTable from './UsersTable';
+import AdminSettingsTabs from './AdminSettingsTabs';
+
+function SettingsGroup({
+  id,
+  title,
+  description,
+  children,
+}: {
+  id: string;
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
+  return (
+    <section id={id} className="scroll-mt-6 space-y-3">
+      <div>
+        <h2 className="text-[16px] font-semibold text-navy">{title}</h2>
+        <p className="mt-0.5 text-[13px] text-on-surface-variant">{description}</p>
+      </div>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [&>*]:min-w-0">{children}</div>
+    </section>
+  );
+}
 
 export default async function UsersSection() {
   const auth = await requireAdmin();
@@ -41,109 +64,54 @@ export default async function UsersSection() {
         </span>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 [&>*]:min-w-0">
-        <GlobalRateLimitControl />
-        <LlmCircuitBreakerControl />
-        <GlobalDailyCoinGrantControl />
-        <WeeklyMarathonControl />
-        <DailyMissionRewardControl />
-        <QuizRewardControl />
-        <GlobalCoinPriceControl />
-        <BackgroundImageControl />
-        <LogoControl />
-        <SendPushReminderControl />
-        <SendBroadcastNotificationControl />
-        <EmbeddingModelControl />
-        <LessonEconomyControl />
-        <GameRewardsControl />
-        <EnergyToCoinControl />
-        <WheelPrizesControl />
-        <GaragePerksControl />
-        <CategoryContentControl />
-        <CarTiersControl />
-        <VipPlatePriceControl />
-        <PlateModerationControl />
-      </div>
+      <AdminSettingsTabs
+        tabs={[
+          { id: 'ai-limits', label: 'AI və limitlər' },
+          { id: 'rewards-energy', label: 'Mükafatlar və enerji' },
+          { id: 'content-appearance', label: 'Məzmun və görünüş' },
+          { id: 'notifications', label: 'Bildirişlər' },
+          { id: 'garage', label: 'Virtual qaraj' },
+        ]}
+      >
+        <SettingsGroup id="ai-limits" title="AI və istifadə limitləri" description="Söhbət imkanları, gündəlik limitlər və AI infrastrukturunun idarəsi.">
+          <GlobalRateLimitControl />
+          <LlmCircuitBreakerControl />
+          <GlobalDailyCoinGrantControl />
+          <GlobalCoinPriceControl />
+          <EmbeddingModelControl />
+        </SettingsGroup>
 
-      <div className="rounded-3xl border border-border/40 bg-surface shadow-sm overflow-hidden overflow-x-auto">
-        {users.length === 0 ? (
-          <div className="py-16 text-center text-[14px] text-on-surface-variant">Hələ istifadəçi yoxdur</div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border/40 text-left">
-                <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant">
-                  E-poçt
-                </th>
-                <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant">
-                  Rol
-                </th>
-                <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant text-right">
-                  Coin balansı
-                </th>
-                <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant text-right">
-                  Ümumi xərclənib
-                </th>
-                <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant text-right">
-                  Qeydiyyat tarixi
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((u) => (
-                <tr
-                  key={u.id}
-                  className="border-b border-border/20 last:border-b-0 hover:bg-primary/5"
-                >
-                  <td className="p-0">
-                    <Link
-                      href={`/admin/users/${u.id}`}
-                      className="block px-4 py-3 font-medium text-navy cursor-pointer"
-                    >
-                      {u.email ?? '—'}
-                    </Link>
-                  </td>
-                  <td className="p-0">
-                    <Link href={`/admin/users/${u.id}`} className="flex px-4 py-3 cursor-pointer">
-                      <span
-                        className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.08em] ${
-                          u.role === 'admin' ? 'bg-primary text-on-primary' : 'bg-surface-tertiary text-navy'
-                        }`}
-                      >
-                        {u.role}
-                      </span>
-                    </Link>
-                  </td>
-                  <td className="p-0">
-                    <Link
-                      href={`/admin/users/${u.id}`}
-                      className="block px-4 py-3 text-[12px] tabular-nums text-right text-on-surface-variant cursor-pointer"
-                    >
-                      {u.coinBalance != null ? formatCoinBalance(u.coinBalance) : '—'}
-                    </Link>
-                  </td>
-                  <td className="p-0">
-                    <Link
-                      href={`/admin/users/${u.id}`}
-                      className="block px-4 py-3 text-[12px] tabular-nums text-right text-on-surface-variant cursor-pointer"
-                    >
-                      {u.totalSpent != null ? formatCoinBalance(u.totalSpent) : '—'}
-                    </Link>
-                  </td>
-                  <td className="p-0">
-                    <Link
-                      href={`/admin/users/${u.id}`}
-                      className="block px-4 py-3 text-[12px] tabular-nums text-right text-on-surface-variant cursor-pointer"
-                    >
-                      {formatAzDate(u.created_at)}
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+        <SettingsGroup id="rewards-energy" title="Mükafatlar və enerji" description="Gündəlik tapşırıqlar, oyunlar, coin və enerji iqtisadiyyatı.">
+          <WeeklyMarathonControl />
+          <DailyMissionRewardControl />
+          <QuizRewardControl />
+          <LessonEconomyControl />
+          <GameRewardsControl />
+          <GameEnergyCostControl />
+          <EnergyToCoinControl />
+          <WheelPrizesControl />
+        </SettingsGroup>
+
+        <SettingsGroup id="content-appearance" title="Məzmun və görünüş" description="Sayt brendi, ana səhifə materialları və tədris məzmunu.">
+          <BackgroundImageControl />
+          <LogoControl />
+          <CategoryContentControl />
+        </SettingsGroup>
+
+        <SettingsGroup id="notifications" title="Bildirişlər" description="İstifadəçilərə göndərilən xatırlatma və ümumi elanlar.">
+          <SendPushReminderControl />
+          <SendBroadcastNotificationControl />
+        </SettingsGroup>
+
+        <SettingsGroup id="garage" title="Virtual qaraj" description="Avtomobil üstünlükləri, nömrələr və qaraj iqtisadiyyatı.">
+          <GaragePerksControl />
+          <CarTiersControl />
+          <VipPlatePriceControl />
+          <PlateModerationControl />
+        </SettingsGroup>
+      </AdminSettingsTabs>
+
+      <UsersTable users={users} />
     </div>
   );
 }

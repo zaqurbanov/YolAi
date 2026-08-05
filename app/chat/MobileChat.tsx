@@ -18,6 +18,7 @@ import {
 } from '@/components/icons';
 import { ChatConversationList } from '@/components/ChatConversationList';
 import { Spinner } from '@/components/Spinner';
+import SuggestedQuestions from '@/components/chat/SuggestedQuestions';
 import { renderCitationText } from '@/lib/chat/renderCitationText';
 import { useBusyCountdown } from './useBusyCountdown';
 
@@ -483,6 +484,12 @@ export default function MobileChat({
             <p className="text-body-md text-on-surface-variant">
               Yol hərəkəti qaydaları ilə bağlı sualınızı yazın, cavab təsdiqlənmiş sənədlərə istinadla veriləcək.
             </p>
+            {/* Same component as the desktop tree — one list, not two that
+                drift. Fills the composer only; sending stays deliberate. */}
+            <SuggestedQuestions
+              className="mt-5 border-t border-outline-variant/30 pt-4"
+              onPick={onInputChange}
+            />
           </div>
         )}
 

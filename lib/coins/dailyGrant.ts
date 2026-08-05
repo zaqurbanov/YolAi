@@ -5,6 +5,7 @@ import { bakuTodayDate } from '@/lib/date/baku';
 import { GAME_DAILY_ENERGY_KEY, DEFAULT_GAME_DAILY_ENERGY } from '@/lib/coins/games';
 import { getEffectiveEnergyGrant, getActiveGaragePerk } from '@/lib/garage/perks';
 import { getGlobalDailyCoinGrant } from '@/lib/chat/coins';
+import { getActiveSubscription } from '@/lib/billing/subscriptions';
 import { logError } from '@/lib/logging/logError';
 
 // "Gündəlik hədiyyə" — the AUTOMATIC daily grant (0094_two_currency_economy.sql).
@@ -31,12 +32,19 @@ import { logError } from '@/lib/logging/logError';
 // The coin floor, composed exactly as lib/chat/coins.ts composes it for the
 // affordability check — same number in both places, or a user could be topped
 // up to one figure and told their limit is another.
+//
+// A SUBSCRIPTION RAISES THIS FLOOR; it never lowers it. Math.max, not
+// assignment: a user holding a garage perk that already exceeds their package's
+// floor must keep the higher number, or subscribing would be a downgrade.
+// This is the whole subscription mechanic — there is no second wallet and no
+// lump grant (see 0101's header for why a lump is structurally wrong here).
 async function resolveCoinFloor(userId: string): Promise<number> {
-  const [base, perk] = await Promise.all([
+  const [base, perk, subscription] = await Promise.all([
     getGlobalDailyCoinGrant(),
     getActiveGaragePerk(userId),
+    getActiveSubscription(userId),
   ]);
-  return base + perk.chatDailyBonus;
+  return Math.max(base + perk.chatDailyBonus, subscription?.coinDailyFloor ?? 0);
 }
 
 // The daily energy floor, including the Prius garage perk — resolved through
@@ -55,7 +63,13 @@ async function resolveEnergyFloor(userId: string): Promise<number> {
     if (Number.isFinite(value) && value > 0) base = value;
   }
 
-  return Math.round(await getEffectiveEnergyGrant(userId, base));
+  const [effective, subscription] = await Promise.all([
+    getEffectiveEnergyGrant(userId, base),
+    getActiveSubscription(userId),
+  ]);
+
+  // Same rule as the coin floor: raise, never lower.
+  return Math.round(Math.max(effective, subscription?.energyDailyFloor ?? 0));
 }
 
 export interface DailyGrantResult {

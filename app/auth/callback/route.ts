@@ -56,5 +56,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  return NextResponse.redirect(`${origin}/`);
+  // Same destination as the email sign-in path: the personal dashboard, not
+  // the landing page (`/` now redirects signed-in visitors here anyway).
+  return NextResponse.redirect(`${origin}/home`);
 }

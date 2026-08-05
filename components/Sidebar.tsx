@@ -3,28 +3,45 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { buttonVariants } from '@heroui/styles';
-import { logout } from '@/app/(auth)/actions';
+import LogoutForm from '@/components/auth/LogoutForm';
 import { SidebarNav } from '@/components/SidebarNav';
 import { SidebarShell } from '@/components/SidebarShell';
 import { ChatConversationList } from '@/components/ChatConversationList';
 import { PlusIcon } from '@/components/icons';
 import InstallAppButton from '@/components/InstallAppButton';
-import { useNavState, invalidateNavState } from '@/components/useNavState';
+import { useNavState } from '@/components/useNavState';
 
+// `/home` is the signed-in dashboard; `/` is the public landing page. The
+// swap below is what keeps "Ana Səhifə" meaning "my page" for a signed-in user
+// without sending them through proxy.ts's `/` → `/home` redirect on every
+// click.
 const NAV_ITEMS = [
-  { href: '/', label: 'Ana Səhifə', icon: 'home' as const },
+  { href: '/home', label: 'Ana Səhifə', icon: 'home' as const },
   { href: '/chat', label: 'Söhbət', icon: 'chat' as const },
   { href: '/oyrenme', label: 'Sürücülük vəsiqəsini al', icon: 'rules' as const },
   { href: '/imtahan', label: 'Rəsmi İmtahan', icon: 'trophy' as const },
   { href: '/coin-qazan', label: 'Coin Qazan', icon: 'coin' as const },
+  { href: '/qiymetler', label: 'Qiymətlər', icon: 'pricing' as const },
   { href: '/account', label: 'Ayarlar', icon: 'settings' as const },
 ];
 
 // Both /account and /coin-qazan require auth (they redirect logged-out visitors
 // to /login), so hide them from the logged-out set rather than sending someone
 // into a redirect.
-const AUTH_ONLY_HREFS = new Set(['/account', '/coin-qazan', '/imtahan']);
-const PUBLIC_NAV_ITEMS = NAV_ITEMS.filter((item) => !AUTH_ONLY_HREFS.has(item.href));
+//
+// /qiymetler is deliberately NOT in this set: it is a public page and the people
+// most likely to need it are the ones who have not signed up yet. It was
+// previously in no navigation surface at all, reachable only by typing the URL.
+//
+// /home joins them for the same reason — it is the personal dashboard and
+// proxy.ts bounces anonymous visitors off it. The logged-out set below puts the
+// LANDING page in that same "Ana Səhifə" slot instead, so the label always
+// points at the page that visitor can actually use.
+const AUTH_ONLY_HREFS = new Set(['/account', '/coin-qazan', '/imtahan', '/home']);
+const PUBLIC_NAV_ITEMS = [
+  { href: '/', label: 'Ana Səhifə', icon: 'home' as const },
+  ...NAV_ITEMS.filter((item) => !AUTH_ONLY_HREFS.has(item.href)),
+];
 
 // Client component for the same reason as NavBar.tsx — it rendered in the
 // root layout and its createClient() call forced every page dynamic.
@@ -89,14 +106,14 @@ export default function Sidebar() {
             wrong state that must not appear, even briefly. */}
         {nav !== null &&
           (nav.user ? (
-            <form action={logout} onSubmit={() => invalidateNavState()}>
+            <LogoutForm>
               <button
                 type="submit"
                 className="w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-muted hover:bg-surface-hover hover:text-foreground"
               >
                 Çıxış
               </button>
-            </form>
+            </LogoutForm>
           ) : (
             <Link
               href="/login"

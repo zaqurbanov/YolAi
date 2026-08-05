@@ -401,7 +401,7 @@ const ENERGY_TUNING_FIELDS = [
     param: 'gameEnergyCost',
     key: GAME_ENERGY_COST_KEY,
     defaultValue: DEFAULT_GAME_ENERGY_COST,
-    integerOnly: true,
+    integerOnly: false,
     min: 0,
     max: 1000,
   },

@@ -2,12 +2,16 @@ import Link from 'next/link';
 import type { RuleCategory } from '@/lib/content/ruleCategories';
 import RoadShaderBackground from '@/components/design3d/RoadShaderBackground';
 import {
+  AwardIcon,
+  CameraIcon,
+  CarIcon,
   ChatIcon,
   CheckIcon,
   CoinIcon,
   FineIcon,
   HelpIcon,
   RulesIcon,
+  SignIcon,
   SparkleIcon,
   TrophyIcon,
 } from '@/components/icons';
@@ -16,8 +20,6 @@ interface HomePage3DProps {
   formattedDriverCount: string;
   driverInitials: string[];
   stats: { value: string; label: string; accent: string }[];
-  topics: RuleCategory[];
-  questionCounts: Record<string, number>;
   fineCategory: RuleCategory;
 }
 
@@ -80,6 +82,10 @@ const PROMO_FEATURES = [
   '24/7 əlçatan AI köməkçi',
 ];
 
+// The five competitive advantages — same list the editorial tree carries, so the
+// two designs make the same claims about the product even though the chrome is
+// different. Kept local to this tree, matching the existing FEATURES pattern.
+
 const FOOTER_LINKS = [
   { href: '/faq/faq', label: 'Suallar' },
   { href: '/faq/privacy', label: 'Məxfilik Siyasəti' },
@@ -97,8 +103,6 @@ export default function HomePage3D({
   formattedDriverCount,
   driverInitials,
   stats,
-  topics,
-  questionCounts,
   fineCategory,
 }: HomePage3DProps) {
   return (
@@ -304,68 +308,6 @@ export default function HomePage3D({
                 </span>
               </div>
             ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ---------- Knowledge base / topics ---------- */}
-      <section id="movzular" className="px-6 py-16">
-        <div className="mx-auto max-w-7xl">
-          <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <h2 className="text-2xl font-bold" style={{ fontFamily: 'var(--hud-font-display)' }}>
-                Geniş Məlumat Bazası
-              </h2>
-              <p className="mt-1 text-sm" style={{ color: 'var(--hud-on-surface-variant)' }}>
-                Hər kateqoriya üzrə dərslərlə qaydaları öyrənin, sualları cavablayıb irəliləyişinizi
-                izləyin.
-              </p>
-            </div>
-            <Link href="/oyrenme" className="text-sm font-bold" style={{ color: 'var(--hud-primary)' }}>
-              Dərslərə başla →
-            </Link>
-          </div>
-
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {topics.map((topic) => {
-              const Icon = topic.icon;
-              const count = questionCounts[topic.title];
-              return (
-                <Link
-                  key={topic.title}
-                  href={`/chat?q=${encodeURIComponent(topic.question)}`}
-                  className="hud-glass group flex flex-col gap-4 rounded-2xl p-6 transition-all hover:bg-white/5"
-                >
-                  <div className="flex items-start justify-between">
-                    <span
-                      className="transition-transform duration-200 group-hover:-translate-y-1 group-hover:scale-110"
-                      style={{ color: 'var(--hud-primary)' }}
-                    >
-                      <Icon width={30} height={30} />
-                    </span>
-                    <span
-                      className="rounded px-2 py-1 text-[12px]"
-                      style={{
-                        fontFamily: 'var(--hud-font-mono)',
-                        color: 'var(--hud-primary)',
-                        background: 'color-mix(in oklab, var(--hud-primary) 10%, transparent)',
-                      }}
-                    >
-                      {topic.citation.split('|')[0].trim()}
-                    </span>
-                  </div>
-                  <h3 className="text-lg font-bold">{topic.title}</h3>
-                  <p className="text-sm" style={{ color: 'var(--hud-on-surface-variant)' }}>
-                    {topic.description}
-                  </p>
-                  {typeof count === 'number' && (
-                    <div className="text-[11px] italic" style={{ color: 'var(--hud-outline)' }}>
-                      {count} sual
-                    </div>
-                  )}
-                </Link>
-              );
-            })}
           </div>
         </div>
       </section>

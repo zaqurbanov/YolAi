@@ -22,6 +22,7 @@ import {
 } from '@/components/icons';
 import { CONVERSATION_CHANGED_EVENT } from '@/lib/chat/conversationEvents';
 import { Spinner } from '@/components/Spinner';
+import SuggestedQuestions from '@/components/chat/SuggestedQuestions';
 import { renderCitationText } from '@/lib/chat/renderCitationText';
 import { formatAzTime } from '@/lib/format/date';
 import { formatCoinBalance } from '@/lib/format/coins';
@@ -1370,6 +1371,15 @@ export default function ChatClient({
             <p className="text-sm text-on-surface-variant">
               Yol hərəkəti qaydaları ilə bağlı sualınızı yazın, cavab təsdiqlənmiş sənədlərə istinadla veriləcək.
             </p>
+            {/* Fills the composer and focuses it — never sends. See the note in
+                SuggestedQuestions: a send costs a coin, so it stays deliberate. */}
+            <SuggestedQuestions
+              className="mt-6 border-t border-outline-variant/30 pt-5"
+              onPick={(question) => {
+                setInput(question);
+                messageInputRef.current?.focus();
+              }}
+            />
           </div>
         )}
 

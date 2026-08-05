@@ -20,10 +20,27 @@ export interface NavState {
 // NavBar and Sidebar both need the exact same payload and both mount in the
 // root layout on every page — without this, every navigation would fire two
 // identical requests. One in-flight promise shared between them, plus a
-// resolved cache so a client-side route change reuses the answer instead of
-// refetching. Deliberately not a context provider: the two consumers are
-// siblings under providers that already exist, and a third provider in the
-// root layout buys nothing here.
+// resolved cache the next render can paint from immediately. Deliberately not a
+// context provider: the two consumers are siblings under providers that already
+// exist, and a third provider in the root layout buys nothing here.
+//
+// STALE-WHILE-REVALIDATE, not read-through. The cache used to SHORT-CIRCUIT the
+// fetch: once populated, a client-side route change reused it forever. That is
+// what made the nav keep showing a signed-out user's name and coin balance
+// after logout — logout is a server action that redirects, and a server-side
+// redirect cannot clear a module-level variable living in the browser. The same
+// bug ran in reverse after an email login (nav stayed logged-out on the page
+// you landed on).
+//
+// Now the cache only decides what to PAINT FIRST; every route change still
+// revalidates in the background and updates if the identity changed. Explicit
+// invalidateNavState() calls at the known transitions remain, so those correct
+// instantly instead of one paint later — but nothing depends on a future call
+// site remembering to make them.
+//
+// The cost is one small request per client-side navigation. It is one, not two:
+// `inFlight` still collapses NavBar's and Sidebar's simultaneous calls into a
+// single fetch, which was the actual reason this module exists.
 let cached: NavState | null = null;
 let inFlight: Promise<NavState | null> | null = null;
 
@@ -46,7 +63,6 @@ async function fetchNavState(): Promise<NavState | null> {
 }
 
 function loadNavState(): Promise<NavState | null> {
-  if (cached) return Promise.resolve(cached);
   inFlight ??= fetchNavState().then((state) => {
     if (state) cached = state;
     inFlight = null;
@@ -69,6 +85,8 @@ export function invalidateNavState() {
  */
 export function useNavState(): NavState | null {
   const pathname = usePathname();
+  // Seeded from the cache so a repeat navigation paints the known identity
+  // immediately; the effect below then confirms or corrects it.
   const [state, setState] = useState<NavState | null>(cached);
 
   useEffect(() => {
@@ -84,8 +102,10 @@ export function useNavState(): NavState | null {
     return () => {
       cancelled = true;
     };
-    // Re-evaluated per route so a navigation that follows a login/logout
-    // (which calls invalidateNavState) picks up the new identity.
+    // Re-run per route: this is the revalidation half of the
+    // stale-while-revalidate described at the top of the file, and the reason
+    // a logout or login is reflected even when the transition forgot to call
+    // invalidateNavState().
   }, [pathname]);
 
   return state;

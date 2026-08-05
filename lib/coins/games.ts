@@ -126,6 +126,14 @@ export async function getEnergyStatus(userId: string): Promise<EnergyStatus> {
   }
 }
 
+// The GLOBAL daily energy floor, with no user and no side effects — unlike
+// getEnergyStatus above, which grants and needs a userId. For display on pages
+// that describe the free tier to someone who may not be signed in (/qiymetler).
+// Garage perks are per-user and deliberately not included here.
+export async function getGlobalDailyEnergyGrant(): Promise<number> {
+  return Math.round(await readNumericSetting(GAME_DAILY_ENERGY_KEY, DEFAULT_GAME_DAILY_ENERGY));
+}
+
 // The XO round price in ENERGY (for display). allowZero: an admin-configured
 // 0 means free play and must be reported as 0, not silently as the default.
 // The authoritative charge is settle_tictactoe's conditional decrement.

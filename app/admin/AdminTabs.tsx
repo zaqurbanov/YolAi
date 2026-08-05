@@ -10,6 +10,7 @@ const TABS = [
   { id: 'kurslar', href: '/admin/kurslar', label: 'Kurslar' },
   { id: 'questions', href: '/admin/questions', label: 'Suallar' },
   { id: 'quiz', href: '/admin/quiz', label: 'Test Sualları' },
+  { id: 'paketler', href: '/admin/paketler', label: 'Paketlər' },
   { id: 'stats', href: '/admin/stats', label: 'Statistika' },
   { id: 'logs', href: '/admin/logs', label: 'Loglar' },
   { id: 'busy-phrases', href: '/admin/busy-phrases', label: 'Status cümlələri' },

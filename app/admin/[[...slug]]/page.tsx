@@ -6,6 +6,7 @@ import DocumentsSection from '../documents/DocumentsSection';
 import DocumentDetailSection from '../documents/DocumentDetailSection';
 import KurslarSection from '../kurslar/KurslarSection';
 import LogsSection from '../logs/LogsSection';
+import PaketlerSection from '../paketler/PaketlerSection';
 import QuestionsSection from '../questions/QuestionsSection';
 import QuizSection from '../quiz/QuizSection';
 import StatsSection from '../stats/StatsSection';
@@ -31,6 +32,7 @@ const TITLES: Record<string, string> = {
   documents: 'Sənədlər',
   kurslar: 'Kurslar',
   logs: 'Loglar',
+  paketler: 'Paketlər',
   questions: 'Suallar',
   quiz: 'Test Sualları',
   stats: 'Statistika',
@@ -82,6 +84,8 @@ export default async function AdminCatchAllPage({
         const context = typeof sp.context === 'string' ? sp.context : undefined;
         return <LogsSection contextFilter={context} />;
       }
+      case 'paketler':
+        return <PaketlerSection />;
       case 'questions':
         return <QuestionsSection />;
       case 'quiz':

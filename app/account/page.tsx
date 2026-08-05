@@ -6,7 +6,8 @@ import { buttonVariants } from '@heroui/styles';
 import { SparkleIcon, CoinIcon, TrashIcon, LogoutIcon, CheckIcon, FlameIcon } from '@/components/icons';
 import Footer from '@/components/Footer';
 import { createClient } from '@/lib/supabase/server';
-import { logout } from '@/app/(auth)/actions';
+import LogoutForm from '@/components/auth/LogoutForm';
+import { initialsFrom } from '@/lib/format/initials';
 import { getAccountStats } from '@/lib/account/getAccountStats';
 import { getCoinBalanceStatus } from '@/lib/chat/coins';
 import { getTransferMinAmount, getTransferHistory } from '@/lib/coins/transfers';
@@ -29,16 +30,6 @@ import { getServerDesign } from '@/lib/design/getServerDesign';
 export const metadata: Metadata = {
   title: 'Hesab',
 };
-
-function initialsFrom(name: string | null, email: string): string {
-  const source = name?.trim() || email;
-  return source
-    .split(/[\s@.]+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('');
-}
 
 export default async function AccountPage() {
   const design = await getServerDesign();
@@ -116,12 +107,12 @@ export default async function AccountPage() {
   ) : null;
   const securityForms = <SecurityForms />;
   const logoutForm = (
-    <form action={logout}>
+    <LogoutForm>
       <Button type="submit" variant="danger" className="gap-2">
         <LogoutIcon width={18} height={18} />
         Hesabdan çıxış et
       </Button>
-    </form>
+    </LogoutForm>
   );
   const deleteAccountDialog = <DeleteAccountDialog />;
 
